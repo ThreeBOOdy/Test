@@ -1,0 +1,10 @@
+{
+  "name": "知练 · 分级智能刷题",
+  "short_name": "知练",
+  "description": "按等级和知识点随机练习的学生题库系统",
+  "start_url": "/student",
+  "display": "standalone",
+  "background_color": "#f7f8f4",
+  "theme_color": "#16766f",
+  "icons": [{ "src": "/app-icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }]
+}

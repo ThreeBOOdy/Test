@@ -1,0 +1,12 @@
+node_modules/
+.next/
+.npm-cache/
+generated/
+coverage/
+.env
+.env.local
+*.log
+postgres-data/
+.patch-input.txt
+test.patch-probe
+.tools/

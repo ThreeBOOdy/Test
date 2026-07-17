@@ -1,0 +1,227 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum UserRole {
+  STUDENT
+  TEACHER
+}
+
+enum QuestionType {
+  SINGLE_CHOICE
+  MULTIPLE_CHOICE
+}
+
+enum QuestionStatus {
+  ACTIVE
+  DISABLED
+  ARCHIVED
+}
+
+enum PracticeMode {
+  LEVEL_COMPREHENSIVE
+  KNOWLEDGE_POINT
+  WRONG_QUESTION
+}
+
+enum PracticeStatus {
+  IN_PROGRESS
+  COMPLETED
+  ABANDONED
+}
+
+enum ImportStatus {
+  PREVIEW
+  COMMITTED
+  REVERTED
+  FAILED
+}
+
+model User {
+  id                String            @id @default(cuid())
+  username          String            @unique
+  displayName       String
+  passwordHash      String
+  role              UserRole          @default(STUDENT)
+  enabled           Boolean           @default(true)
+  mustChangePassword Boolean          @default(true)
+  sessions          PracticeSession[]
+  wrongQuestions    WrongQuestion[]
+  imports           ImportBatch[]
+  createdAt         DateTime          @default(now())
+  updatedAt         DateTime          @updatedAt
+}
+
+model Level {
+  id             String                  @id @default(cuid())
+  code           String                  @unique
+  name           String
+  sortOrder      Int                     @default(0)
+  enabled        Boolean                 @default(true)
+  questions      Question[]
+  practiceRule   LevelPracticeRule?
+  knowledgeRules KnowledgePracticeRule[]
+  sessions       PracticeSession[]
+  createdAt      DateTime                @default(now())
+  updatedAt      DateTime                @updatedAt
+}
+
+model KnowledgePoint {
+  id             String                  @id @default(cuid())
+  code           String                  @unique
+  name           String
+  path           String                  @unique
+  depth          Int
+  sortOrder      Int                     @default(0)
+  enabled        Boolean                 @default(true)
+  parentId       String?
+  parent         KnowledgePoint?         @relation("KnowledgeTree", fields: [parentId], references: [id])
+  children       KnowledgePoint[]        @relation("KnowledgeTree")
+  questions      Question[]
+  practiceRules  KnowledgePracticeRule[]
+  sessions       PracticeSession[]
+  createdAt      DateTime                @default(now())
+  updatedAt      DateTime                @updatedAt
+
+  @@index([parentId, sortOrder])
+  @@index([path])
+}
+
+model LevelPracticeRule {
+  id            String   @id @default(cuid())
+  levelId       String   @unique
+  level         Level    @relation(fields: [levelId], references: [id], onDelete: Cascade)
+  singleCount   Int      @default(0)
+  multipleCount Int      @default(0)
+  enabled       Boolean  @default(true)
+  updatedAt     DateTime @updatedAt
+}
+
+model KnowledgePracticeRule {
+  id               String         @id @default(cuid())
+  knowledgePointId String
+  levelId          String
+  knowledgePoint   KnowledgePoint @relation(fields: [knowledgePointId], references: [id], onDelete: Cascade)
+  level            Level          @relation(fields: [levelId], references: [id], onDelete: Cascade)
+  singleCount      Int            @default(0)
+  multipleCount    Int            @default(0)
+  enabled          Boolean        @default(true)
+  updatedAt        DateTime       @updatedAt
+
+  @@unique([knowledgePointId, levelId])
+  @@index([levelId])
+}
+
+model Question {
+  id                   String            @id @default(cuid())
+  levelId              String
+  knowledgePointId     String
+  level                Level             @relation(fields: [levelId], references: [id])
+  knowledgePoint       KnowledgePoint    @relation(fields: [knowledgePointId], references: [id])
+  sourceBankCode       String?
+  externalQuestionCode String?
+  stem                 String
+  type                 QuestionType
+  optionCount          Int
+  correctOptionCount   Int
+  selectionSpec        String
+  options              Json
+  correctOptionIds     String[]
+  status               QuestionStatus    @default(ACTIVE)
+  importBatchId        String?
+  importBatch          ImportBatch?      @relation(fields: [importBatchId], references: [id])
+  sessionQuestions     PracticeSessionQuestion[]
+  answers              PracticeAnswer[]
+  wrongQuestions       WrongQuestion[]
+  createdAt            DateTime          @default(now())
+  updatedAt            DateTime          @updatedAt
+
+  @@index([levelId, type, status])
+  @@index([knowledgePointId, levelId, type, status])
+  @@index([externalQuestionCode])
+}
+
+model PracticeSession {
+  id                   String                    @id @default(cuid())
+  userId               String
+  user                 User                      @relation(fields: [userId], references: [id])
+  mode                 PracticeMode
+  levelId              String
+  level                Level                     @relation(fields: [levelId], references: [id])
+  knowledgePointId     String?
+  knowledgePoint       KnowledgePoint?           @relation(fields: [knowledgePointId], references: [id])
+  status               PracticeStatus            @default(IN_PROGRESS)
+  singleCountSnapshot  Int
+  multipleCountSnapshot Int
+  currentIndex         Int                       @default(0)
+  correctCount         Int                       @default(0)
+  startedAt            DateTime                  @default(now())
+  completedAt          DateTime?
+  questions            PracticeSessionQuestion[]
+  answers              PracticeAnswer[]
+
+  @@index([userId, status, startedAt])
+}
+
+model PracticeSessionQuestion {
+  id         String          @id @default(cuid())
+  sessionId  String
+  questionId String
+  position   Int
+  session    PracticeSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  question   Question        @relation(fields: [questionId], references: [id])
+
+  @@unique([sessionId, questionId])
+  @@unique([sessionId, position])
+}
+
+model PracticeAnswer {
+  id                String          @id @default(cuid())
+  sessionId         String
+  questionId        String
+  session           PracticeSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  question          Question        @relation(fields: [questionId], references: [id])
+  selectedOptionIds String[]
+  isCorrect         Boolean
+  submittedAt       DateTime        @default(now())
+
+  @@unique([sessionId, questionId])
+  @@index([questionId, isCorrect])
+}
+
+model WrongQuestion {
+  id           String   @id @default(cuid())
+  userId       String
+  questionId   String
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  question     Question @relation(fields: [questionId], references: [id])
+  wrongCount   Int      @default(1)
+  mastered     Boolean  @default(false)
+  lastWrongAt  DateTime @default(now())
+  masteredAt   DateTime?
+
+  @@unique([userId, questionId])
+  @@index([userId, mastered])
+}
+
+model ImportBatch {
+  id           String       @id @default(cuid())
+  fileName     String
+  status       ImportStatus @default(PREVIEW)
+  totalRows    Int          @default(0)
+  validRows    Int          @default(0)
+  warningRows  Int          @default(0)
+  errorRows    Int          @default(0)
+  errorReport  Json?
+  importedById String
+  importedBy   User         @relation(fields: [importedById], references: [id])
+  questions    Question[]
+  createdAt    DateTime     @default(now())
+  committedAt  DateTime?
+  revertedAt   DateTime?
+}
