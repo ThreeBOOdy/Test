@@ -77,3 +77,24 @@ export type ValidatedQuestionRow = {
   type: QuestionType;
   issues: ValidationIssue[];
 };
+export type PublicQuestion = Omit<Question, "correctOptionIds" | "status"> & {
+  knowledgeName: string;
+  levelCode: string;
+};
+
+export type PublicAnswerResult = {
+  isCorrect: boolean;
+  correctOptionIds: string[];
+  selectedOptionIds: string[];
+  answeredCount: number;
+  correctCount: number;
+};
+
+export type PublicPracticeSession = {
+  id: string;
+  mode: PracticeMode;
+  title: string;
+  total: number;
+  questions: PublicQuestion[];
+  initialResults: Record<string, PublicAnswerResult>;
+};

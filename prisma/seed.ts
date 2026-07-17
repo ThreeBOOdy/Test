@@ -1,17 +1,12 @@
 import "dotenv/config";
-import { randomBytes, scryptSync } from "node:crypto";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { Prisma, PrismaClient } from "../generated/prisma/client";
 import { knowledgePoints, levelRules, levels, questions } from "../lib/data/demo";
+import { hashPassword } from "../lib/server/password";
 
 const connectionString = process.env.DATABASE_URL ?? "postgresql://practice:practice@localhost:5432/practice?schema=public";
 const prisma = new PrismaClient({ adapter: new PrismaPg({ connectionString }) });
 
-function hashPassword(password: string) {
-  const salt = randomBytes(16).toString("hex");
-  const hash = scryptSync(password, salt, 64).toString("hex");
-  return `scrypt$${salt}$${hash}`;
-}
 
 async function main() {
   const seedPassword = process.env.APP_SEED_PASSWORD ?? "ChangeMe123!";

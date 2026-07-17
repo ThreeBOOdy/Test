@@ -8,15 +8,15 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { cn } from "@/lib/utils";
-import type { PublicQuestion } from "@/lib/server/demo-session-store";
+import type { PublicAnswerResult, PublicPracticeSession } from "@/lib/domain/types";
 
-type Session = { id: string; title: string; total: number; questions: PublicQuestion[] };
-type AnswerResult = { isCorrect: boolean; correctOptionIds: string[]; answeredCount: number; correctCount: number };
+type Session = PublicPracticeSession;
+type AnswerResult = PublicAnswerResult;
 
 export function PracticeRunner({ session }: { session: Session }) {
   const [index, setIndex] = useState(0);
   const [selected, setSelected] = useState<string[]>([]);
-  const [results, setResults] = useState<Record<string, AnswerResult>>({});
+  const [results, setResults] = useState<Record<string, AnswerResult>>(session.initialResults);
   const [error, setError] = useState("");
   const [pending, setPending] = useState(false);
   const question = session.questions[index];

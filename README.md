@@ -1,58 +1,77 @@
 # 知练 · 分等级与知识点刷题系统
 
-面向学生与教师的移动优先刷题 MVP。支持按等级综合练习、按知识点专项练习、服务端即时判题、错题记录、树形知识目录、双层抽题规则，以及兼容现有题库格式的 Excel 预检。
+面向学生与教师的移动优先刷题系统。支持按等级综合练习、按知识点专项练习、服务端即时判题、固定题序恢复、练习历史、错题本、树形知识目录、双层抽题规则，以及兼容现有题库格式的 Excel 导入。
 
 ## 当前功能
 
-- 学生端：等级综合练习、知识点专项练习、单题即时反馈、练习历史、错题本。
-- 教师端：题库概览、题目列表、知识点树、等级/知识点抽题规则、学生列表。
-- Excel：读取 `.xlsx`，兼容 `AB`、`A,B`、`A、B` 等答案格式，校验 `4选2` 和 `MC2` 编码。
-- 数据层：PostgreSQL 18、Prisma 7 模型、初始迁移和演示种子数据。
-- 工程化：Next.js 16、TypeScript、Tailwind CSS、Vitest、Docker Compose、PWA manifest。
+- 账号权限：用户名密码登录、HTTP-only 会话 Cookie、学生与教师角色隔离。
+- 学生端：等级综合练习、知识点专项练习、单题即时反馈、退出后继续、练习历史和错题本。
+- 教师端：数据库题库概览、题目列表、知识点树、等级/知识点抽题规则、学生列表。
+- 抽题规则：教师可保存每个等级及每个“知识点 + 等级”的单选、多选题量，并在保存和开始练习时校验库存。
+- Excel：读取 `.xlsx`，兼容 `AB`、`A,B`、`A、B` 等答案格式，预检 `4选2`、`MC2` 等规格并确认写入数据库。
+- 数据层：PostgreSQL 18、Prisma 7、持久化练习会话、答案、错题和导入批次。
+- 工程化：Next.js 16、React 19、TypeScript、Tailwind CSS、Vitest、Docker Compose、PWA manifest。
+
+## 环境配置
+
+复制环境变量模板：
+
+```powershell
+Copy-Item .env.example .env
+```
+
+至少需要配置：
+
+- `DATABASE_URL`：PostgreSQL 连接地址。
+- `APP_SEED_PASSWORD`：种子账号的初始密码。
+- `AUTH_SECRET`：JWT 签名密钥，生产环境必须使用独立随机值。
+- `COOKIE_SECURE`：本地 HTTP 使用 `false`，正式 HTTPS 环境使用 `true`。
+
+可在 PowerShell 中生成随机 `AUTH_SECRET`：
+
+```powershell
+$bytes = New-Object byte[] 32
+[Security.Cryptography.RandomNumberGenerator]::Create().GetBytes($bytes)
+[Convert]::ToBase64String($bytes)
+```
 
 ## 本地开发
 
 ```powershell
-Copy-Item .env.example .env
 npm.cmd install
 npm.cmd run db:generate
-npm.cmd run dev
-```
-
-浏览：
-
-- 首页：`http://localhost:3000`
-- 学生端：`http://localhost:3000/student`
-- 教师端：`http://localhost:3000/teacher`
-
-当前 UI 使用演示数据即可直接浏览，不依赖数据库启动。
-
-## PostgreSQL 与迁移
-
-```powershell
 docker compose up -d db
 npm.cmd run db:migrate -- --name init
 npm.cmd run db:seed
+npm.cmd run dev
 ```
 
-演示账号种子：
+访问地址：
 
-- 教师：`teacher`
-- 学生：`student`
-- 初始密码来自 `.env` 中的 `APP_SEED_PASSWORD`，首次登录应强制修改。
+- 首页：`http://localhost:3000`
+- 登录：`http://localhost:3000/login`
+- 学生端：`http://localhost:3000/student`
+- 教师端：`http://localhost:3000/teacher`
 
-容器基础镜像使用 AWS Public ECR 的 Docker Official Images 镜像路径，避免部分网络环境无法直连 Docker Hub。PostgreSQL 端口仅绑定到本机 `127.0.0.1`。
+种子账号：
 
-## 完整容器启动
+- 教师：`teacher / ChangeMe123!`
+- 学生：`student / ChangeMe123!`
+
+如果修改了 `APP_SEED_PASSWORD`，种子账号密码以该变量为准。当前版本尚未实现首次登录强制改密，请勿在公网环境继续使用默认密码。
+
+## Docker 启动
 
 ```powershell
 docker compose up -d --build
 ```
 
-服务默认使用：
+默认端口：
 
 - Web：`3000`
-- PostgreSQL：`5432`
+- PostgreSQL：`127.0.0.1:5432`
+
+容器基础镜像使用 AWS Public ECR 的 Docker Official Images 镜像路径，以兼容当前网络环境。PostgreSQL 端口仅绑定本机。
 
 ## Excel 表头
 
@@ -65,6 +84,7 @@ docker compose up -d --build
 - 单选示例：答案 `A`，规格 `4选1`。
 - 多选示例：答案 `AC`，规格 `4选2`。
 - 分类号自动形成 `4 > 4.1 > 4.1.1` 树形关系。
+- 导入先执行服务端预检，确认后才写入题目和导入批次。
 
 ## 质量检查
 
@@ -78,7 +98,8 @@ npm.cmd run build
 
 ## 后续重点
 
-- 将演示会话仓库替换为 Prisma 持久化仓库。
-- 接入正式用户名/密码认证和教师权限中间件。
-- 完成 Excel 确认入库、批次撤销和错误报告下载。
-- 增加学习统计与教师审核后的 AI 解析。
+- 完成教师新增、编辑、停用题目和知识点的操作接口。
+- 完成教师创建学生、重置密码和首次登录改密流程。
+- 增加题库筛选、导入批次撤销和错误报告下载。
+- 将学生首页演示指标替换为数据库统计。
+- 增加登录限流、CSRF 加固和教师审核后的 AI 解析。

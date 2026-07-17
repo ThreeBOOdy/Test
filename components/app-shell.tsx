@@ -36,7 +36,7 @@ export function AppShell({ role, currentPath, children }: { role: "student" | "t
         <nav className="mt-7 flex flex-col gap-1.5">
           {nav.map((item) => <NavItem key={item.href} item={item} active={currentPath === item.href} />)}
         </nav>
-        <Link href="/" className="mt-auto flex items-center gap-3 rounded-xl px-3 py-3 text-sm font-semibold text-[var(--muted-foreground)] hover:bg-[var(--muted)] hover:text-[var(--foreground)]"><LogOut className="size-4" />退出演示</Link>
+        <Link href="/api/v1/auth/logout" className="mt-auto flex items-center gap-3 rounded-xl px-3 py-3 text-sm font-semibold text-[var(--muted-foreground)] hover:bg-[var(--muted)] hover:text-[var(--foreground)]"><LogOut className="size-4" />退出登录</Link>
       </aside>
       <div className="lg:pl-64">
         <header className="sticky top-0 z-20 flex h-16 items-center justify-between border-b border-[var(--border)] bg-[color:rgba(247,248,244,.88)] px-4 backdrop-blur-xl sm:px-8 lg:px-10">

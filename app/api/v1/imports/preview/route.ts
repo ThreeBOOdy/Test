@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import ExcelJS from "exceljs";
 import { validateImportRow } from "@/lib/domain/question-import";
 import type { ImportQuestionRow } from "@/lib/domain/types";
+import { getCurrentUser } from "@/lib/server/session";
 
 export const runtime = "nodejs";
 const aliases: Record<string, string[]> = {
@@ -10,6 +11,8 @@ const aliases: Record<string, string[]> = {
 
 export async function POST(request: Request) {
   try {
+    const user = await getCurrentUser();
+    if (!user || user.role !== "TEACHER") return NextResponse.json({ message: "需要教师权限" }, { status: 403 });
     const formData = await request.formData();
     const file = formData.get("file");
     if (!(file instanceof File)) return NextResponse.json({ message: "请选择 Excel 文件" }, { status: 400 });
