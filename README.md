@@ -41,7 +41,7 @@ npm.cmd run db:seed
 - 学生：`student`
 - 初始密码来自 `.env` 中的 `APP_SEED_PASSWORD`，首次登录应强制修改。
 
-如果 Docker Hub 在当前网络不可访问，需要先为 Docker Desktop 配置可用代理或镜像网络；不要关闭 TLS 证书验证。
+容器基础镜像使用 AWS Public ECR 的 Docker Official Images 镜像路径，避免部分网络环境无法直连 Docker Hub。PostgreSQL 端口仅绑定到本机 `127.0.0.1`。
 
 ## 完整容器启动
 
