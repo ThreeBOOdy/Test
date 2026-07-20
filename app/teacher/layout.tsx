@@ -5,5 +5,6 @@ export default async function TeacherLayout({ children }: { children: React.Reac
   const user = await getCurrentUser();
   if (!user) redirect("/login?next=/teacher");
   if (user.role !== "TEACHER") redirect("/student");
+  if (user.mustChangePassword) redirect("/change-password" as never);
   return children;
 }

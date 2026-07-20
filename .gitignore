@@ -10,3 +10,4 @@ postgres-data/
 .patch-input.txt
 test.patch-probe
 .tools/
+*.tsbuildinfo

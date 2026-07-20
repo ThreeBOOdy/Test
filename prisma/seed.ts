@@ -10,8 +10,8 @@ const prisma = new PrismaClient({ adapter: new PrismaPg({ connectionString }) })
 
 async function main() {
   const seedPassword = process.env.APP_SEED_PASSWORD ?? "ChangeMe123!";
-  await prisma.user.upsert({ where: { username: "teacher" }, update: {}, create: { username: "teacher", displayName: "陈老师", role: "TEACHER", passwordHash: hashPassword(seedPassword), mustChangePassword: true } });
-  await prisma.user.upsert({ where: { username: "student" }, update: {}, create: { username: "student", displayName: "林小知", role: "STUDENT", passwordHash: hashPassword(seedPassword), mustChangePassword: true } });
+  await prisma.user.upsert({ where: { username: "teacher" }, update: {}, create: { username: "teacher", displayName: "陈老师", role: "TEACHER", passwordHash: hashPassword(seedPassword), mustChangePassword: false } });
+  await prisma.user.upsert({ where: { username: "student" }, update: {}, create: { username: "student", displayName: "林小知", role: "STUDENT", passwordHash: hashPassword(seedPassword), mustChangePassword: false } });
 
   for (const level of levels) {
     await prisma.level.upsert({ where: { id: level.id }, update: { code: level.code, name: level.name, sortOrder: level.sortOrder, enabled: level.enabled }, create: level });

@@ -14,7 +14,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ message: "用户名或密码错误" }, { status: 401 });
     }
     const token = await createSessionToken({ userId: user.id, username: user.username, role: user.role });
-    const response = NextResponse.json({ user: { id: user.id, username: user.username, displayName: user.displayName, role: user.role } });
+    const response = NextResponse.json({ user: { id: user.id, username: user.username, displayName: user.displayName, role: user.role, mustChangePassword: user.mustChangePassword } });
     response.cookies.set(SESSION_COOKIE, token, { httpOnly: true, sameSite: "lax", secure: process.env.COOKIE_SECURE === "true", path: "/", maxAge: 60 * 60 * 24 * 7 });
     return response;
   } catch (error) {

@@ -20,7 +20,8 @@ export function LoginForm() {
     if (!response.ok) { setError(data.message ?? "登录失败"); return; }
     const requested = searchParams.get("next");
     const fallback = data.user.role === "TEACHER" ? "/teacher" : "/student";
-    router.replace((requested?.startsWith("/") ? requested : fallback) as never);
+    const destination = data.user.mustChangePassword ? "/change-password" : requested?.startsWith("/") ? requested : fallback;
+    router.replace(destination as never);
     router.refresh();
   }
 

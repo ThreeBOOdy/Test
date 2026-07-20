@@ -4,6 +4,7 @@ import { Prisma } from "@/generated/prisma/client";
 import { prisma } from "@/lib/db";
 import { validateImportRow } from "@/lib/domain/question-import";
 import type { ImportQuestionRow } from "@/lib/domain/types";
+import { ensureKnowledgePoint } from "@/lib/server/knowledge-service";
 import { getCurrentUser } from "@/lib/server/session";
 
 const rowSchema = z.object({
@@ -43,21 +44,4 @@ export async function POST(request: Request) {
   } catch (error) {
     return NextResponse.json({ message: error instanceof Error ? error.message : "导入失败" }, { status: 400 });
   }
-}
-
-type Transaction = Parameters<Parameters<typeof prisma.$transaction>[0]>[0];
-async function ensureKnowledgePoint(tx: Transaction, code: string, leafName?: string) {
-  const segments = code.split(".").map((segment) => segment.trim()).filter(Boolean);
-  if (segments.length === 0) throw new Error("分类号不能为空");
-  let parentId: string | null = null;
-  let currentCode = "";
-  let current = null as Awaited<ReturnType<typeof tx.knowledgePoint.findUnique>>;
-  for (let index = 0; index < segments.length; index += 1) {
-    currentCode = currentCode ? `${currentCode}.${segments[index]}` : segments[index];
-    const path = `/${segments.slice(0, index + 1).map((_, partIndex) => segments.slice(0, partIndex + 1).join(".")).join("/")}`;
-    current = await tx.knowledgePoint.upsert({ where: { code: currentCode }, update: index === segments.length - 1 && leafName ? { name: leafName } : {}, create: { code: currentCode, name: index === segments.length - 1 && leafName ? leafName : currentCode, parentId, path, depth: index, sortOrder: 0, enabled: true } });
-    parentId = current.id;
-  }
-  if (!current) throw new Error("知识点创建失败");
-  return current;
 }

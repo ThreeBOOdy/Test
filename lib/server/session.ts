@@ -1,5 +1,6 @@
 import "server-only";
 import { cookies } from "next/headers";
+import { cache } from "react";
 import { SignJWT, jwtVerify } from "jose";
 import { prisma } from "@/lib/db";
 
@@ -35,11 +36,11 @@ export async function verifySessionToken(token: string): Promise<SessionPayload 
   }
 }
 
-export async function getCurrentUser() {
+export const getCurrentUser = cache(async function getCurrentUser() {
   const store = await cookies();
   const token = store.get(SESSION_COOKIE)?.value;
   if (!token) return null;
   const session = await verifySessionToken(token);
   if (!session) return null;
   return prisma.user.findFirst({ where: { id: session.userId, enabled: true }, select: { id: true, username: true, displayName: true, role: true, mustChangePassword: true } });
-}
+});

@@ -1,13 +1,14 @@
-import { KeyRound, Plus, Search, UserRoundCheck } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
 import { PageHeader } from "@/components/page-header";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
+import { StudentManager } from "@/components/student-manager";
 import { prisma } from "@/lib/db";
 
 export default async function StudentsPage() {
-  const students=await prisma.user.findMany({where:{role:"STUDENT"},include:{sessions:{select:{correctCount:true,singleCountSnapshot:true,multipleCountSnapshot:true,startedAt:true},orderBy:{startedAt:"desc"}}},orderBy:{createdAt:"desc"}});
-  return <AppShell role="teacher" currentPath="/teacher/students"><div className="safe-bottom"><PageHeader title="学生管理" description={`当前共有 ${students.length} 个学生账号。账号由教师创建，公开注册保持关闭。`} action={<Button><Plus className="size-4" />创建学生</Button>} /><div className="mb-5 flex flex-col gap-3 rounded-2xl border border-[var(--border)] bg-white p-4 sm:flex-row"><label className="flex h-11 flex-1 items-center gap-3 rounded-xl bg-[var(--muted)] px-4"><Search className="size-4 text-[var(--muted-foreground)]" /><input className="w-full bg-transparent text-sm outline-none" placeholder="搜索姓名或用户名" /></label><Button variant="outline">批量导入学生</Button></div><Card><CardContent className="overflow-x-auto p-0"><table className="min-w-[820px] w-full text-left"><thead><tr className="border-b border-[var(--border)] bg-[var(--muted)] text-xs text-[var(--muted-foreground)]"><Th>学生</Th><Th>账号状态</Th><Th>累计练习</Th><Th>正确率</Th><Th>最近活跃</Th><Th>操作</Th></tr></thead><tbody>{students.map((student)=>{const answered=student.sessions.reduce((sum,item)=>sum+item.singleCountSnapshot+item.multipleCountSnapshot,0);const correct=student.sessions.reduce((sum,item)=>sum+item.correctCount,0);const accuracy=answered?Math.round(correct/answered*100):0;return <tr key={student.id} className="border-b border-[var(--border)] last:border-0"><Td><div className="flex items-center gap-3"><div className="grid size-10 place-items-center rounded-full bg-[var(--secondary)] font-bold text-[var(--primary)]">{student.displayName[0]}</div><div><div className="font-extrabold">{student.displayName}</div><div className="mt-1 text-xs text-[var(--muted-foreground)]">{student.username}</div></div></div></Td><Td><Badge tone={student.enabled?"green":"red"}>{student.enabled?"启用":"停用"}</Badge></Td><Td>{student.sessions.length} 次</Td><Td><span className="font-extrabold text-[var(--primary)]">{accuracy}%</span></Td><Td>{student.sessions[0]?.startedAt.toLocaleString("zh-CN")??"尚未练习"}</Td><Td><div className="flex gap-2"><Button variant="ghost" size="sm"><UserRoundCheck className="size-4" />详情</Button><Button variant="ghost" size="sm"><KeyRound className="size-4" />重置密码</Button></div></Td></tr>})}</tbody></table></CardContent></Card></div></AppShell>;
+  const students = await prisma.user.findMany({ where: { role: "STUDENT" }, include: { sessions: { select: { correctCount: true, singleCountSnapshot: true, multipleCountSnapshot: true, startedAt: true }, orderBy: { startedAt: "desc" } } }, orderBy: { createdAt: "desc" } });
+  const rows = students.map((student) => {
+    const answered = student.sessions.reduce((sum, item) => sum + item.singleCountSnapshot + item.multipleCountSnapshot, 0);
+    const correct = student.sessions.reduce((sum, item) => sum + item.correctCount, 0);
+    return { id: student.id, username: student.username, displayName: student.displayName, enabled: student.enabled, mustChangePassword: student.mustChangePassword, sessionCount: student.sessions.length, accuracy: answered ? Math.round(correct / answered * 100) : 0, lastActive: student.sessions[0]?.startedAt.toLocaleString("zh-CN") ?? "尚未练习" };
+  });
+  return <AppShell role="teacher" currentPath="/teacher/students"><div className="safe-bottom"><PageHeader title="学生管理" description={`当前共有 ${rows.length} 个学生账号。教师可创建账号、停用账号并生成一次性临时密码。`} /><StudentManager students={rows} /></div></AppShell>;
 }
-function Th({children}:{children:React.ReactNode}){return <th className="px-5 py-4 font-semibold">{children}</th>}; function Td({children}:{children:React.ReactNode}){return <td className="px-5 py-4 text-sm">{children}</td>}
