@@ -1,15 +1,16 @@
-import { BookOpenCheck } from "lucide-react";
+﻿import { RadioTower } from "lucide-react";
+import { cn } from "@/lib/utils";
 
-export function Logo({ compact = false }: { compact?: boolean }) {
+export function Logo({ compact = false, inverse = false }: { compact?: boolean; inverse?: boolean }) {
   return (
     <div className="flex items-center gap-3">
-      <div className="grid size-10 place-items-center rounded-2xl bg-[var(--primary)] text-white shadow-[0_8px_20px_rgba(17,94,89,.25)]">
-        <BookOpenCheck className="size-5" aria-hidden="true" />
+      <div className="radio-waves grid size-10 place-items-center rounded-[15px] bg-[linear-gradient(145deg,#16b8c2,#087883)] text-white shadow-[0_10px_28px_rgba(7,139,152,.28)]">
+        <RadioTower className="relative z-10 size-5" aria-hidden="true" />
       </div>
       {compact ? null : (
         <div>
-          <div className="text-base font-extrabold tracking-[-0.03em]">知练</div>
-          <div className="text-[11px] font-medium tracking-[0.18em] text-[var(--muted-foreground)]">SMART PRACTICE</div>
+          <div className={cn("text-base font-black tracking-[-0.04em]", inverse && "text-white")}>波段研习</div>
+          <div className={cn("mt-0.5 text-[10px] font-bold tracking-[0.22em] text-[var(--muted-foreground)]", inverse && "text-cyan-100/60")}>RADIO EXAM LAB</div>
         </div>
       )}
     </div>

@@ -13,7 +13,8 @@ const schema = z.object({
 export async function POST(request: Request) {
   try {
     const user = await getCurrentUser();
-    if (!user || user.role !== "TEACHER") return NextResponse.json({ message: "需要教师权限" }, { status: 403 });
+    if (!user) return NextResponse.json({ message: "登录状态已失效，请重新登录" }, { status: 401 });
+    if (user.role !== "TEACHER") return NextResponse.json({ message: "当前账号没有教师权限" }, { status: 403 });
     const input = schema.parse(await request.json());
     const duplicate = await prisma.user.findUnique({ where: { username: input.username } });
     if (duplicate) throw new Error("用户名已存在");

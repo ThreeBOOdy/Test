@@ -15,7 +15,8 @@ const schema = z.object({ fileName: z.string().min(1), rows: z.array(z.object({ 
 export async function POST(request: Request) {
   try {
     const user = await getCurrentUser();
-    if (!user || user.role !== "TEACHER") return NextResponse.json({ message: "需要教师权限" }, { status: 403 });
+    if (!user) return NextResponse.json({ message: "登录状态已失效，请重新登录" }, { status: 401 });
+    if (user.role !== "TEACHER") return NextResponse.json({ message: "当前账号没有教师权限" }, { status: 403 });
     const input = schema.parse(await request.json());
     const validated = input.rows.map((item) => validateImportRow(item.row as ImportQuestionRow));
     const invalid = validated.filter((item) => item.issues.some((issue) => issue.severity === "error"));

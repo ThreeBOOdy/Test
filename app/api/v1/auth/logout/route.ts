@@ -1,8 +1,6 @@
 import { NextResponse } from "next/server";
-import { SESSION_COOKIE } from "@/lib/server/session";
+import { clearSessionCookie, publicUrl } from "@/lib/server/session-cookie";
 
-export async function GET(request: Request) {
-  const response = NextResponse.redirect(new URL("/", request.url));
-  response.cookies.set(SESSION_COOKIE, "", { httpOnly: true, sameSite: "lax", path: "/", maxAge: 0 });
-  return response;
+export async function POST(request: Request) {
+  return clearSessionCookie(NextResponse.redirect(publicUrl("/", request)));
 }

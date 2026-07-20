@@ -1,5 +1,6 @@
 "use client";
 
+import { authenticatedFetch } from "@/lib/client/authenticated-fetch";
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Check, Copy, KeyRound, Pencil, Plus, Search, X } from "lucide-react";
@@ -38,7 +39,7 @@ export function StudentManager({ students }: { students: StudentRow[] }) {
     if (!form) return;
     setPending(true);
     setMessage("");
-    const response = await fetch(form.id ? `/api/v1/admin/students/${form.id}` : "/api/v1/admin/students", {
+    const response = await authenticatedFetch(form.id ? `/api/v1/admin/students/${form.id}` : "/api/v1/admin/students", {
       method: form.id ? "PUT" : "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(form.id ? { action: "update", displayName: form.displayName, enabled: form.enabled } : { username: form.username, displayName: form.displayName, password: form.password }),
@@ -56,7 +57,7 @@ export function StudentManager({ students }: { students: StudentRow[] }) {
   async function resetPassword(student: StudentRow) {
     if (!window.confirm(`确定为 ${student.displayName} 重置密码吗？`)) return;
     setPending(true);
-    const response = await fetch(`/api/v1/admin/students/${student.id}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "resetPassword" }) });
+    const response = await authenticatedFetch(`/api/v1/admin/students/${student.id}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "resetPassword" }) });
     const result = await response.json();
     setPending(false);
     if (!response.ok) {

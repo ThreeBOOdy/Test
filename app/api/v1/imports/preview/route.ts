@@ -12,7 +12,8 @@ const aliases: Record<string, string[]> = {
 export async function POST(request: Request) {
   try {
     const user = await getCurrentUser();
-    if (!user || user.role !== "TEACHER") return NextResponse.json({ message: "需要教师权限" }, { status: 403 });
+    if (!user) return NextResponse.json({ message: "登录状态已失效，请重新登录" }, { status: 401 });
+    if (user.role !== "TEACHER") return NextResponse.json({ message: "当前账号没有教师权限" }, { status: 403 });
     const formData = await request.formData();
     const file = formData.get("file");
     if (!(file instanceof File)) return NextResponse.json({ message: "请选择 Excel 文件" }, { status: 400 });

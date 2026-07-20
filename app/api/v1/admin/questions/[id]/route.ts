@@ -19,7 +19,8 @@ const schema = z.object({
 export async function PUT(request: Request, context: { params: Promise<{ id: string }> }) {
   try {
     const user = await getCurrentUser();
-    if (!user || user.role !== "TEACHER") return NextResponse.json({ message: "需要教师权限" }, { status: 403 });
+    if (!user) return NextResponse.json({ message: "登录状态已失效，请重新登录" }, { status: 401 });
+    if (user.role !== "TEACHER") return NextResponse.json({ message: "当前账号没有教师权限" }, { status: 403 });
     const { id } = await context.params;
     const input = schema.parse(await request.json());
     const normalized = normalizeQuestionEditorInput(input);

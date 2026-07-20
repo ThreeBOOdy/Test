@@ -1,5 +1,6 @@
 "use client";
 
+import { authenticatedFetch } from "@/lib/client/authenticated-fetch";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { KeyRound, ShieldCheck } from "lucide-react";
@@ -21,7 +22,7 @@ export function ChangePasswordForm({ role }: { role: "STUDENT" | "TEACHER" }) {
       return;
     }
     setPending(true);
-    const response = await fetch("/api/v1/auth/change-password", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ currentPassword, newPassword }) });
+    const response = await authenticatedFetch("/api/v1/auth/change-password", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ currentPassword, newPassword }) });
     const result = await response.json();
     setPending(false);
     if (!response.ok) {

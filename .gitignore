@@ -11,3 +11,4 @@ postgres-data/
 test.patch-probe
 .tools/
 *.tsbuildinfo
+tmp/
