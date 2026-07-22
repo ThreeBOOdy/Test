@@ -2,9 +2,13 @@ import { ApiError } from "./api-error";
 
 export const DEFAULT_JSON_BODY_LIMIT = 256 * 1024;
 
-export async function readJsonBody(request: Request, maxBytes = DEFAULT_JSON_BODY_LIMIT): Promise<unknown> {
+export function assertRequestBodySize(request: Request, maxBytes: number) {
   const declaredLength = Number(request.headers.get("content-length"));
   if (Number.isFinite(declaredLength) && declaredLength > maxBytes) throw new ApiError("请求体过大", 413);
+}
+
+export async function readJsonBody(request: Request, maxBytes = DEFAULT_JSON_BODY_LIMIT): Promise<unknown> {
+  assertRequestBodySize(request, maxBytes);
 
   const reader = request.body?.getReader();
   const decoder = new TextDecoder();

@@ -2,7 +2,8 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { isImportBatchExpired } from "../lib/domain/import-batch";
 import { isLoginBlocked, validatePasswordPolicy } from "../lib/domain/security";
 import { ApiError, mapPublicError } from "../lib/domain/api-error";
-import { readJsonBody } from "../lib/domain/request-body";
+import { getDatabaseSchema } from "../lib/domain/database-url";
+import { assertRequestBodySize, readJsonBody } from "../lib/domain/request-body";
 import { normalizePagination } from "../lib/server/pagination";
 
 afterEach(() => {
@@ -56,6 +57,11 @@ describe("API error mapping", () => {
 });
 
 describe("request body limits", () => {
+  it("rejects an oversized multipart request before parsing", () => {
+    const request = new Request("http://localhost/api", { method: "POST", headers: { "content-length": "21" }, body: "file" });
+    expect(() => assertRequestBodySize(request, 20)).toThrowError(new ApiError("请求体过大", 413));
+  });
+
   it("rejects declared and streamed JSON bodies above the limit", async () => {
     const declared = new Request("http://localhost/api", { method: "POST", headers: { "content-length": "20" }, body: "{}" });
     await expect(readJsonBody(declared, 10)).rejects.toMatchObject({ status: 413 });
@@ -70,5 +76,12 @@ describe("request body limits", () => {
 
     const malformed = new Request("http://localhost/api", { method: "POST", body: "{" });
     await expect(readJsonBody(malformed, 1024)).rejects.toEqual(new ApiError("请求体不是有效 JSON", 400));
+  });
+});
+
+describe("database URL schema", () => {
+  it("uses the configured PostgreSQL schema and defaults to public", () => {
+    expect(getDatabaseSchema("postgresql://user:pass@localhost:5432/app?schema=tenant_a")).toBe("tenant_a");
+    expect(getDatabaseSchema("postgresql://user:pass@localhost:5432/app")).toBe("public");
   });
 });

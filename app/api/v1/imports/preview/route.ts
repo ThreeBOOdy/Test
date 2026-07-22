@@ -4,6 +4,7 @@ import { Prisma } from "@/generated/prisma/client";
 import { prisma } from "@/lib/db";
 import { getImportBatchExpiry } from "@/lib/domain/import-batch";
 import { validateImportRow } from "@/lib/domain/question-import";
+import { assertRequestBodySize } from "@/lib/domain/request-body";
 import type { ImportQuestionRow, ValidatedQuestionRow } from "@/lib/domain/types";
 import { assertSameOrigin } from "@/lib/server/http";
 import { ApiError, apiErrorResponse, requireRole } from "@/lib/server/api";
@@ -16,6 +17,7 @@ export async function POST(request: Request) {
   try {
     assertSameOrigin(request);
     const user = await requireRole("TEACHER");
+    assertRequestBodySize(request, 21 * 1024 * 1024);
     const form = await request.formData();
     const file = form.get("file");
     if (!(file instanceof File)) throw new ApiError("请选择 Excel 文件");

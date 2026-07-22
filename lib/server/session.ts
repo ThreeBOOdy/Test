@@ -8,7 +8,7 @@ import { assertProductionAuthEnvironment } from "@/lib/server/env";
 export const SESSION_COOKIE = "zhilian_session";
 const encoder = new TextEncoder();
 
-type SessionPayload = { userId: string; role: "STUDENT" | "TEACHER"; username: string; sessionVersion: number };
+export type SessionPayload = { userId: string; role: "STUDENT" | "TEACHER"; username: string; sessionVersion: number };
 
 function secret() {
   return encoder.encode(assertProductionAuthEnvironment());
@@ -35,11 +35,18 @@ export async function verifySessionToken(token: string): Promise<SessionPayload 
   }
 }
 
+export async function findSessionUser(session: SessionPayload) {
+  return prisma.user.findFirst({
+    where: { id: session.userId, enabled: true, sessionVersion: session.sessionVersion },
+    select: { id: true, username: true, displayName: true, role: true, mustChangePassword: true, sessionVersion: true },
+  });
+}
+
 export const getCurrentUser = cache(async function getCurrentUser() {
   const store = await cookies();
   const token = store.get(SESSION_COOKIE)?.value;
   if (!token) return null;
   const session = await verifySessionToken(token);
   if (!session) return null;
-  return prisma.user.findFirst({ where: { id: session.userId, enabled: true, sessionVersion: session.sessionVersion }, select: { id: true, username: true, displayName: true, role: true, mustChangePassword: true, sessionVersion: true } });
+  return findSessionUser(session);
 });

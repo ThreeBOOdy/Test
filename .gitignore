@@ -3,6 +3,8 @@ node_modules/
 .npm-cache/
 generated/
 coverage/
+playwright-report/
+test-results/
 .env
 .env.local
 *.log

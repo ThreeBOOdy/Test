@@ -1,12 +1,14 @@
 import { beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "../../generated/prisma/client";
-import { commitImportBatch, getImportBatchReport } from "../../lib/server/import-service";
+import { getDatabaseSchema } from "../../lib/domain/database-url";
+import { commitImportBatch, getImportBatchReport, revertImportBatch } from "../../lib/server/import-service";
 import { createPracticeSession, getPracticeSession, submitPracticeAnswer } from "../../lib/server/practice-service";
+import { createSessionToken, findSessionUser, verifySessionToken } from "../../lib/server/session";
 
 const connectionString = process.env.DATABASE_URL;
 if (!connectionString) throw new Error("DATABASE_URL is required for integration tests");
-const prisma = new PrismaClient({ adapter: new PrismaPg({ connectionString }) });
+const prisma = new PrismaClient({ adapter: new PrismaPg({ connectionString }, { schema: getDatabaseSchema(connectionString) }) });
 
 beforeAll(() => {
   if (!connectionString.includes("practice")) throw new Error("Integration tests require an isolated practice database");
@@ -112,5 +114,56 @@ describe("production database foundation", () => {
     const result = await submitPracticeAnswer(user.id, created.id, question.id, ["A"]);
     expect(result.isCorrect).toBe(true);
     expect(await prisma.practiceSession.findUniqueOrThrow({ where: { id: created.id } })).toMatchObject({ status: "COMPLETED", currentIndex: 1, correctCount: 1 });
+  });
+
+  it("invalidates an old session after the user session version changes", async () => {
+    const user = await prisma.user.create({ data: { username: "session-user", displayName: "Session User", passwordHash: "test", role: "STUDENT" } });
+    const token = await createSessionToken({ userId: user.id, username: user.username, role: user.role, sessionVersion: user.sessionVersion });
+    const payload = await verifySessionToken(token);
+    expect(payload).not.toBeNull();
+    expect(await findSessionUser(payload!)).toMatchObject({ id: user.id, sessionVersion: 0 });
+
+    await prisma.user.update({ where: { id: user.id }, data: { sessionVersion: { increment: 1 } } });
+
+    expect(await findSessionUser(payload!)).toBeNull();
+  });
+
+  it("creates at most twenty wrong-question items and updates mastery", async () => {
+    const user = await prisma.user.create({ data: { username: "wrong-user", displayName: "Wrong User", passwordHash: "test", role: "STUDENT" } });
+    const level = await prisma.level.create({ data: { code: "A", name: "A Level" } });
+    const point = await prisma.knowledgePoint.create({ data: { code: "8.1.1", name: "Wrong Point", path: "/8/8.1/8.1.1", depth: 2 } });
+    const questions = await Promise.all(Array.from({ length: 25 }, (_, index) => prisma.question.create({ data: { levelId: level.id, knowledgePointId: point.id, externalQuestionCode: `WRONG-${index + 1}`, stem: `Wrong ${index + 1}`, type: "SINGLE_CHOICE", optionCount: 2, correctOptionCount: 1, selectionSpec: "2选1", options: [{ id: "A", text: "A" }, { id: "B", text: "B" }], correctOptionIds: ["A"] } })));
+    await prisma.wrongQuestion.createMany({ data: questions.map((question) => ({ userId: user.id, questionId: question.id })) });
+
+    const session = await createPracticeSession(user.id, { mode: "wrong" });
+
+    expect(session.mode).toBe("WRONG_QUESTION");
+    expect(session.total).toBe(20);
+    expect((await prisma.practiceSession.findUniqueOrThrow({ where: { id: session.id } })).levelId).toBeNull();
+    const [correctQuestion, incorrectQuestion] = session.questions;
+    await submitPracticeAnswer(user.id, session.id, correctQuestion.id, ["A"]);
+    await submitPracticeAnswer(user.id, session.id, incorrectQuestion.id, ["B"]);
+    expect(await prisma.wrongQuestion.findUniqueOrThrow({ where: { userId_questionId: { userId: user.id, questionId: correctQuestion.id } } })).toMatchObject({ mastered: true, wrongCount: 1 });
+    expect(await prisma.wrongQuestion.findUniqueOrThrow({ where: { userId_questionId: { userId: user.id, questionId: incorrectQuestion.id } } })).toMatchObject({ mastered: false, wrongCount: 2 });
+  });
+
+  it("deletes unused imported questions, archives referenced ones, and prevents repeated revert", async () => {
+    const teacher = await prisma.user.create({ data: { username: "revert-teacher", displayName: "Teacher", passwordHash: "test", role: "TEACHER" } });
+    const student = await prisma.user.create({ data: { username: "revert-student", displayName: "Student", passwordHash: "test", role: "STUDENT" } });
+    const level = await prisma.level.create({ data: { code: "A", name: "A Level" } });
+    const point = await prisma.knowledgePoint.create({ data: { code: "7.1.1", name: "Revert Point", path: "/7/7.1/7.1.1", depth: 2 } });
+    const batch = await prisma.importBatch.create({ data: { fileName: "revert.xlsx", importedById: teacher.id, status: "COMMITTED", totalRows: 2, validRows: 2, insertedRows: 2 } });
+    const [used, unused] = await Promise.all([
+      prisma.question.create({ data: { levelId: level.id, knowledgePointId: point.id, importBatchId: batch.id, externalQuestionCode: "REVERT-USED", stem: "Used", type: "SINGLE_CHOICE", optionCount: 2, correctOptionCount: 1, selectionSpec: "2选1", options: [{ id: "A", text: "A" }, { id: "B", text: "B" }], correctOptionIds: ["A"] } }),
+      prisma.question.create({ data: { levelId: level.id, knowledgePointId: point.id, importBatchId: batch.id, externalQuestionCode: "REVERT-UNUSED", stem: "Unused", type: "SINGLE_CHOICE", optionCount: 2, correctOptionCount: 1, selectionSpec: "2选1", options: [{ id: "A", text: "A" }, { id: "B", text: "B" }], correctOptionIds: ["A"] } }),
+    ]);
+    const session = await prisma.practiceSession.create({ data: { userId: student.id, mode: "LEVEL_COMPREHENSIVE", levelId: level.id, singleCountSnapshot: 1, multipleCountSnapshot: 0 } });
+    await prisma.practiceSessionQuestion.create({ data: { sessionId: session.id, questionId: used.id, position: 0, snapshot: { questionId: used.id, levelId: level.id, knowledgePointId: point.id, stem: used.stem, type: used.type, optionCount: 2, correctOptionCount: 1, selectionSpec: "2选1", options: [{ id: "A", text: "A" }, { id: "B", text: "B" }], correctOptionIds: ["A"], levelCode: level.code, knowledgeName: point.name } } });
+
+    expect(await revertImportBatch(batch.id)).toEqual({ archived: 1, deleted: 1 });
+    expect(await prisma.question.findUnique({ where: { id: unused.id } })).toBeNull();
+    expect(await prisma.question.findUniqueOrThrow({ where: { id: used.id } })).toMatchObject({ status: "ARCHIVED" });
+    expect(await prisma.importBatch.findUniqueOrThrow({ where: { id: batch.id } })).toMatchObject({ status: "REVERTED" });
+    await expect(revertImportBatch(batch.id)).rejects.toMatchObject({ status: 409 });
   });
 });

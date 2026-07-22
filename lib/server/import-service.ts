@@ -9,6 +9,18 @@ import { ensureKnowledgePoint } from "@/lib/server/knowledge-service";
 
 type ImportBatchReportOptions = { page: number; pageSize: number; issuesOnly?: boolean };
 
+export async function revertImportBatch(batchId: string) {
+  return prisma.$transaction(async (tx) => {
+    const batch = await tx.importBatch.findUnique({ where: { id: batchId } });
+    if (!batch) throw new ApiError("导入批次不存在", 404);
+    if (batch.status !== "COMMITTED") throw new ApiError("只有已提交批次可以撤销", 409);
+    const archived = await tx.question.updateMany({ where: { importBatchId: batchId, sessionQuestions: { some: {} } }, data: { status: "ARCHIVED" } });
+    const deleted = await tx.question.deleteMany({ where: { importBatchId: batchId, sessionQuestions: { none: {} }, answers: { none: {} }, wrongQuestions: { none: {} } } });
+    await tx.importBatch.update({ where: { id: batchId }, data: { status: "REVERTED", revertedAt: new Date() } });
+    return { archived: archived.count, deleted: deleted.count };
+  });
+}
+
 export async function getImportBatchReport(batchId: string, options: ImportBatchReportOptions) {
   const batch = await prisma.importBatch.findUnique({
     where: { id: batchId },

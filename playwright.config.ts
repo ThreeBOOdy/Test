@@ -8,11 +8,11 @@ export default defineConfig({
   timeout: 120_000,
   fullyParallel: false,
   workers: 1,
-  use: { baseURL, trace: "retain-on-failure" },
+  use: { baseURL, trace: "retain-on-failure", ...(process.env.CI ? {} : { channel: "chrome" as const }) },
   webServer: {
     command: `npm run dev -- --port ${port}`,
     url: `${baseURL}/api/health/live`,
-    reuseExistingServer: !process.env.CI,
+    reuseExistingServer: false,
     timeout: 120_000,
     env: { ...process.env, COOKIE_SECURE: "false" },
   },

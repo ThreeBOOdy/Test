@@ -2,41 +2,192 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import ExcelJS from "exceljs";
-import { expect, test } from "@playwright/test";
+import { expect, test, type Page } from "@playwright/test";
 
-async function login(page: import("@playwright/test").Page, username: string) {
+const runId = `${Date.now().toString(36)}-${process.pid}`;
+const studentUsername = `e2e-${runId}`;
+const initialPassword = "InitialPass123!";
+const changedPassword = "ChangedPass456!";
+let temporaryPassword = "";
+
+async function login(page: Page, username: string, password: string, destination: string) {
   await page.goto("/login");
   await page.getByLabel("用户名").fill(username);
-  await page.getByLabel("密码").fill("ChangeMe123!");
+  await page.getByLabel("密码").fill(password);
   await page.getByRole("button", { name: "登录" }).click();
+  await expect(page).toHaveURL(new RegExp(`${destination.replaceAll("/", "\\/")}$`));
 }
 
-test("teacher and student can enter their protected workspaces", async ({ page }) => {
-  await login(page, "teacher");
-  await expect(page).toHaveURL(/\/teacher$/);
-  await expect(page.getByText("教师工作台").first()).toBeVisible();
+async function logout(page: Page) {
   await page.getByRole("button", { name: "退出登录" }).click();
-  await login(page, "student");
-  await expect(page).toHaveURL(/\/student$/);
-  await expect(page.getByText(/欢迎回来/)).toBeVisible();
-});
+  await expect(page).toHaveURL(/\/$/);
+}
 
-test("Excel preview commits every row beyond the first hundred", async ({ page }) => {
-  await login(page, "teacher");
-  await page.goto("/teacher/import");
-  const workbook = new ExcelJS.Workbook();
-  const sheet = workbook.addWorksheet("Questions");
-  sheet.addRow(["等级", "分类号", "知识点名称", "题目编号", "问题", "答案", "选项规格", "A", "B", "C", "D", "是否启用"]);
-  for (let index = 1; index <= 101; index += 1) sheet.addRow(["A", "9.1.1", "E2E Knowledge", `E2E-${index}`, `Question ${index}`, "A", "4选1", "Correct", "Wrong B", "Wrong C", "Wrong D", "是"]);
-  const filePath = path.join(os.tmpdir(), `zhixue-e2e-${Date.now()}.xlsx`);
-  await workbook.xlsx.writeFile(filePath);
-  try {
-    await page.locator('input[type="file"]').setInputFiles(filePath);
-    await page.getByRole("button", { name: "开始预检" }).click();
-    await expect(page.getByRole("button", { name: "确认导入 101 道题" })).toBeVisible();
-    await page.getByRole("button", { name: "确认导入 101 道题" }).click();
-    await expect(page.getByText("成功导入 101 道题，跳过重复 0 道")).toBeVisible();
-  } finally {
-    fs.rmSync(filePath, { force: true });
-  }
+function optionIndexes(ids: string[]) {
+  return ids.map((id) => id.charCodeAt(0) - 65);
+}
+
+async function answerQuestion(page: Page, optionIds: string[]) {
+  const options = page.locator('button[class*="min-h-16"]');
+  await expect(options).toHaveCount(4);
+  for (const index of optionIndexes(optionIds)) await options.nth(index).click();
+  await page.getByRole("button", { name: "提交本题" }).click();
+  await expect(page.getByText(/回答正确|回答错误/, { exact: true })).toBeVisible();
+}
+
+async function answerWrong(page: Page) {
+  const isMultiple = await page.getByText("多选题", { exact: true }).isVisible();
+  await answerQuestion(page, isMultiple ? ["B", "C", "D"] : ["D"]);
+  await expect(page.getByText("回答错误", { exact: true })).toBeVisible();
+}
+
+function correctOptions(stem: string) {
+  const mappings: Array<[string, string[]]> = [
+    ["通常属于良导体", ["A"]],
+    ["电流的国际单位", ["B"]],
+    ["电压的国际单位", ["C"]],
+    ["电阻的国际单位", ["A"]],
+    ["直流电的电流方向", ["B"]],
+    ["功率的国际单位", ["B"]],
+    ["通常属于绝缘体", ["A", "B", "D"]],
+    ["描述基本电路状态", ["A", "B", "C"]],
+    ["安全用电应做到", ["A", "C", "D"]],
+    ["常见半导体器件", ["A", "B", "D"]],
+    ["Question ", ["A"]],
+  ];
+  const match = mappings.find(([text]) => stem.includes(text));
+  if (!match) throw new Error(`未找到题目答案映射：${stem}`);
+  return match[1];
+}
+
+async function answerCorrect(page: Page) {
+  const stem = await page.getByRole("heading", { level: 1 }).innerText();
+  await answerQuestion(page, correctOptions(stem));
+  await expect(page.getByText("回答正确", { exact: true })).toBeVisible();
+}
+
+test.describe.serial("production business flows", () => {
+  test("teacher creates and resets a student who must change the first-login password", async ({ page }) => {
+    await login(page, "teacher", "ChangeMe123!", "/teacher");
+    await expect(page.getByText("教师工作台").first()).toBeVisible();
+    await page.goto("/teacher/students");
+    await page.getByRole("button", { name: "创建学生" }).click();
+
+    const createDialog = page.getByRole("dialog", { name: "创建学生" });
+    await createDialog.getByLabel("用户名").fill(studentUsername);
+    await createDialog.getByLabel("显示姓名").fill("端到端学生");
+    await createDialog.getByLabel("初始密码").fill(initialPassword);
+    await createDialog.getByRole("button", { name: "保存学生" }).click();
+    await expect(createDialog).toBeHidden();
+
+    const studentRow = page.getByRole("row").filter({ hasText: studentUsername });
+    await expect(studentRow).toContainText("待修改");
+    page.once("dialog", (dialog) => dialog.accept());
+    await studentRow.getByRole("button", { name: "重置密码" }).click();
+
+    const passwordDialog = page.getByRole("dialog", { name: "临时密码已生成" });
+    temporaryPassword = (await passwordDialog.locator("code").innerText()).trim();
+    expect(temporaryPassword).toMatch(/^[a-f0-9]{16}A1$/);
+    await passwordDialog.getByRole("button", { name: "我已保存" }).click();
+    await logout(page);
+
+    await login(page, studentUsername, temporaryPassword, "/change-password");
+    await expect(page.getByText("管理员为你创建或重置了密码，请先完成修改。")).toBeVisible();
+    await page.getByLabel("当前密码").fill(temporaryPassword);
+    await page.getByLabel("新密码", { exact: true }).fill(changedPassword);
+    await page.getByLabel("确认新密码").fill(changedPassword);
+    await page.getByRole("button", { name: "保存新密码" }).click();
+    await expect(page).toHaveURL(/\/student$/);
+    await expect(page.getByRole("heading", { name: "欢迎回来，端到端学生" })).toBeVisible();
+
+    await logout(page);
+    await login(page, studentUsername, changedPassword, "/student");
+    await expect(page.getByRole("heading", { name: "欢迎回来，端到端学生" })).toBeVisible();
+  });
+
+  test("student practice restores progress and closes the wrong-question loop", async ({ page }) => {
+    await login(page, studentUsername, changedPassword, "/student");
+    await page.getByRole("link", { name: /A级综合练习/ }).click();
+    await expect(page).toHaveURL(/\/student\/practice\?session=/);
+    await expect(page.getByText("第 1 / 10 题", { exact: true })).toBeVisible();
+
+    await answerWrong(page);
+    await page.getByRole("button", { name: "下一题" }).click();
+    await expect(page.getByText("第 2 / 10 题", { exact: true })).toBeVisible();
+    const secondStem = await page.getByRole("heading", { level: 1 }).innerText();
+    await page.reload();
+    await expect(page.getByText("第 2 / 10 题", { exact: true })).toBeVisible();
+    await expect(page.getByRole("heading", { level: 1 })).toHaveText(secondStem);
+
+    for (let questionNumber = 2; questionNumber <= 10; questionNumber += 1) {
+      await answerWrong(page);
+      await page.getByRole("button", { name: questionNumber === 10 ? "查看结果" : "下一题" }).click();
+    }
+    await expect(page.getByRole("heading", { name: "练习完成" })).toBeVisible();
+    await expect(page.getByText("答对 0 题，共 10 题")).toBeVisible();
+
+    await page.goto("/student/history");
+    await expect(page.getByText("A级综合练习").first()).toBeVisible();
+    await expect(page.getByText("10 题", { exact: false }).first()).toBeVisible();
+
+    await page.goto("/student/wrong");
+    await expect(page.getByText("待巩固 10", { exact: true })).toBeVisible();
+    await page.getByRole("link", { name: "随机巩固错题" }).click();
+    await expect(page.getByText("第 1 / 10 题", { exact: true })).toBeVisible();
+
+    for (let questionNumber = 1; questionNumber <= 10; questionNumber += 1) {
+      await answerCorrect(page);
+      await page.getByRole("button", { name: questionNumber === 10 ? "查看结果" : "下一题" }).click();
+    }
+    await expect(page.getByRole("heading", { name: "练习完成" })).toBeVisible();
+    await expect(page.getByText("答对 10 题，共 10 题")).toBeVisible();
+
+    await page.goto("/student/wrong");
+    await expect(page.getByText("待巩固 0", { exact: true })).toBeVisible();
+    await expect(page.getByText("已掌握 10", { exact: true })).toBeVisible();
+    await page.goto("/student/history");
+    await expect(page.getByText("错题巩固练习").first()).toBeVisible();
+  });
+
+  test("Excel preview, issue report, commit, and revert work as one server-owned batch", async ({ page }) => {
+    await login(page, "teacher", "ChangeMe123!", "/teacher");
+    await page.goto("/teacher/import");
+    const workbook = new ExcelJS.Workbook();
+    const sheet = workbook.addWorksheet("Questions");
+    sheet.addRow(["等级", "题库编号", "分类号", "知识点名称", "题目编号", "问题", "答案", "选项规格", "A", "B", "C", "D", "是否启用"]);
+    for (let index = 1; index <= 101; index += 1) {
+      sheet.addRow(["A", `E2E-${runId}`, "4.1.1", "导体与绝缘体", `MC2-E2E-${runId}-${index}`, `Question ${runId}-${index}`, "A", "4选1", "Correct", "Wrong B", "Wrong C", "Wrong D", "是"]);
+    }
+    const filePath = path.join(os.tmpdir(), `zhixue-e2e-${runId}.xlsx`);
+    await workbook.xlsx.writeFile(filePath);
+    try {
+      await page.locator('input[type="file"]').setInputFiles(filePath);
+      await page.getByRole("button", { name: "开始预检" }).click();
+      await expect(page.getByRole("button", { name: "确认导入 101 道题" })).toBeVisible();
+      await expect(page.getByText("总行数", { exact: true }).locator("..")).toContainText("101");
+      await expect(page.getByText("可导入", { exact: true }).locator("..")).toContainText("101");
+      await expect(page.getByText("警告", { exact: true }).locator("..")).toContainText("101");
+      await expect(page.getByText("错误", { exact: true }).locator("..")).toContainText("0");
+      await page.getByRole("button", { name: "确认导入 101 道题" }).click();
+      await expect(page.getByText("成功导入 101 道题，跳过重复 0 道")).toBeVisible();
+
+      const batch = page.getByText(path.basename(filePath)).locator("xpath=ancestor::div[contains(@class,'rounded-2xl')][1]");
+      await expect(batch).toContainText("COMMITTED");
+      await batch.getByRole("button", { name: "查看报告" }).click();
+      await expect(batch.getByText("问题报告（共 101 行）")).toBeVisible();
+      await expect(batch.getByText(/警告［题目编号］/).first()).toBeVisible();
+
+      page.once("dialog", (dialog) => dialog.accept());
+      const revertResponsePromise = page.waitForResponse((response) => response.request().method() === "POST" && response.url().includes("/api/v1/admin/import-batches/") && response.url().endsWith("/revert"), { timeout: 30_000 });
+      await batch.getByRole("button", { name: "撤销" }).click();
+      const revertResponse = await revertResponsePromise;
+      expect(revertResponse.ok()).toBe(true);
+      expect(await revertResponse.json()).toEqual({ deleted: 101, archived: 0 });
+      await expect(page.getByText("已删除 101 道未使用题目，归档 0 道已使用题目")).toBeVisible({ timeout: 15_000 });
+      await expect(batch).toContainText("REVERTED");
+      await expect(batch.getByRole("button", { name: "撤销" })).toHaveCount(0);
+    } finally {
+      fs.rmSync(filePath, { force: true });
+    }
+  });
 });
