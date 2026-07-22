@@ -1,4 +1,5 @@
 import "server-only";
+import { ApiError } from "@/lib/domain/api-error";
 import { prisma } from "@/lib/db";
 import { normalizeKnowledgeCode } from "@/lib/domain/knowledge-code";
 
@@ -23,10 +24,10 @@ export async function ensureKnowledgePoint(
     const isLeaf = index === segments.length - 1;
     const existing = await tx.knowledgePoint.findUnique({ where: { code: currentCode }, include: { _count: { select: { questions: true } } } });
     if (existing && !isLeaf && existing._count.questions > 0) {
-      throw new Error(`知识点 ${existing.code} 已有直属题目，不能再创建下级节点`);
+      throw new ApiError(`知识点 ${existing.code} 已有直属题目，不能再创建下级节点`, 409);
     }
     if (existing && !existing.enabled) {
-      throw new Error(`知识点 ${existing.code} 已停用`);
+      throw new ApiError(`知识点 ${existing.code} 已停用`, 409);
     }
     current = await tx.knowledgePoint.upsert({
       where: { code: currentCode },
@@ -44,6 +45,6 @@ export async function ensureKnowledgePoint(
     parentId = current.id;
   }
 
-  if (!current) throw new Error("知识点创建失败");
+  if (!current) throw new ApiError("知识点创建失败", 500);
   return current;
 }

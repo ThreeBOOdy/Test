@@ -14,7 +14,7 @@ type Session = PublicPracticeSession;
 type AnswerResult = PublicAnswerResult;
 
 export function PracticeRunner({ session }: { session: Session }) {
-  const [index, setIndex] = useState(0);
+  const [index, setIndex] = useState(() => Math.max(0, session.questions.findIndex((question) => !session.initialResults[question.id])));
   const [selected, setSelected] = useState<string[]>([]);
   const [results, setResults] = useState<Record<string, AnswerResult>>(session.initialResults);
   const [error, setError] = useState("");

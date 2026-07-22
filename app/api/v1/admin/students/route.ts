@@ -1,25 +1,30 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/lib/db";
+import { readJsonBody } from "@/lib/domain/request-body";
+import { validatePasswordPolicy } from "@/lib/domain/security";
+import { writeAuditLog } from "@/lib/server/audit";
+import { assertSameOrigin } from "@/lib/server/http";
 import { hashPassword } from "@/lib/server/password";
-import { getCurrentUser } from "@/lib/server/session";
+import { ApiError, apiErrorResponse, requireRole } from "@/lib/server/api";
 
 const schema = z.object({
-  username: z.string().trim().min(3).max(50).regex(/^[A-Za-z0-9_.-]+$/, "用户名只能包含字母、数字、点、横线和下划线"),
+  username: z.string().trim().min(3).max(50).regex(/^[A-Za-z0-9_.-]+$/),
   displayName: z.string().trim().min(1).max(100),
-  password: z.string().min(8).max(128),
+  password: z.string().min(10).max(128).refine((value) => validatePasswordPolicy(value) === null),
 });
 
 export async function POST(request: Request) {
   try {
-    const user = await getCurrentUser();
-    if (!user || user.role !== "TEACHER") return NextResponse.json({ message: "需要教师权限" }, { status: 403 });
-    const input = schema.parse(await request.json());
+    assertSameOrigin(request);
+    const user = await requireRole("TEACHER");
+    const input = schema.parse(await readJsonBody(request));
     const duplicate = await prisma.user.findUnique({ where: { username: input.username } });
-    if (duplicate) throw new Error("用户名已存在");
+    if (duplicate) throw new ApiError("\u7528\u6237\u540d\u5df2\u5b58\u5728", 409);
     const student = await prisma.user.create({ data: { username: input.username, displayName: input.displayName, passwordHash: hashPassword(input.password), role: "STUDENT", enabled: true, mustChangePassword: true } });
+    await writeAuditLog({ actorUserId: user.id, action: "STUDENT_CREATE", targetType: "User", targetId: student.id });
     return NextResponse.json({ id: student.id }, { status: 201 });
   } catch (error) {
-    return NextResponse.json({ message: error instanceof Error ? error.message : "创建学生失败" }, { status: 400 });
+    return apiErrorResponse(error, "\u521b\u5efa\u5b66\u751f\u5931\u8d25");
   }
 }

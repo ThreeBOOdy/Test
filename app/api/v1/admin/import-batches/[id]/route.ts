@@ -1,0 +1,16 @@
+import { NextResponse } from "next/server";
+import { apiErrorResponse, requireRole } from "@/lib/server/api";
+import { getImportBatchReport } from "@/lib/server/import-service";
+import { normalizePagination } from "@/lib/server/pagination";
+
+export async function GET(request: Request, context: { params: Promise<{ id: string }> }) {
+  try {
+    await requireRole("TEACHER");
+    const { id } = await context.params;
+    const url = new URL(request.url);
+    const { page, pageSize } = normalizePagination({ page: url.searchParams.get("page") ?? undefined, pageSize: url.searchParams.get("pageSize") ?? undefined });
+    return NextResponse.json(await getImportBatchReport(id, { page, pageSize, issuesOnly: url.searchParams.get("issuesOnly") === "true" }));
+  } catch (error) {
+    return apiErrorResponse(error, "读取导入报告失败");
+  }
+}

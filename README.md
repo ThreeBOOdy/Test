@@ -20,6 +20,7 @@
 - 查看真实累计正确率、近 7 日练习量、待巩固错题和薄弱知识点。
 - 查看等级综合与知识点专项练习历史。
 - 错题本支持掌握状态更新。
+- 支持从待巩固错题中随机抽取最多 20 道重新练习。
 - 管理员重置密码后，下一次访问学生端会强制修改密码。
 
 ### 教师端
@@ -52,6 +53,7 @@
 - 自动创建缺失的知识点父级目录。
 - 记录导入批次、文件名、有效行数和警告数量。
 - 相同等级下题目编号重复时跳过重复题目。
+- 预检内容完整保存在服务器，支持导入批次查询和安全撤销。
 
 ## 核心业务规则
 
@@ -370,7 +372,7 @@ http://localhost:3000
 | 方法 | 路径 | 说明 |
 | --- | --- | --- |
 | `POST` | `/api/v1/auth/login` | 用户名密码登录 |
-| `GET` | `/api/v1/auth/logout` | 清除登录 Cookie |
+| `POST` | `/api/v1/auth/logout` | 清除登录 Cookie |
 | `POST` | `/api/v1/auth/change-password` | 修改当前账号密码 |
 
 ### 学生练习
@@ -398,6 +400,8 @@ http://localhost:3000
 | --- | --- | --- |
 | `POST` | `/api/v1/imports/preview` | 解析 Excel 并返回预检结果 |
 | `POST` | `/api/v1/imports/commit` | 再次校验并提交导入批次 |
+| `GET` | `/api/v1/admin/import-batches` | 分页查询导入批次 |
+| `POST` | `/api/v1/admin/import-batches/:id/revert` | 撤销已提交导入批次 |
 
 所有教师管理接口都会在服务端验证当前登录用户角色，不能只依赖前端页面限制。
 
@@ -407,6 +411,19 @@ http://localhost:3000
 
 ```powershell
 npm.cmd test
+```
+
+运行 PostgreSQL 集成测试：
+
+```powershell
+npm.cmd run test:integration
+```
+
+运行 Playwright 端到端测试：
+
+```powershell
+npx playwright install chromium
+npm.cmd run test:e2e
 ```
 
 运行 ESLint：
@@ -439,7 +456,7 @@ npm.cmd run build
 ### 备份
 
 ```powershell
-docker compose exec -T db pg_dump -U practice -d practice --clean --if-exists --no-owner --no-privileges > practice-backup.sql
+.\scripts\backup.ps1
 ```
 
 ### 恢复
@@ -447,12 +464,10 @@ docker compose exec -T db pg_dump -U practice -d practice --clean --if-exists --
 恢复前应停止应用写入，并确认目标数据库可以被覆盖：
 
 ```powershell
-docker compose stop app
-Get-Content -Raw -Encoding utf8 practice-backup.sql | docker compose exec -T db psql -U practice -d practice
-docker compose start app
+.\scripts\restore.ps1 -BackupFile .\backups\practice-YYYYMMDD-HHMMSS.dump
 ```
 
-如果使用 Windows PowerShell 5，建议通过 PostgreSQL 图形工具或 PowerShell 7 执行备份恢复，以避免重定向编码影响 SQL 文件。
+脚本使用 PostgreSQL 自定义备份格式，并通过 `docker compose cp` 传输文件，避免 Windows PowerShell 文本管道造成编码损坏。
 
 生产环境建议使用云数据库自动备份，并定期验证备份文件可以正常恢复。
 
@@ -468,16 +483,49 @@ docker compose start app
 - 停用账号后旧会话自动失效。
 - 管理员重置密码后的强制改密。
 - 学生题目接口不会提前返回标准答案。
+- 登录失败按用户名和 IP 进行 15 分钟窗口限流。
+- 密码修改、密码重置和账号停用会使旧会话立即失效。
+- 所有写接口执行同源校验，敏感教师操作写入审计日志。
 
-正式公网部署前仍建议增加：
+## 生产部署
 
-- HTTPS 和 `COOKIE_SECURE=true`。
-- 登录接口限流和失败锁定。
-- 更完整的 CSRF 防护。
-- 安全审计日志。
-- 密码强度策略和密码泄露检查。
-- 数据库最小权限账号。
-- 自动备份、监控和异常告警。
+生产环境使用独立 Compose 文件，并通过 Caddy 自动申请和续期 HTTPS 证书：
+
+```powershell
+Copy-Item .env.example .env
+docker compose -f docker-compose.prod.yml up -d --build
+```
+
+生产环境必须设置随机的 `POSTGRES_PASSWORD`、至少 32 字符的 `AUTH_SECRET` 和真实 `APP_DOMAIN`。数据库不暴露宿主机端口，应用会在迁移任务成功后启动。
+
+健康检查：
+
+```text
+/api/health/live
+/api/health/ready
+```
+
+备份和恢复：
+
+```powershell
+.\scripts\backup.ps1
+.\scripts\restore.ps1 -BackupFile .\backups\practice-YYYYMMDD-HHMMSS.dump
+```
+
+升级步骤：
+
+1. 执行 `scripts/backup.ps1` 并在独立环境验证备份可恢复。
+2. 拉取新代码后运行 `docker compose -f docker-compose.prod.yml build`。
+3. 运行 `docker compose -f docker-compose.prod.yml up -d`；迁移任务成功后应用才会启动。
+4. 检查 `/api/health/live`、`/api/health/ready` 和关键登录、练习流程。
+
+回滚步骤：
+
+1. 若仅应用代码异常且迁移向后兼容，切回上一版本镜像并重新运行生产 Compose。
+2. 若数据库迁移不兼容，停止应用，使用升级前 `.dump` 文件执行 `scripts/restore.ps1`，再启动上一版本镜像。
+3. Prisma 生产迁移不自动执行向下迁移；任何破坏性 Schema 变更都必须先验证备份恢复。
+
+正式公网部署后仍建议接入外部监控、集中日志、异常告警和异地备份。
 
 ## 常见问题
 
@@ -522,11 +570,10 @@ public.ecr.aws/docker/library/postgres:18-alpine
 ## 当前限制与后续规划
 
 - 增加知识点分类号重命名和批量调整。
-- 增加导入批次撤销和错误报告下载。
 - 增加题库 Excel 导出和学生批量导入。
 - 增加分页、服务端组合筛选和大题库性能优化。
-- 增加错题重新组卷和掌握度复习策略。
-- 增加教师统计报表和学生薄弱知识点趋势。
+- 增加更细粒度的掌握度复习策略。
+- 增加学生薄弱知识点趋势和报表导出。
 - 增加 AI 解析草稿、教师审核和学生查看流程。
 - 增加正式考试、限时、防作弊和试卷发布能力。
 

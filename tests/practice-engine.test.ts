@@ -35,4 +35,15 @@ describe("practice engine", () => {
     expect(isAnswerCorrect(["A"], ["A", "C"])).toBe(false);
     expect(isAnswerCorrect(["A", "B"], ["A", "C"])).toBe(false);
   });
+
+  it("selects at most twenty pending wrong questions", () => {
+    const wrongBank = Array.from({ length: 25 }, (_, index) => question(`wrong-${index}`, "SINGLE_CHOICE", index % 2 ? "A" : "B"));
+    const result = selectPracticeQuestions(wrongBank, {
+      mode: "WRONG_QUESTION",
+      levelId: "",
+      rule: { singleCount: 20, multipleCount: 0 },
+    }, () => 0.42);
+    expect(result.questions).toHaveLength(20);
+    expect(new Set(result.questions.map((item) => item.id)).size).toBe(20);
+  });
 });

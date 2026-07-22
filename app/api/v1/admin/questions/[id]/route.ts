@@ -3,7 +3,10 @@ import { z } from "zod";
 import { Prisma } from "@/generated/prisma/client";
 import { prisma } from "@/lib/db";
 import { normalizeQuestionEditorInput } from "@/lib/domain/question-editor";
-import { getCurrentUser } from "@/lib/server/session";
+import { readJsonBody } from "@/lib/domain/request-body";
+import { assertSameOrigin } from "@/lib/server/http";
+import { writeAuditLog } from "@/lib/server/audit";
+import { ApiError, apiErrorResponse, requireRole } from "@/lib/server/api";
 
 const schema = z.object({
   levelId: z.string().min(1),
@@ -18,23 +21,23 @@ const schema = z.object({
 
 export async function PUT(request: Request, context: { params: Promise<{ id: string }> }) {
   try {
-    const user = await getCurrentUser();
-    if (!user || user.role !== "TEACHER") return NextResponse.json({ message: "需要教师权限" }, { status: 403 });
+    assertSameOrigin(request);
+    const user = await requireRole("TEACHER");
     const { id } = await context.params;
-    const input = schema.parse(await request.json());
+    const input = schema.parse(await readJsonBody(request));
     const normalized = normalizeQuestionEditorInput(input);
     const [question, level, point] = await Promise.all([
       prisma.question.findUnique({ where: { id } }),
       prisma.level.findUnique({ where: { id: input.levelId } }),
       prisma.knowledgePoint.findUnique({ where: { id: input.knowledgePointId }, include: { _count: { select: { children: true } } } }),
     ]);
-    if (!question) throw new Error("题目不存在");
-    if (!level || (!level.enabled && input.levelId !== question.levelId)) throw new Error("等级不存在或已停用");
-    if (!point || (!point.enabled && input.knowledgePointId !== question.knowledgePointId)) throw new Error("知识点不存在或已停用");
-    if (point._count.children > 0) throw new Error("题目必须归属末级知识点");
+    if (!question) throw new ApiError("题目不存在", 404);
+    if (!level || (!level.enabled && input.levelId !== question.levelId)) throw new ApiError("等级不存在或已停用", 404);
+    if (!point || (!point.enabled && input.knowledgePointId !== question.knowledgePointId)) throw new ApiError("知识点不存在或已停用", 404);
+    if (point._count.children > 0) throw new ApiError("题目必须归属末级知识点");
     if (input.externalQuestionCode) {
       const duplicate = await prisma.question.findFirst({ where: { id: { not: id }, levelId: input.levelId, externalQuestionCode: input.externalQuestionCode } });
-      if (duplicate) throw new Error("该等级下已存在相同题目编号");
+      if (duplicate) throw new ApiError("该等级下已存在相同题目编号", 409);
     }
     await prisma.question.update({
       where: { id },
@@ -53,8 +56,9 @@ export async function PUT(request: Request, context: { params: Promise<{ id: str
         status: input.status,
       },
     });
+    await writeAuditLog({ actorUserId: user.id, action: "QUESTION_UPDATE", targetType: "Question", targetId: id, metadata: { status: input.status } });
     return NextResponse.json({ saved: true });
   } catch (error) {
-    return NextResponse.json({ message: error instanceof Error ? error.message : "更新题目失败" }, { status: 400 });
+    return apiErrorResponse(error, "更新题目失败");
   }
 }

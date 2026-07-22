@@ -3,7 +3,10 @@ import { z } from "zod";
 import { Prisma } from "@/generated/prisma/client";
 import { prisma } from "@/lib/db";
 import { normalizeQuestionEditorInput } from "@/lib/domain/question-editor";
-import { getCurrentUser } from "@/lib/server/session";
+import { readJsonBody } from "@/lib/domain/request-body";
+import { assertSameOrigin } from "@/lib/server/http";
+import { writeAuditLog } from "@/lib/server/audit";
+import { ApiError, apiErrorResponse, requireRole } from "@/lib/server/api";
 
 const schema = z.object({
   levelId: z.string().min(1),
@@ -18,20 +21,20 @@ const schema = z.object({
 
 export async function POST(request: Request) {
   try {
-    const user = await getCurrentUser();
-    if (!user || user.role !== "TEACHER") return NextResponse.json({ message: "需要教师权限" }, { status: 403 });
-    const input = schema.parse(await request.json());
+    assertSameOrigin(request);
+    const user = await requireRole("TEACHER");
+    const input = schema.parse(await readJsonBody(request));
     const normalized = normalizeQuestionEditorInput(input);
     const [level, point] = await Promise.all([
       prisma.level.findFirst({ where: { id: input.levelId, enabled: true } }),
       prisma.knowledgePoint.findFirst({ where: { id: input.knowledgePointId, enabled: true }, include: { _count: { select: { children: true } } } }),
     ]);
-    if (!level) throw new Error("等级不存在或已停用");
-    if (!point) throw new Error("知识点不存在或已停用");
-    if (point._count.children > 0) throw new Error("题目必须归属末级知识点");
+    if (!level) throw new ApiError("等级不存在或已停用", 404);
+    if (!point) throw new ApiError("知识点不存在或已停用", 404);
+    if (point._count.children > 0) throw new ApiError("题目必须归属末级知识点");
     if (input.externalQuestionCode) {
       const duplicate = await prisma.question.findFirst({ where: { levelId: input.levelId, externalQuestionCode: input.externalQuestionCode } });
-      if (duplicate) throw new Error("该等级下已存在相同题目编号");
+      if (duplicate) throw new ApiError("该等级下已存在相同题目编号", 409);
     }
     const question = await prisma.question.create({
       data: {
@@ -49,8 +52,9 @@ export async function POST(request: Request) {
         status: input.status,
       },
     });
+    await writeAuditLog({ actorUserId: user.id, action: "QUESTION_CREATE", targetType: "Question", targetId: question.id });
     return NextResponse.json({ id: question.id }, { status: 201 });
   } catch (error) {
-    return NextResponse.json({ message: error instanceof Error ? error.message : "创建题目失败" }, { status: 400 });
+    return apiErrorResponse(error, "创建题目失败");
   }
 }

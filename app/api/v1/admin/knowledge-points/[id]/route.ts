@@ -1,18 +1,21 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/lib/db";
-import { getCurrentUser } from "@/lib/server/session";
+import { readJsonBody } from "@/lib/domain/request-body";
+import { assertSameOrigin } from "@/lib/server/http";
+import { writeAuditLog } from "@/lib/server/audit";
+import { ApiError, apiErrorResponse, requireRole } from "@/lib/server/api";
 
 const schema = z.object({ name: z.string().trim().min(1).max(200), sortOrder: z.number().int().min(0).max(100000), enabled: z.boolean() });
 
 export async function PUT(request: Request, context: { params: Promise<{ id: string }> }) {
   try {
-    const user = await getCurrentUser();
-    if (!user || user.role !== "TEACHER") return NextResponse.json({ message: "需要教师权限" }, { status: 403 });
+    assertSameOrigin(request);
+    const user = await requireRole("TEACHER");
     const { id } = await context.params;
-    const input = schema.parse(await request.json());
+    const input = schema.parse(await readJsonBody(request));
     const point = await prisma.knowledgePoint.findUnique({ where: { id } });
-    if (!point) throw new Error("知识点不存在");
+    if (!point) throw new ApiError("知识点不存在", 404);
     await prisma.$transaction([
       prisma.knowledgePoint.update({ where: { id }, data: { name: input.name, sortOrder: input.sortOrder } }),
       prisma.knowledgePoint.updateMany({
@@ -20,8 +23,9 @@ export async function PUT(request: Request, context: { params: Promise<{ id: str
         data: { enabled: input.enabled },
       }),
     ]);
+    await writeAuditLog({ actorUserId: user.id, action: "KNOWLEDGE_UPDATE", targetType: "KnowledgePoint", targetId: id, metadata: { enabled: input.enabled } });
     return NextResponse.json({ saved: true });
   } catch (error) {
-    return NextResponse.json({ message: error instanceof Error ? error.message : "更新知识点失败" }, { status: 400 });
+    return apiErrorResponse(error, "更新知识点失败");
   }
 }

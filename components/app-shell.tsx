@@ -1,8 +1,10 @@
 import Link from "next/link";
 import type { LucideIcon } from "lucide-react";
-import { BarChart3, BookCopy, BookOpen, ChevronRight, FileSpreadsheet, GraduationCap, LayoutDashboard, LogOut, Settings2, Target, UsersRound } from "lucide-react";
+import { BarChart3, BookCopy, BookOpen, ChevronRight, FileSpreadsheet, GraduationCap, LayoutDashboard, Settings2, Target, UsersRound } from "lucide-react";
 import { Logo } from "@/components/logo";
+import { LogoutButton } from "@/components/logout-button";
 import { cn } from "@/lib/utils";
+import { getCurrentUser } from "@/lib/server/session";
 
 const studentNav = [
   { href: "/student", label: "学习首页", icon: LayoutDashboard },
@@ -17,9 +19,11 @@ const teacherNav = [
   { href: "/teacher/rules", label: "抽题规则", icon: Settings2 },
   { href: "/teacher/import", label: "Excel 导入", icon: FileSpreadsheet },
   { href: "/teacher/students", label: "学生管理", icon: UsersRound },
+  { href: "/teacher/reports", label: "教学统计", icon: BarChart3 },
 ];
 
-export function AppShell({ role, currentPath, children }: { role: "student" | "teacher"; currentPath: string; children: React.ReactNode }) {
+export async function AppShell({ role, currentPath, children }: { role: "student" | "teacher"; currentPath: string; children: React.ReactNode }) {
+  const user = await getCurrentUser();
   const nav = role === "student" ? studentNav : teacherNav;
   const label = role === "student" ? "学生空间" : "教师工作台";
 
@@ -36,17 +40,17 @@ export function AppShell({ role, currentPath, children }: { role: "student" | "t
         <nav className="mt-7 flex flex-col gap-1.5">
           {nav.map((item) => <NavItem key={item.href} item={item} active={currentPath === item.href} />)}
         </nav>
-        <Link href="/api/v1/auth/logout" className="mt-auto flex items-center gap-3 rounded-xl px-3 py-3 text-sm font-semibold text-[var(--muted-foreground)] hover:bg-[var(--muted)] hover:text-[var(--foreground)]"><LogOut className="size-4" />退出登录</Link>
+        <LogoutButton />
       </aside>
       <div className="lg:pl-64">
         <header className="sticky top-0 z-20 flex h-16 items-center justify-between border-b border-[var(--border)] bg-[color:rgba(247,248,244,.88)] px-4 backdrop-blur-xl sm:px-8 lg:px-10">
           <div className="lg:hidden"><Logo compact /></div>
           <div className="hidden text-sm text-[var(--muted-foreground)] lg:block">{label}</div>
-          <div className="flex items-center gap-3"><div className="text-right"><div className="text-sm font-bold">{role === "student" ? "林小知" : "陈老师"}</div><div className="text-xs text-[var(--muted-foreground)]">{role === "student" ? "A级学习中" : "题库管理员"}</div></div><div className="grid size-10 place-items-center rounded-full bg-[var(--ink)] text-sm font-bold text-white">{role === "student" ? "林" : "陈"}</div></div>
+          <div className="flex items-center gap-3"><div className="text-right"><div className="text-sm font-bold">{user?.displayName ?? "知练用户"}</div><div className="text-xs text-[var(--muted-foreground)]">{user?.username ?? label}</div></div><div className="grid size-10 place-items-center rounded-full bg-[var(--ink)] text-sm font-bold text-white">{(user?.displayName ?? "知").slice(0, 1)}</div></div>
         </header>
         <main className="mx-auto w-full max-w-[1440px] px-4 py-6 sm:px-8 sm:py-8 lg:px-10">{children}</main>
         <nav className="fixed inset-x-3 bottom-3 z-30 grid grid-cols-3 rounded-2xl border border-[var(--border)] bg-white/95 p-2 shadow-2xl backdrop-blur lg:hidden">
-          {nav.slice(0, 3).map((item) => <MobileNavItem key={item.href} item={item} active={currentPath === item.href} />)}
+          {nav.map((item) => <MobileNavItem key={item.href} item={item} active={currentPath === item.href} />)}
         </nav>
       </div>
     </div>

@@ -50,9 +50,11 @@ model User {
   role              UserRole          @default(STUDENT)
   enabled           Boolean           @default(true)
   mustChangePassword Boolean          @default(true)
+  sessionVersion     Int              @default(0)
   sessions          PracticeSession[]
   wrongQuestions    WrongQuestion[]
   imports           ImportBatch[]
+  auditLogs         AuditLog[]
   createdAt         DateTime          @default(now())
   updatedAt         DateTime          @updatedAt
 }
@@ -144,6 +146,7 @@ model Question {
   @@index([levelId, type, status])
   @@index([knowledgePointId, levelId, type, status])
   @@index([externalQuestionCode])
+  @@unique([levelId, externalQuestionCode])
 }
 
 model PracticeSession {
@@ -151,8 +154,8 @@ model PracticeSession {
   userId               String
   user                 User                      @relation(fields: [userId], references: [id])
   mode                 PracticeMode
-  levelId              String
-  level                Level                     @relation(fields: [levelId], references: [id])
+  levelId              String?
+  level                Level?                    @relation(fields: [levelId], references: [id])
   knowledgePointId     String?
   knowledgePoint       KnowledgePoint?           @relation(fields: [knowledgePointId], references: [id])
   status               PracticeStatus            @default(IN_PROGRESS)
@@ -173,6 +176,7 @@ model PracticeSessionQuestion {
   sessionId  String
   questionId String
   position   Int
+  snapshot   Json
   session    PracticeSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
   question   Question        @relation(fields: [questionId], references: [id])
 
@@ -217,11 +221,56 @@ model ImportBatch {
   validRows    Int          @default(0)
   warningRows  Int          @default(0)
   errorRows    Int          @default(0)
+  insertedRows Int          @default(0)
+  duplicateRows Int         @default(0)
   errorReport  Json?
   importedById String
   importedBy   User         @relation(fields: [importedById], references: [id])
   questions    Question[]
+  rows         ImportBatchRow[]
   createdAt    DateTime     @default(now())
+  expiresAt    DateTime?
   committedAt  DateTime?
   revertedAt   DateTime?
+
+  @@index([importedById, status, createdAt])
+}
+
+model ImportBatchRow {
+  id        String      @id @default(cuid())
+  batchId   String
+  batch     ImportBatch @relation(fields: [batchId], references: [id], onDelete: Cascade)
+  rowNumber Int
+  payload   Json
+  issues    Json
+  valid     Boolean
+  createdAt DateTime    @default(now())
+
+  @@unique([batchId, rowNumber])
+  @@index([batchId, valid, rowNumber])
+}
+
+model LoginAttempt {
+  id             String   @id @default(cuid())
+  usernameHash   String
+  ipHash         String
+  success        Boolean
+  createdAt      DateTime @default(now())
+
+  @@index([usernameHash, success, createdAt])
+  @@index([ipHash, success, createdAt])
+}
+
+model AuditLog {
+  id          String   @id @default(cuid())
+  actorUserId String?
+  actor       User?    @relation(fields: [actorUserId], references: [id], onDelete: SetNull)
+  action      String
+  targetType  String
+  targetId    String?
+  metadata    Json?
+  createdAt   DateTime @default(now())
+
+  @@index([actorUserId, createdAt])
+  @@index([action, createdAt])
 }
