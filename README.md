@@ -2,7 +2,7 @@
 
 一套面向学校、培训机构和家庭学习场景的移动优先刷题系统。系统支持按照 **等级** 与 **树形知识点** 两种维度随机抽题，教师可以分别配置单选题、多选题数量，学生完成练习后会自动生成历史记录、正确率和错题数据。
 
-当前项目采用 Next.js 模块化单体架构，前后端、权限、业务接口和教师管理页面位于同一代码仓库，使用 PostgreSQL 持久化数据，并提供 Docker Compose 本地部署方案。
+当前项目采用 Next.js 模块化单体架构，前后端、权限、业务接口和教师管理页面位于同一代码仓库，使用 PostgreSQL 持久化数据，并提供本地与生产两套 Docker Compose 部署方案。当前生产化分支已经完成练习快照、错题闭环、服务端导入批次、会话失效、登录限流、审计日志、分页、统计、CI 和 HTTPS 反向代理等基础能力。
 
 ## 功能概览
 
@@ -16,11 +16,14 @@
 - 多选题按照 `4选2`、`4选3` 等规格限制选择数量。
 - 多选题必须与标准答案集合完全一致才判定正确。
 - 单题提交后即时显示结果和标准答案。
+- 最后一题提交后仍先展示即时判题，再由学生进入练习结果页。
 - 练习题目、顺序和已提交答案持久化，刷新或退出后可以继续。
+- 恢复练习时自动定位到第一道未答题。
 - 查看真实累计正确率、近 7 日练习量、待巩固错题和薄弱知识点。
 - 查看等级综合与知识点专项练习历史。
 - 错题本支持掌握状态更新。
 - 支持从待巩固错题中随机抽取最多 20 道重新练习。
+- 错题练习答对后自动标记掌握，再次答错会继续累计错误次数。
 - 管理员重置密码后，下一次访问学生端会强制修改密码。
 
 ### 教师端
@@ -35,10 +38,12 @@
 - 停用父级知识点时同步停用全部后代节点。
 - 创建学生账号、修改学生姓名、停用账号。
 - 为学生生成一次性临时密码。
+- 查看按日期、等级、学生和知识点筛选的练习次数、实际答题量、正确率和活跃学生统计。
 - 配置每个等级综合练习的单选、多选题量。
 - 配置每个“知识点 + 等级”专项练习的单选、多选题量。
 - 保存规则时校验实际题库库存，防止配置无法生成的练习。
 - 查看题目、知识点、学生和练习的真实数据库数据。
+- 题库、学生、练习历史、错题和导入批次使用服务端分页，默认每页 20 条、最大 100 条。
 
 ### Excel 题库导入
 
@@ -48,12 +53,15 @@
 - 自动识别有效选项数量、正确答案数量和题型。
 - 校验填写的 `4选2` 等规格是否与实际数据一致。
 - 使用 `MC1`、`MC2`、`MC3` 等编号进行辅助异常提示。
-- 导入前展示正确行、警告行和错误行。
+- 单次最多预检 5000 行，默认保留 24 小时。
+- 导入前分别统计有效行、警告行和错误行，页面只展示有限预览，完整数据保存在服务器。
 - 服务端再次校验后才允许正式写入数据库。
 - 自动创建缺失的知识点父级目录。
-- 记录导入批次、文件名、有效行数和警告数量。
+- 提交接口只接收 `batchId`，客户端不能修改预检后的题目内容。
+- 记录导入批次、文件名、有效行、写入行、重复行、警告行和错误行数量。
 - 相同等级下题目编号重复时跳过重复题目。
-- 预检内容完整保存在服务器，支持导入批次查询和安全撤销。
+- 支持分页查看批次问题报告和状态。
+- 撤销批次时删除未被练习引用的题目，已被引用的题目改为 `ARCHIVED`；已撤销批次不能重复提交或撤销。
 
 ## 核心业务规则
 
@@ -98,8 +106,9 @@ C级：单选 60，多选 40
 - 单选、多选题量快照。
 - 实际抽取的题目 ID。
 - 固定的题目顺序。
+- 题干、选项、标准答案、题型、等级代码和知识点名称快照。
 
-因此教师后续修改规则或题目状态，不会改变已经创建的练习。
+显示题目和服务端判题都只使用快照。因此教师后续修改规则、题干、选项、答案或题目状态，不会改变进行中的练习和历史记录。
 
 ## 技术架构
 
@@ -127,38 +136,42 @@ flowchart LR
 | 样式 | Tailwind CSS 4 | 响应式界面和移动端布局 |
 | 数据库 | PostgreSQL 18 | 题库、练习、答案、错题和账号数据 |
 | ORM | Prisma 7、`@prisma/adapter-pg` | 类型安全查询、关系和迁移 |
-| 身份认证 | jose、HTTP-only Cookie | HS256 JWT 会话与角色权限 |
+| 身份认证 | jose、HTTP-only Cookie | HS256 JWT、会话版本和角色权限 |
 | Excel | ExcelJS | Excel 读取、表头映射和导入预览 |
 | 参数校验 | Zod 4 | API 请求和导入数据校验 |
 | 图标 | Lucide React | 学生端和教师端界面图标 |
-| 测试 | Vitest | 业务规则和数据规范化测试 |
-| 部署 | Docker、Docker Compose | 应用与 PostgreSQL 容器化 |
+| 测试 | Vitest、Playwright | 单元、PostgreSQL 集成和浏览器端到端测试 |
+| 部署 | Docker、Docker Compose、Caddy | 应用、迁移任务、PostgreSQL 和自动 HTTPS |
 
 ## 数据模型
 
 | 模型 | 说明 |
 | --- | --- |
-| `User` | 学生和教师账号、密码摘要、角色、启用和强制改密状态 |
+| `User` | 学生和教师账号、密码摘要、角色、启用、强制改密和会话版本 |
 | `Level` | A、B、C 等等级定义 |
 | `KnowledgePoint` | 使用分类号、父级 ID、路径和深度组成的树形知识点 |
 | `LevelPracticeRule` | 每个等级的综合练习题量配置 |
 | `KnowledgePracticeRule` | 每个“知识点 + 等级”的专项题量配置 |
 | `Question` | 题干、选项、答案、等级、知识点、规格和状态 |
 | `PracticeSession` | 学生练习、模式、题量快照和完成状态 |
-| `PracticeSessionQuestion` | 练习中固定的题目和顺序 |
+| `PracticeSessionQuestion` | 练习中固定的题目顺序和完整题目快照 |
 | `PracticeAnswer` | 学生提交答案、正确性和提交时间 |
 | `WrongQuestion` | 学生错题次数、掌握状态和最近错误时间 |
 | `ImportBatch` | Excel 导入批次和导入统计 |
+| `ImportBatchRow` | 服务端保存的逐行预检内容、规范化结果和错误信息 |
+| `LoginAttempt` | 登录用户名哈希、IP 哈希、成功状态和时间 |
+| `AuditLog` | 学生、题目、知识点、规则和导入等管理操作日志 |
 
 ## 项目结构
 
 ```text
 app/
+├── api/health/             # 存活与就绪健康检查
 ├── api/v1/                 # 登录、练习、导入和教师管理接口
 ├── change-password/        # 强制修改密码页面
 ├── login/                  # 登录页面
 ├── student/                # 学生首页、练习、历史和错题本
-└── teacher/                # 教师概览、题库、知识点、规则、导入和学生管理
+└── teacher/                # 教师概览、题库、知识点、规则、导入、学生和统计
 components/
 ├── ui/                     # 基础 UI 组件
 ├── question-manager.tsx    # 题库管理交互
@@ -173,7 +186,11 @@ prisma/
 ├── migrations/             # PostgreSQL 迁移
 ├── schema.prisma           # 数据库模型
 └── seed.ts                 # 演示账号、等级、知识点和题目数据
-tests/                      # Vitest 自动化测试
+tests/                      # 单元、PostgreSQL 集成和 Playwright E2E 测试
+scripts/                    # PostgreSQL 备份和恢复脚本
+docker-compose.prod.yml     # 应用、迁移、数据库和 Caddy 生产编排
+Caddyfile                   # HTTPS 反向代理配置
+.github/workflows/ci.yml    # GitHub Actions 全量质量门禁
 ```
 
 ## 环境要求
@@ -197,10 +214,12 @@ Copy-Item .env.example .env
 
 | 变量 | 示例 | 说明 |
 | --- | --- | --- |
-| `DATABASE_URL` | `postgresql://practice:practice@localhost:5432/practice?schema=public` | Prisma 使用的 PostgreSQL 地址 |
+| `DATABASE_URL` | `postgresql://practice:practice@localhost:5432/practice?schema=public` | Prisma 使用的 PostgreSQL 地址；支持通过 `schema` 参数指定非 `public` Schema |
 | `APP_SEED_PASSWORD` | `ChangeMe123!` | 演示账号种子密码 |
 | `AUTH_SECRET` | 至少 32 字符随机字符串 | JWT 签名密钥 |
 | `COOKIE_SECURE` | `false` | 本地 HTTP 为 `false`，正式 HTTPS 为 `true` |
+| `POSTGRES_PASSWORD` | 高熵随机密码 | 生产 Compose 的 PostgreSQL 密码 |
+| `APP_DOMAIN` | `practice.example.com` | Caddy 申请 HTTPS 证书使用的公网域名 |
 
 PowerShell 生成随机 `AUTH_SECRET`：
 
@@ -319,7 +338,7 @@ http://localhost:3000
 | 教师 | `teacher` | `ChangeMe123!` |
 | 学生 | `student` | `ChangeMe123!` |
 
-如果修改了 `APP_SEED_PASSWORD`，密码以环境变量为准。
+如果修改了 `APP_SEED_PASSWORD`，密码以环境变量为准。Seed 按等级代码和知识点分类号等业务唯一键对齐数据，可以在同一开发数据库中重复执行。
 
 演示账号为了便于本地验收不会强制修改密码。教师新建学生或重置学生密码时，新账号会被标记为“待修改密码”。
 
@@ -379,7 +398,7 @@ http://localhost:3000
 
 | 方法 | 路径 | 说明 |
 | --- | --- | --- |
-| `POST` | `/api/v1/practice-sessions` | 创建等级综合或知识点专项练习 |
+| `POST` | `/api/v1/practice-sessions` | 创建等级综合、知识点专项或最多 20 道错题巩固练习 |
 | `POST` | `/api/v1/practice-sessions/:id/answers` | 提交一道题的答案 |
 
 ### 教师管理
@@ -398,9 +417,10 @@ http://localhost:3000
 
 | 方法 | 路径 | 说明 |
 | --- | --- | --- |
-| `POST` | `/api/v1/imports/preview` | 解析 Excel 并返回预检结果 |
-| `POST` | `/api/v1/imports/commit` | 再次校验并提交导入批次 |
+| `POST` | `/api/v1/imports/preview` | 解析 Excel，保存服务端批次并返回 `batchId`、统计和分页预览 |
+| `POST` | `/api/v1/imports/commit` | 接收 `{batchId}`，重新校验服务端保存的全部行并提交 |
 | `GET` | `/api/v1/admin/import-batches` | 分页查询导入批次 |
+| `GET` | `/api/v1/admin/import-batches/:id` | 分页查询批次预检行或问题报告 |
 | `POST` | `/api/v1/admin/import-batches/:id/revert` | 撤销已提交导入批次 |
 
 所有教师管理接口都会在服务端验证当前登录用户角色，不能只依赖前端页面限制。
@@ -445,11 +465,44 @@ npm.cmd run build
 - 同一次练习题目不重复。
 - 库存不足时拒绝创建练习。
 - 多选题答案集合精确判定。
+- 教师修改题目后，旧练习显示和判题仍使用不可变快照。
+- 练习创建、恢复、提交和完成事务。
+- 会话版本递增后旧 JWT 立即失效。
+- 最多随机抽取 20 道错题，答对更新掌握状态，答错累计错误次数。
 - Excel 常见答案格式标准化。
 - 选项规格与实际答案数量校验。
 - `MC2`、`MC3` 等编码冲突警告。
+- 5000 行预检数据能够完整提交，并正确统计重复题。
+- 导入批次问题报告分页、过期限制和安全撤销。
+- 数据库唯一约束阻止并发重复题号写入。
 - 教师题目编辑选项连续性校验。
 - 分类号格式和空段校验。
+- 教师创建学生、重置密码和学生首次强制改密。
+- 等级练习即时判题、刷新恢复、历史记录、错题产生、错题组卷和掌握状态更新。
+- Excel 预检、警告报告、101 行完整提交和撤销。
+
+当前验证基线：
+
+- 单元测试：26 项。
+- PostgreSQL 集成测试：9 项。
+- Playwright 端到端测试：3 条完整业务流程。
+- ESLint、Prisma Schema 校验和 Next.js 生产构建。
+- `npm audit`：0 个已知漏洞。
+
+完整发布前检查：
+
+```powershell
+npm.cmd test
+npm.cmd run test:integration
+npm.cmd run db:seed
+npm.cmd run test:e2e
+npm.cmd run lint
+npm.cmd run build
+npx.cmd prisma validate
+npm.cmd audit
+```
+
+GitHub Actions 使用 PostgreSQL 18 服务容器，自动执行依赖安装、Prisma Generate、数据库迁移、Seed、单元测试、集成测试、ESLint、生产构建和 Playwright E2E。
 
 ## 数据备份与恢复
 
@@ -476,9 +529,11 @@ npm.cmd run build
 当前版本已经提供：
 
 - Scrypt 密码摘要。
-- HS256 JWT 会话。
+- 10～128 位且同时包含字母和数字的密码策略。
+- HS256 JWT 会话和 `sessionVersion` 版本校验。
 - HTTP-only Cookie。
 - `SameSite=Lax` Cookie。
+- 生产环境强制 `COOKIE_SECURE=true`。
 - 学生和教师服务端角色校验。
 - 停用账号后旧会话自动失效。
 - 管理员重置密码后的强制改密。
@@ -486,6 +541,9 @@ npm.cmd run build
 - 登录失败按用户名和 IP 进行 15 分钟窗口限流。
 - 密码修改、密码重置和账号停用会使旧会话立即失效。
 - 所有写接口执行同源校验，敏感教师操作写入审计日志。
+- JSON 请求体默认限制为 256 KiB，Excel 文件限制为 20 MiB，并在解析 Multipart 前检查总请求大小。
+- 安全响应头包含 `X-Content-Type-Options`、`X-Frame-Options`、Referrer Policy、Permissions Policy 和 CSP。
+- 生产环境不会向客户端返回数据库内部异常细节。
 
 ## 生产部署
 
@@ -571,7 +629,8 @@ public.ecr.aws/docker/library/postgres:18-alpine
 
 - 增加知识点分类号重命名和批量调整。
 - 增加题库 Excel 导出和学生批量导入。
-- 增加分页、服务端组合筛选和大题库性能优化。
+- 增加更复杂的题库批量编辑和批量状态维护。
+- 继续优化超大规模题库下的索引、查询计划和后台任务队列。
 - 增加更细粒度的掌握度复习策略。
 - 增加学生薄弱知识点趋势和报表导出。
 - 增加 AI 解析草稿、教师审核和学生查看流程。
@@ -581,10 +640,16 @@ public.ecr.aws/docker/library/postgres:18-alpine
 
 仓库地址：`https://github.com/ThreeBOOdy/Test`
 
-提交代码前建议至少执行：
+当前生产化开发分支：`codex/production-hardening`。
+
+提交代码前建议执行完整质量门禁：
 
 ```powershell
-npm.cmd run lint
 npm.cmd test
+npm.cmd run test:integration
+npm.cmd run test:e2e
+npm.cmd run lint
 npm.cmd run build
+npx.cmd prisma validate
+npm.cmd audit
 ```
