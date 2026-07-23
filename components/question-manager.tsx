@@ -1,5 +1,6 @@
 "use client";
 
+import { authenticatedFetch } from "@/lib/client/authenticated-fetch";
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Check, Pencil, Plus, Search, X } from "lucide-react";
@@ -93,7 +94,7 @@ export function QuestionManager({ rows, levels, knowledgePoints }: { rows: Quest
     if (!form) return;
     setPending(true);
     setMessage("");
-    const response = await fetch(form.id ? `/api/v1/admin/questions/${form.id}` : "/api/v1/admin/questions", {
+    const response = await authenticatedFetch(form.id ? `/api/v1/admin/questions/${form.id}` : "/api/v1/admin/questions", {
       method: form.id ? "PUT" : "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(form),

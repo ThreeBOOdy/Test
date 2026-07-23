@@ -1,5 +1,6 @@
 "use client";
 
+import { authenticatedFetch } from "@/lib/client/authenticated-fetch";
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { FolderTree, Pencil, Plus, Search, X } from "lucide-react";
@@ -36,7 +37,7 @@ export function KnowledgeManager({ points }: { points: KnowledgeRow[] }) {
     if (!form) return;
     setPending(true);
     setMessage("");
-    const response = await fetch(form.id ? `/api/v1/admin/knowledge-points/${form.id}` : "/api/v1/admin/knowledge-points", {
+    const response = await authenticatedFetch(form.id ? `/api/v1/admin/knowledge-points/${form.id}` : "/api/v1/admin/knowledge-points", {
       method: form.id ? "PUT" : "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(form),
