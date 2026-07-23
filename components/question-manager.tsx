@@ -110,7 +110,7 @@ export function QuestionManager({ rows, levels, knowledgePoints }: { rows: Quest
   }
 
   return <>
-    <div className="mb-5 grid gap-3 rounded-2xl border border-[var(--border)] bg-white p-4 lg:grid-cols-[1fr_150px_150px_150px_auto]">
+    <div className="mb-5 grid gap-3 rounded-2xl border border-[var(--border)] bg-[var(--surface-soft)] p-4 lg:grid-cols-[1fr_150px_150px_150px_auto]">
       <label className="flex h-11 items-center gap-3 rounded-xl bg-[var(--muted)] px-4"><Search className="size-4 text-[var(--muted-foreground)]" /><input value={search} onChange={(event) => setSearch(event.target.value)} className="w-full bg-transparent text-sm outline-none" placeholder="搜索题干、编号或知识点" /></label>
       <Select value={levelFilter} onChange={setLevelFilter}><option value="ALL">全部等级</option>{levels.map((level) => <option key={level.id} value={level.id}>{level.code}级</option>)}</Select>
       <Select value={typeFilter} onChange={setTypeFilter}><option value="ALL">全部题型</option><option value="SINGLE_CHOICE">单选题</option><option value="MULTIPLE_CHOICE">多选题</option></Select>
@@ -124,10 +124,10 @@ export function QuestionManager({ rows, levels, knowledgePoints }: { rows: Quest
 
 function Select({ value, onChange, children }: { value: string; onChange: (value: string) => void; children: React.ReactNode }) { return <select value={value} onChange={(event) => onChange(event.target.value)} className={inputClass}>{children}</select>; }
 function Field({ label, children }: { label: string; children: React.ReactNode }) { return <label><span className="mb-2 block text-sm font-bold">{label}</span>{children}</label>; }
-function Modal({ title, onClose, children }: { title: string; onClose: () => void; children: React.ReactNode }) { return <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-slate-950/45 p-4 sm:p-8" role="dialog" aria-modal="true" aria-label={title}><div className="my-auto w-full max-w-3xl rounded-[24px] bg-white p-5 shadow-2xl sm:p-7"><div className="mb-6 flex items-center justify-between"><h2 className="text-xl font-extrabold">{title}</h2><Button type="button" variant="ghost" size="sm" onClick={onClose} aria-label="关闭"><X className="size-5" /></Button></div>{children}</div></div>; }
+function Modal({ title, onClose, children }: { title: string; onClose: () => void; children: React.ReactNode }) { return <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-slate-950/45 p-4 sm:p-8" role="dialog" aria-modal="true" aria-label={title}><div className="my-auto w-full max-w-3xl rounded-[24px] bg-[var(--surface-soft)] p-5 shadow-2xl sm:p-7"><div className="mb-6 flex items-center justify-between"><h2 className="text-xl font-extrabold">{title}</h2><Button type="button" variant="ghost" size="sm" onClick={onClose} aria-label="关闭"><X className="size-5" /></Button></div>{children}</div></div>; }
 function StatusBadge({ status }: { status: QuestionStatus }) { return <Badge tone={status === "ACTIVE" ? "green" : status === "DISABLED" ? "amber" : "neutral"}>{status === "ACTIVE" ? "启用" : status === "DISABLED" ? "停用" : "归档"}</Badge>; }
 function Empty({ text }: { text: string }) { return <div className="p-10 text-center text-sm text-[var(--muted-foreground)]">{text}</div>; }
-function ErrorMessage({ message }: { message: string }) { return <div className="rounded-xl bg-rose-50 px-4 py-3 text-sm font-semibold text-rose-700">{message}</div>; }
+function ErrorMessage({ message }: { message: string }) { return <div className="rounded-xl bg-rose-400/10 px-4 py-3 text-sm font-semibold text-rose-200">{message}</div>; }
 function Th({ children }: { children: React.ReactNode }) { return <th className="px-5 py-4 font-semibold">{children}</th>; }
 function Td({ children }: { children: React.ReactNode }) { return <td className="px-5 py-4 text-sm">{children}</td>; }
-const inputClass = "h-11 w-full rounded-xl border border-[var(--border)] bg-white px-3 text-sm outline-none transition focus:border-[var(--ring)] focus:ring-2 focus:ring-[var(--ring)]/20";
+const inputClass = "h-11 w-full rounded-xl border border-[var(--border)] bg-[var(--surface-soft)] px-3 text-sm outline-none transition focus:border-[var(--ring)] focus:ring-2 focus:ring-[var(--ring)]/20";

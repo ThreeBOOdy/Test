@@ -1,0 +1,6 @@
+import { Check, X } from "lucide-react";
+import { cn } from "@/lib/utils";
+
+export function AnswerOption({ index, option, selected, disabled, correct, wrongSelected, onToggle }: { index: number; option: { id: string; text: string }; selected: boolean; disabled: boolean; correct?: boolean; wrongSelected?: boolean; onToggle: () => void }) {
+  return <button type="button" aria-pressed={selected} disabled={disabled} onClick={onToggle} className={cn("flex min-h-16 w-full items-center gap-4 rounded-2xl border p-4 text-left transition-colors disabled:cursor-default", !correct && !wrongSelected && selected && "border-cyan-300/50 bg-cyan-300/10", !correct && !wrongSelected && !selected && "border-[var(--border)] bg-[var(--surface-soft)] hover:border-[var(--border-strong)]", correct && "border-emerald-300/45 bg-emerald-400/10", wrongSelected && "border-rose-300/45 bg-rose-400/10")}><span className="grid size-9 shrink-0 place-items-center rounded-xl border border-current/20 bg-black/15 font-black">{correct ? <Check className="size-4" /> : wrongSelected ? <X className="size-4" /> : index + 1}</span><span className="min-w-0 flex-1 font-semibold leading-7">{option.text}</span><span className="sr-only">{correct ? "正确答案" : wrongSelected ? "你的选择" : `快捷键 ${index + 1}`}</span></button>;
+}
