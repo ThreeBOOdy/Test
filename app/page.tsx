@@ -1,38 +1,13 @@
 import Link from "next/link";
-import { ArrowRight, BookOpenCheck, GraduationCap, ShieldCheck, Sparkles, Target } from "lucide-react";
+import { ArrowRight, BookOpenCheck, GraduationCap, ShieldCheck, Target } from "lucide-react";
 import { Logo } from "@/components/logo";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
+import { SignalBackdrop } from "@/components/visual/signal-backdrop";
+import { Artwork } from "@/components/visual/artwork";
 
 export default function HomePage() {
-  return (
-    <main className="min-h-screen overflow-hidden px-5 py-6 sm:px-8 lg:px-12">
-      <div className="mx-auto max-w-7xl">
-        <header className="flex items-center justify-between"><Logo /><Badge tone="green">可运行 MVP</Badge></header>
-        <section className="grid min-h-[calc(100vh-7rem)] items-center gap-12 py-14 lg:grid-cols-[1.05fr_.95fr]">
-          <div>
-            <div className="mb-6 inline-flex items-center gap-2 text-sm font-semibold text-[var(--primary)]"><Sparkles className="size-4" />让每一次练习都有明确方向</div>
-            <h1 className="max-w-3xl text-5xl font-black leading-[1.08] tracking-[-0.06em] sm:text-6xl">分等级、分知识点，<span className="text-[var(--primary)]">练到真正掌握。</span></h1>
-            <p className="mt-7 max-w-2xl text-base leading-8 text-[var(--muted-foreground)] sm:text-lg">知练为学生提供随机刷题、即时判题和错题沉淀，为教师提供题库、知识目录、抽题规则与 Excel 导入的一体化工作台。</p>
-            <div className="mt-9 flex flex-wrap gap-4">
-              <Link href="/student" className="inline-flex h-13 items-center gap-3 rounded-xl bg-[var(--primary)] px-6 font-bold text-white shadow-[0_12px_28px_rgba(17,94,89,.22)]">进入学生端<ArrowRight className="size-4" /></Link>
-              <Link href="/teacher" className="inline-flex h-13 items-center gap-3 rounded-xl border border-[var(--border)] bg-white px-6 font-bold">进入教师端<ArrowRight className="size-4" /></Link>
-            </div>
-            <div className="mt-10 flex flex-wrap gap-x-7 gap-y-3 text-sm text-[var(--muted-foreground)]"><span className="flex items-center gap-2"><ShieldCheck className="size-4 text-[var(--primary)]" />服务端判题</span><span className="flex items-center gap-2"><Target className="size-4 text-[var(--primary)]" />双维度随机抽题</span><span className="flex items-center gap-2"><BookOpenCheck className="size-4 text-[var(--primary)]" />兼容现有 Excel</span></div>
-          </div>
-          <div className="relative">
-            <div className="absolute -inset-10 rounded-full bg-emerald-100/60 blur-3xl" />
-            <div className="relative grid gap-5 sm:grid-cols-2">
-              <RoleCard href="/student" icon={GraduationCap} title="学生空间" description="按等级综合练习，或针对薄弱知识点专项突破。" stats={["即时反馈", "错题本", "学习记录"]} />
-              <RoleCard href="/teacher" icon={ShieldCheck} title="教师工作台" description="配置题量、维护知识树、校验并导入题库。" stats={["随机规则", "题库库存", "Excel 预检"]} offset />
-            </div>
-          </div>
-        </section>
-      </div>
-    </main>
-  );
+  return <main className="relative min-h-screen overflow-hidden"><SignalBackdrop /><div className="relative mx-auto max-w-7xl px-5 py-6 sm:px-8 lg:px-10"><header className="flex items-center justify-between"><Logo /><Link href="/login" className="inline-flex min-h-10 items-center rounded-xl border border-[var(--border)] bg-[var(--surface-soft)] px-4 text-sm font-bold hover:border-[var(--border-strong)]">账号登录</Link></header><section className="grid min-h-[calc(100vh-7rem)] items-center gap-12 py-14 lg:grid-cols-[.92fr_1.08fr]"><div><Badge tone="blue">无线电题库 · 专业训练系统</Badge><h1 className="mt-6 max-w-2xl text-5xl font-black leading-[1.04] tracking-[-0.06em] sm:text-6xl">把复杂题库<br /><span className="text-[var(--primary)]">调谐成清晰训练</span></h1><p className="mt-6 max-w-xl text-base leading-8 text-[var(--muted-foreground)]">为学生提供高专注随机练习、即时判题与错题沉淀；为教师提供题库、知识目录、抽题规则与 Excel 导入控制台。</p><div className="mt-9 flex flex-col gap-3 sm:flex-row"><Link href="/student" className="inline-flex min-h-12 items-center justify-center gap-3 rounded-xl bg-[var(--primary)] px-6 font-bold text-[var(--primary-foreground)]">进入学生训练<ArrowRight className="size-4" /></Link><Link href="/teacher" className="inline-flex min-h-12 items-center justify-center gap-3 rounded-xl border border-[var(--border)] bg-[var(--surface-soft)] px-6 font-bold hover:border-[var(--border-strong)]">进入教师控制台<ArrowRight className="size-4" /></Link></div><div className="mt-10 flex flex-wrap gap-x-7 gap-y-3 text-sm text-[var(--muted-foreground)]"><span className="flex items-center gap-2"><ShieldCheck className="size-4 text-[var(--primary)]" />服务端判题</span><span className="flex items-center gap-2"><Target className="size-4 text-[var(--primary)]" />双维度抽题</span><span className="flex items-center gap-2"><BookOpenCheck className="size-4 text-[var(--primary)]" />兼容现有 Excel</span></div></div><div className="relative"><div className="relative aspect-[16/11] overflow-hidden rounded-[2rem] border border-[var(--border)] bg-[var(--surface)] shadow-[var(--shadow-card)]"><Artwork src="/art/home-orbital-network.webp" alt="环绕地球的无线电通信网络" sizes="(max-width: 1024px) 100vw, 52vw" priority variant="orbital" /><div className="absolute inset-0 bg-[linear-gradient(0deg,rgba(7,11,18,.65),transparent_55%)]" /><div className="absolute inset-x-5 bottom-5 grid gap-3 sm:grid-cols-2"><RoleCard href="/student" icon={GraduationCap} title="学生训练空间" text="即时反馈 · 错题频道 · 历史记录" /><RoleCard href="/teacher" icon={ShieldCheck} title="教师题库控制台" text="抽题规则 · 库存校验 · Excel 预检" /></div></div></div></section></div></main>;
 }
 
-function RoleCard({ href, icon: Icon, title, description, stats, offset = false }: { href: string; icon: typeof GraduationCap; title: string; description: string; stats: string[]; offset?: boolean }) {
-  return <Link href={href as never} className={offset ? "sm:mt-16" : ""}><Card className="group h-full transition duration-300 hover:-translate-y-1 hover:shadow-[0_22px_55px_rgba(22,48,44,.14)]"><CardContent className="p-7"><div className="grid size-12 place-items-center rounded-2xl bg-[var(--secondary)] text-[var(--primary)]"><Icon className="size-6" /></div><h2 className="mt-6 text-2xl font-extrabold tracking-[-0.04em]">{title}</h2><p className="mt-3 min-h-20 text-sm leading-7 text-[var(--muted-foreground)]">{description}</p><div className="mt-5 flex flex-wrap gap-2">{stats.map((stat) => <Badge key={stat}>{stat}</Badge>)}</div><div className="mt-7 flex items-center gap-2 text-sm font-bold text-[var(--primary)]">打开演示<ArrowRight className="size-4 transition group-hover:translate-x-1" /></div></CardContent></Card></Link>;
-}
+function RoleCard({ href, icon: Icon, title, text }: { href: string; icon: typeof GraduationCap; title: string; text: string }) { return <Link href={href as never}><Card className="border-white/10 bg-[color:rgba(10,16,26,.82)] backdrop-blur-xl transition-transform duration-200 hover:-translate-y-0.5"><CardContent className="flex items-center gap-3 p-4"><div className="grid size-10 place-items-center rounded-xl bg-cyan-300/10 text-[var(--primary)]"><Icon className="size-5" /></div><div><div className="text-sm font-extrabold">{title}</div><div className="mt-1 text-[11px] text-[var(--muted-foreground)]">{text}</div></div></CardContent></Card></Link>; }
