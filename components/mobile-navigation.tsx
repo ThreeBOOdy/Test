@@ -2,27 +2,9 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import type { LucideIcon } from "lucide-react";
-import { BarChart3, BookCopy, BookOpen, FileSpreadsheet, LayoutDashboard, Menu, Settings2, Target, UsersRound, X } from "lucide-react";
+import { Menu, X } from "lucide-react";
+import { studentNavigation, teacherNavigation, type NavigationItem } from "@/components/navigation-items";
 import { cn } from "@/lib/utils";
-
-type NavItem = { href: string; label: string; icon: LucideIcon };
-
-export const studentNavigation: NavItem[] = [
-  { href: "/student", label: "学习首页", icon: LayoutDashboard },
-  { href: "/student/history", label: "练习记录", icon: BarChart3 },
-  { href: "/student/wrong", label: "我的错题", icon: BookCopy },
-];
-
-export const teacherNavigation: NavItem[] = [
-  { href: "/teacher", label: "管理概览", icon: LayoutDashboard },
-  { href: "/teacher/questions", label: "题库管理", icon: BookOpen },
-  { href: "/teacher/knowledge", label: "知识点目录", icon: Target },
-  { href: "/teacher/rules", label: "抽题规则", icon: Settings2 },
-  { href: "/teacher/import", label: "Excel 导入", icon: FileSpreadsheet },
-  { href: "/teacher/students", label: "学生管理", icon: UsersRound },
-  { href: "/teacher/reports", label: "教学统计", icon: BarChart3 },
-];
 
 export function MobileNavigation({ role, currentPath }: { role: "student" | "teacher"; currentPath: string }) {
   const [open, setOpen] = useState(false);
@@ -44,7 +26,7 @@ export function MobileNavigation({ role, currentPath }: { role: "student" | "tea
   </>;
 }
 
-function MobileNavLink({ item, active, onClick, expanded = false }: { item: NavItem; active: boolean; onClick: () => void; expanded?: boolean }) {
+function MobileNavLink({ item, active, onClick, expanded = false }: { item: NavigationItem; active: boolean; onClick: () => void; expanded?: boolean }) {
   const Icon = item.icon;
   return <Link href={item.href as never} aria-label={item.label} onClick={onClick} className={cn("flex min-h-12 items-center justify-center gap-1 rounded-xl px-2 py-2 text-[10px] font-semibold transition-colors", expanded ? "flex-row justify-start text-xs" : "flex-col", active ? "bg-cyan-300/12 text-[var(--primary)]" : "text-[var(--muted-foreground)] hover:bg-[var(--surface-soft)] hover:text-[var(--foreground)]")}><Icon className="size-4 shrink-0" /><span>{item.label}</span></Link>;
 }

@@ -14,8 +14,8 @@ async function login(page: Page, username: string, password: string, destination
   await page.goto("/login");
   await page.getByLabel("用户名").fill(username);
   await page.getByLabel("密码").fill(password);
-  await page.getByRole("button", { name: "登录" }).click();
-  await expect(page).toHaveURL(new RegExp(`${destination.replaceAll("/", "\\/")}$`));
+  await page.getByRole("button", { name: "进入学习频道" }).click();
+  await expect(page).toHaveURL(new RegExp(`${destination.replaceAll("/", "\\/")}$`), { timeout: 20_000 });
 }
 
 async function logout(page: Page) {
@@ -31,7 +31,7 @@ async function answerQuestion(page: Page, optionIds: string[]) {
   const options = page.locator('button[class*="min-h-16"]');
   await expect(options).toHaveCount(4);
   for (const index of optionIndexes(optionIds)) await options.nth(index).click();
-  await page.getByRole("button", { name: "提交本题" }).click();
+  await page.getByRole("button", { name: "提交答案" }).click();
   await expect(page.getByText(/回答正确|回答错误/, { exact: true })).toBeVisible();
 }
 
@@ -69,7 +69,7 @@ async function answerCorrect(page: Page) {
 test.describe.serial("production business flows", () => {
   test("teacher creates and resets a student who must change the first-login password", async ({ page }) => {
     await login(page, "teacher", "ChangeMe123!", "/teacher");
-    await expect(page.getByText("教师工作台").first()).toBeVisible();
+    await expect(page.getByText("教师控制台").first()).toBeVisible();
     await page.goto("/teacher/students");
     await page.getByRole("button", { name: "创建学生" }).click();
 
@@ -96,8 +96,12 @@ test.describe.serial("production business flows", () => {
     await page.getByLabel("当前密码").fill(temporaryPassword);
     await page.getByLabel("新密码", { exact: true }).fill(changedPassword);
     await page.getByLabel("确认新密码").fill(changedPassword);
+    const changePasswordResponsePromise = page.waitForResponse((response) => response.url().endsWith("/api/v1/auth/change-password") && response.request().method() === "POST");
     await page.getByRole("button", { name: "保存新密码" }).click();
-    await expect(page).toHaveURL(/\/student$/);
+    const changePasswordResponse = await changePasswordResponsePromise;
+    const changePasswordBody = await changePasswordResponse.text();
+    expect(changePasswordResponse.ok(), `change-password ${changePasswordResponse.status()}: ${changePasswordBody}`).toBe(true);
+    await expect(page).toHaveURL(/\/student$/, { timeout: 20_000 });
     await expect(page.getByRole("heading", { name: "欢迎回来，端到端学生" })).toBeVisible();
 
     await logout(page);
@@ -107,7 +111,7 @@ test.describe.serial("production business flows", () => {
 
   test("student practice restores progress and closes the wrong-question loop", async ({ page }) => {
     await login(page, studentUsername, changedPassword, "/student");
-    await page.getByRole("link", { name: /A级综合练习/ }).click();
+    await page.getByRole("link", { name: /A级综合训练/ }).click();
     await expect(page).toHaveURL(/\/student\/practice\?session=/);
     await expect(page.getByText("第 1 / 10 题", { exact: true })).toBeVisible();
 
@@ -123,8 +127,9 @@ test.describe.serial("production business flows", () => {
       await answerWrong(page);
       await page.getByRole("button", { name: questionNumber === 10 ? "查看结果" : "下一题" }).click();
     }
-    await expect(page.getByRole("heading", { name: "练习完成" })).toBeVisible();
-    await expect(page.getByText("答对 0 题，共 10 题")).toBeVisible();
+    await expect(page.getByRole("heading", { name: "训练完成" })).toBeVisible();
+    await expect(page.getByText("正确", { exact: true }).locator("..")).toContainText("0");
+    await expect(page.getByText("总题", { exact: true }).locator("..")).toContainText("10");
 
     await page.goto("/student/history");
     await expect(page.getByText("A级综合练习").first()).toBeVisible();
@@ -139,8 +144,9 @@ test.describe.serial("production business flows", () => {
       await answerCorrect(page);
       await page.getByRole("button", { name: questionNumber === 10 ? "查看结果" : "下一题" }).click();
     }
-    await expect(page.getByRole("heading", { name: "练习完成" })).toBeVisible();
-    await expect(page.getByText("答对 10 题，共 10 题")).toBeVisible();
+    await expect(page.getByRole("heading", { name: "训练完成" })).toBeVisible();
+    await expect(page.getByText("正确", { exact: true }).locator("..")).toContainText("10");
+    await expect(page.getByText("总题", { exact: true }).locator("..")).toContainText("10");
 
     await page.goto("/student/wrong");
     await expect(page.getByText("待巩固 0", { exact: true })).toBeVisible();

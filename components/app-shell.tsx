@@ -2,7 +2,8 @@ import Link from "next/link";
 import { ChevronRight, GraduationCap } from "lucide-react";
 import { Logo } from "@/components/logo";
 import { LogoutButton } from "@/components/logout-button";
-import { MobileNavigation, studentNavigation, teacherNavigation } from "@/components/mobile-navigation";
+import { MobileNavigation } from "@/components/mobile-navigation";
+import { studentNavigation, teacherNavigation } from "@/components/navigation-items";
 import { cn } from "@/lib/utils";
 
 type ShellUser = { username: string; displayName: string };

@@ -1,8 +1,15 @@
-# 知练 · 分等级与知识点刷题系统
+# 波段研习 · 知练无线电题库
 
 一套面向学校、培训机构和家庭学习场景的移动优先刷题系统。系统支持按照 **等级** 与 **树形知识点** 两种维度随机抽题，教师可以分别配置单选题、多选题数量，学生完成练习后会自动生成历史记录、正确率和错题数据。
 
-当前项目采用 Next.js 模块化单体架构，前后端、权限、业务接口和教师管理页面位于同一代码仓库，使用 PostgreSQL 持久化数据，并提供本地与生产两套 Docker Compose 部署方案。当前生产化分支已经完成练习快照、错题闭环、服务端导入批次、会话失效、登录限流、审计日志、分页、统计、CI 和 HTTPS 反向代理等基础能力。
+当前版本是 2026 年 7 月 23 日完成的整合版本，以生产增强分支为基线，合并认证与视觉更新、无线电训练 UI 重构。项目采用 Next.js 模块化单体架构，前后端、权限、业务接口和教师管理页面位于同一代码仓库，使用 PostgreSQL 持久化数据，并提供本地与生产两套 Docker Compose 部署方案。当前版本已经完成练习快照、错题闭环、服务端导入批次、会话失效、登录限流、审计日志、分页、教学统计、移动端完整导航、CI 和 HTTPS 反向代理等基础能力。
+
+## 当前版本组成
+
+- **生产增强**：会话版本、登录限流、审计日志、练习快照、服务端 Excel 批次、分页、教学统计、健康检查、CI、备份恢复和生产部署。
+- **认证与视觉**：浏览器会话检查、登录体验、无线电主题视觉资源和统一页面风格。
+- **训练 UI 重构**：题目导航、草稿选择状态、频谱进度、即时判题、完成摘要，以及教师移动端“更多”功能面板。
+- **兼容修复**：导航配置拆出 Client Component 边界，现有视觉资源替代缺失插画，端到端测试同步新版交互文案。
 
 ## 功能概览
 
@@ -25,6 +32,7 @@
 - 支持从待巩固错题中随机抽取最多 20 道重新练习。
 - 错题练习答对后自动标记掌握，再次答错会继续累计错误次数。
 - 管理员重置密码后，下一次访问学生端会强制修改密码。
+- 新版无线电训练界面支持题目导航、未提交草稿状态、即时正误反馈和训练完成摘要。
 
 ### 教师端
 
@@ -44,6 +52,7 @@
 - 保存规则时校验实际题库库存，防止配置无法生成的练习。
 - 查看题目、知识点、学生和练习的真实数据库数据。
 - 题库、学生、练习历史、错题和导入批次使用服务端分页，默认每页 20 条、最大 100 条。
+- 移动端底部导航保留常用教师入口，其余功能通过“更多”面板访问，避免入口被三列布局截断。
 
 ### Excel 题库导入
 
@@ -173,25 +182,63 @@ app/
 ├── student/                # 学生首页、练习、历史和错题本
 └── teacher/                # 教师概览、题库、知识点、规则、导入、学生和统计
 components/
+├── training/               # 答题选项、题目导航和完成摘要
+├── visual/                 # 无线电主题背景、插画降级和频谱进度
 ├── ui/                     # 基础 UI 组件
+├── app-shell.tsx           # 桌面侧栏、身份信息和统一页面框架
+├── mobile-navigation.tsx   # 学生底栏与教师“更多”功能面板
+├── practice-runner.tsx     # 单题练习、草稿选择、即时判题与恢复
 ├── question-manager.tsx    # 题库管理交互
 ├── knowledge-manager.tsx   # 知识点管理交互
-├── student-manager.tsx     # 学生账号管理交互
-└── practice-runner.tsx     # 移动端单题练习组件
+├── rule-editor.tsx         # 抽题规则和库存校验
+├── import-preview.tsx      # Excel 预检、提交和批次反馈
+└── student-manager.tsx     # 学生账号管理交互
 lib/
-├── domain/                 # 无数据库依赖的业务规则和校验
-├── server/                 # 服务端认证、练习和知识点服务
+├── domain/                 # 无数据库依赖的业务规则、快照和 UI 状态
+├── server/                 # 认证安全、练习、导入和知识点服务
+├── client/                 # 浏览器请求封装
 └── db.ts                   # Prisma 数据库客户端
 prisma/
 ├── migrations/             # PostgreSQL 迁移
 ├── schema.prisma           # 数据库模型
 └── seed.ts                 # 演示账号、等级、知识点和题目数据
-tests/                      # 单元、PostgreSQL 集成和 Playwright E2E 测试
+tests/
+├── integration/            # PostgreSQL 集成测试
+├── e2e/                    # Playwright 完整业务流程
+└── *.test.{ts,tsx}         # 领域规则与 React UI 单元测试
 scripts/                    # PostgreSQL 备份和恢复脚本
 docker-compose.prod.yml     # 应用、迁移、数据库和 Caddy 生产编排
 Caddyfile                   # HTTPS 反向代理配置
 .github/workflows/ci.yml    # GitHub Actions 全量质量门禁
 ```
+
+### 关键调用链
+
+```mermaid
+flowchart LR
+    Browser[学生或教师浏览器] --> Pages[Next.js 页面与 RSC]
+    Browser --> Routes[Route Handlers]
+    Pages --> Session[会话与角色校验]
+    Routes --> Session
+    Routes --> Domain[领域校验与抽题规则]
+    Pages --> Prisma[Prisma Client]
+    Routes --> Services[服务端业务服务]
+    Services --> Domain
+    Services --> Prisma
+    Prisma --> PostgreSQL[(PostgreSQL 18)]
+    Excel[Excel 文件] --> ExcelJS[ExcelJS 解析]
+    ExcelJS --> Domain
+```
+
+### 分层职责
+
+- `lib/domain` 不依赖数据库，负责答案标准化、题目编辑校验、知识点树、随机抽题、练习快照和题目 UI 状态。
+- `lib/server` 负责数据库事务、JWT、会话版本、登录限流、审计日志、密码摘要、导入批次和业务编排。
+- `app/api/v1` 负责请求解析、Zod 校验、同源检查、角色授权和 HTTP 响应。
+- `app/student` 与 `app/teacher` 主要使用 React Server Components 读取数据库，交互密集区域拆为 Client Components。
+- `components/training` 将练习界面拆分为答题选项、题目导航与完成摘要，便于独立测试和移动端适配。
+- `components/mobile-navigation.tsx` 在教师移动端保留常用入口，并通过“更多”面板暴露全部管理功能，包括教学统计。
+- 项目没有全局认证中间件；受保护页面和 API 均在服务端独立执行会话与角色校验。
 
 ## 环境要求
 
@@ -260,6 +307,8 @@ docker compose up -d db
 ```powershell
 npx.cmd prisma migrate deploy
 ```
+
+> 首次启动和升级已有数据库时都必须执行该命令。本整合版本需要 `20260721160000_production_foundation` 迁移来创建会话版本、登录尝试和审计日志结构；遗漏迁移会导致登录接口返回 500。
 
 开发数据库需要创建新迁移时使用：
 
@@ -479,15 +528,16 @@ npm.cmd run build
 - 分类号格式和空段校验。
 - 教师创建学生、重置密码和学生首次强制改密。
 - 等级练习即时判题、刷新恢复、历史记录、错题产生、错题组卷和掌握状态更新。
+- 教师移动端“更多”面板可访问全部管理入口，练习题目导航、草稿选择和完成摘要可独立渲染测试。
 - Excel 预检、警告报告、101 行完整提交和撤销。
 
-当前验证基线：
+当前版本验证基线：
 
-- 单元测试：26 项。
+- Vitest 单元与 UI 测试：37 项，覆盖 8 个测试文件。
 - PostgreSQL 集成测试：9 项。
-- Playwright 端到端测试：3 条完整业务流程。
+- Playwright 端到端测试套件：包含 3 条完整业务流程。
 - ESLint、Prisma Schema 校验和 Next.js 生产构建。
-- `npm audit`：0 个已知漏洞。
+- `npm audit`：当前报告 1 个高危依赖告警；尚未执行可能引入破坏性升级的 `npm audit fix --force`。
 
 完整发布前检查：
 
@@ -597,6 +647,17 @@ docker compose logs db
 ```
 
 本地开发使用 `localhost:5432`，应用容器内部使用主机名 `db:5432`，不要混用两个地址。
+
+### 登录返回 500 或“登录失败”
+
+先检查数据库迁移状态：
+
+```powershell
+npx.cmd prisma migrate status
+npx.cmd prisma migrate deploy
+```
+
+当前版本必须包含 `20260721160000_production_foundation`。该迁移增加 `User.sessionVersion`、`LoginAttempt` 和 `AuditLog` 等认证所需结构。迁移完成后重新登录，无需删除或重新初始化数据库。
 
 ### `AUTH_SECRET` 报错
 

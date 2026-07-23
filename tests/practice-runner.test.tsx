@@ -40,4 +40,27 @@ describe("PracticeRunner", () => {
     await user.click(screen.getByRole("button", { name: "提交答案" }));
     expect(screen.getByRole("alert")).toHaveTextContent("本题要求选择 2 项");
   });
+
+  it("shows the final answer feedback before opening the summary", async () => {
+    const user = userEvent.setup();
+    const question = practiceSessionFixture().questions[0];
+    vi.mocked(fetch).mockResolvedValue(new Response(JSON.stringify({
+      isCorrect: true,
+      correctOptionIds: ["A"],
+      selectedOptionIds: ["A"],
+      answeredCount: 1,
+      correctCount: 1,
+    }), { status: 200, headers: { "Content-Type": "application/json" } }));
+
+    render(<PracticeRunner session={practiceSessionFixture({ questions: [question], total: 1 })} />);
+    await user.click(screen.getByRole("button", { name: /每秒三十万千米/ }));
+    await user.click(screen.getByRole("button", { name: "提交答案" }));
+
+    expect(await screen.findByText("回答正确", { exact: true })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "查看结果" })).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "训练完成" })).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "查看结果" }));
+    expect(screen.getByRole("heading", { name: "训练完成" })).toBeInTheDocument();
+  });
 });
