@@ -33,11 +33,22 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run db:generate
-      - run: npx prisma migrate deploy
-      - run: npm run db:seed
       - run: npm test
+      - run: npx prisma migrate deploy
+        env:
+          DATABASE_URL: postgresql://practice:practice@localhost:5432/practice?schema=ci_integration
       - run: npm run test:integration
+        env:
+          DATABASE_URL: postgresql://practice:practice@localhost:5432/practice?schema=ci_integration
       - run: npm run lint
       - run: npm run build
       - run: npx playwright install --with-deps chromium
+      - run: npx prisma migrate deploy
+        env:
+          DATABASE_URL: postgresql://practice:practice@localhost:5432/practice?schema=ci_e2e
+      - run: npm run db:seed
+        env:
+          DATABASE_URL: postgresql://practice:practice@localhost:5432/practice?schema=ci_e2e
       - run: npm run test:e2e
+        env:
+          DATABASE_URL: postgresql://practice:practice@localhost:5432/practice?schema=ci_e2e
