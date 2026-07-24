@@ -12,6 +12,11 @@ export default async function PracticePage({ searchParams }: { searchParams: Pro
     if (!session) redirect("/student");
     return <main className="surface-grid min-h-screen bg-[linear-gradient(180deg,#f8fbfc,#eaf0f4)] px-4 py-6 sm:px-8"><PracticeRunner session={session} /></main>;
   }
-  const session = await createPracticeSession(user.id, params.mode === "wrong" ? { mode: "wrong" } : { mode: params.mode === "knowledge" ? "knowledge" : "level", levelCode: params.level ?? "A", knowledgePointId: params.knowledge });
+  const mode = params.mode;
+  const session = await createPracticeSession(user.id,
+    mode === "wrong" ? { mode: "wrong" }
+      : mode === "knowledge" ? { mode: "knowledge", levelCode: params.level ?? "A", knowledgePointId: params.knowledge ?? "" }
+        : mode === "order" || mode === "random" || mode === "exam" ? { mode, levelCode: params.level ?? "A" }
+          : { mode: "level", levelCode: params.level ?? "A" });
   redirect(`/student/practice?session=${session.id}`);
 }

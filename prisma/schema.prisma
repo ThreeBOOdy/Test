@@ -27,6 +27,9 @@ enum PracticeMode {
   LEVEL_COMPREHENSIVE
   KNOWLEDGE_POINT
   WRONG_QUESTION
+  QUESTION_ORDER
+  RANDOM_ALL
+  MOCK_EXAM
 }
 
 enum PracticeStatus {
@@ -67,10 +70,23 @@ model Level {
   enabled        Boolean                 @default(true)
   questions      Question[]
   practiceRule   LevelPracticeRule?
+  examRule       ExamRule?
   knowledgeRules KnowledgePracticeRule[]
   sessions       PracticeSession[]
   createdAt      DateTime                @default(now())
   updatedAt      DateTime                @updatedAt
+}
+
+model ExamRule {
+  id              String   @id @default(cuid())
+  levelId         String   @unique
+  level           Level    @relation(fields: [levelId], references: [id], onDelete: Cascade)
+  singleCount     Int
+  multipleCount   Int
+  durationMinutes Int
+  passingCount    Int
+  enabled         Boolean  @default(true)
+  updatedAt       DateTime @updatedAt
 }
 
 model KnowledgePoint {
@@ -163,6 +179,9 @@ model PracticeSession {
   multipleCountSnapshot Int
   currentIndex         Int                       @default(0)
   correctCount         Int                       @default(0)
+  durationMinutesSnapshot Int?
+  passingCountSnapshot Int?
+  expiresAt            DateTime?
   startedAt            DateTime                  @default(now())
   completedAt          DateTime?
   questions            PracticeSessionQuestion[]

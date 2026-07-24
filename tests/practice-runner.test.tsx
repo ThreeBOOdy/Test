@@ -18,7 +18,7 @@ describe("PracticeRunner", () => {
     vi.mocked(fetch).mockResolvedValue(new Response(JSON.stringify({ isCorrect: true, correctOptionIds: ["A"], selectedOptionIds: ["A"], answeredCount: 1, correctCount: 1 }), { status: 200, headers: { "Content-Type": "application/json" } }));
     render(<PracticeRunner session={practiceSessionFixture()} />);
     fireEvent.keyDown(window, { key: "1" });
-    expect(screen.getByRole("button", { name: /每秒三十万千米/ })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByRole("radio", { name: /每秒三十万千米/ })).toBeChecked();
     fireEvent.keyDown(window, { key: "Enter" });
     await waitFor(() => expect(fetch).toHaveBeenCalledTimes(1));
   });
@@ -26,19 +26,20 @@ describe("PracticeRunner", () => {
   it("keeps a draft while navigating", async () => {
     const user = userEvent.setup();
     render(<PracticeRunner session={practiceSessionFixture()} />);
-    await user.click(screen.getByRole("button", { name: /每秒三十万千米/ }));
+    await user.click(screen.getByRole("radio", { name: /每秒三十万千米/ }));
     await user.click(screen.getByRole("button", { name: "第 2 题，未答" }));
     await user.click(screen.getByRole("button", { name: "第 1 题，已选" }));
-    expect(screen.getByRole("button", { name: /每秒三十万千米/ })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByRole("radio", { name: /每秒三十万千米/ })).toBeChecked();
   });
 
-  it("alerts when a multiple answer is incomplete", async () => {
+  it("allows submitting any non-empty multiple-choice selection", async () => {
     const user = userEvent.setup();
     const question = practiceSessionFixture().questions[1];
+    vi.mocked(fetch).mockResolvedValue(new Response(JSON.stringify({ isCorrect: false, correctOptionIds: ["A", "B"], selectedOptionIds: ["A"], answeredCount: 1, correctCount: 0 }), { status: 200, headers: { "Content-Type": "application/json" } }));
     render(<PracticeRunner session={practiceSessionFixture({ questions: [question], total: 1 })} />);
-    await user.click(screen.getByRole("button", { name: /使用合适的发射功率/ }));
-    await user.click(screen.getByRole("button", { name: "提交答案" }));
-    expect(screen.getByRole("alert")).toHaveTextContent("本题要求选择 2 项");
+    await user.click(screen.getByRole("checkbox", { name: /使用合适的发射功率/ }));
+    await user.click(screen.getAllByRole("button", { name: "提交答案" })[0]);
+    await waitFor(() => expect(fetch).toHaveBeenCalledTimes(1));
   });
 
   it("shows the final answer feedback before opening the summary", async () => {
@@ -53,14 +54,28 @@ describe("PracticeRunner", () => {
     }), { status: 200, headers: { "Content-Type": "application/json" } }));
 
     render(<PracticeRunner session={practiceSessionFixture({ questions: [question], total: 1 })} />);
-    await user.click(screen.getByRole("button", { name: /每秒三十万千米/ }));
-    await user.click(screen.getByRole("button", { name: "提交答案" }));
+    await user.click(screen.getByRole("radio", { name: /每秒三十万千米/ }));
+    await user.click(screen.getAllByRole("button", { name: "提交答案" })[0]);
 
     expect(await screen.findByText("回答正确", { exact: true })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "查看结果" })).toBeInTheDocument();
+    expect(screen.getAllByRole("button", { name: "查看结果" })[0]).toBeInTheDocument();
     expect(screen.queryByRole("heading", { name: "训练完成" })).not.toBeInTheDocument();
 
-    await user.click(screen.getByRole("button", { name: "查看结果" }));
+    await user.click(screen.getAllByRole("button", { name: "查看结果" })[0]);
     expect(screen.getByRole("heading", { name: "训练完成" })).toBeInTheDocument();
+  });
+
+  it("submits mock exam answers together and shows the pass result", async () => {
+    const user = userEvent.setup();
+    const question = practiceSessionFixture().questions[0];
+    vi.mocked(fetch).mockResolvedValue(new Response(JSON.stringify({ results: { [question.id]: { isCorrect: true, correctOptionIds: ["A"], selectedOptionIds: ["A"], answeredCount: 1, correctCount: 1 } }, correctCount: 1, total: 1, passingCount: 1, passed: true }), { status: 200, headers: { "Content-Type": "application/json" } }));
+    render(<PracticeRunner session={practiceSessionFixture({ mode: "MOCK_EXAM", title: "A级 · 模拟考试", questions: [question], total: 1, exam: { durationMinutes: 40, passingCount: 1, expiresAt: new Date(Date.now() + 40 * 60_000).toISOString() } })} />);
+
+    await user.click(screen.getByRole("radio", { name: /每秒三十万千米/ }));
+    await user.click(screen.getAllByRole("button", { name: "提交试卷" })[0]);
+
+    await waitFor(() => expect(fetch).toHaveBeenCalledWith("/api/v1/practice-sessions/session-1/submit", expect.objectContaining({ method: "POST" })));
+    expect(await screen.findByRole("heading", { name: "模拟考试完成" })).toBeInTheDocument();
+    expect(screen.getByText("考试合格")).toBeInTheDocument();
   });
 });

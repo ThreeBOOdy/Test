@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { InsufficientQuestionError, isAnswerCorrect, selectPracticeQuestions } from "../lib/domain/practice-engine";
+import { InsufficientQuestionError, isAnswerCorrect, selectPracticeQuestions, selectPrioritizedRandomQuestions, sortQuestionsByBankNumber } from "../lib/domain/practice-engine";
 import type { Question } from "../lib/domain/types";
 
 function question(id: string, type: Question["type"], levelId = "A", knowledgePointId = "kp-1"): Question {
@@ -45,5 +45,24 @@ describe("practice engine", () => {
     }, () => 0.42);
     expect(result.questions).toHaveLength(20);
     expect(new Set(result.questions.map((item) => item.id)).size).toBe(20);
+  });
+
+  it("sorts bank question numbers naturally in ascending order", () => {
+    const questions = [
+      { ...question("fallback", "SINGLE_CHOICE"), externalQuestionCode: undefined },
+      { ...question("q-10", "SINGLE_CHOICE"), externalQuestionCode: "A10" },
+      { ...question("q-2", "SINGLE_CHOICE"), externalQuestionCode: "A2" },
+      { ...question("q-1", "SINGLE_CHOICE"), externalQuestionCode: "A1" },
+    ];
+
+    expect(sortQuestionsByBankNumber(questions).map((item) => item.id)).toEqual(["q-1", "q-2", "q-10", "fallback"]);
+  });
+
+  it("fills random practice from unanswered questions before answered ones", () => {
+    const questions = Array.from({ length: 6 }, (_, index) => question(`q-${index + 1}`, "SINGLE_CHOICE"));
+    const result = selectPrioritizedRandomQuestions(questions, new Set(["q-1", "q-2", "q-3"]), 4, () => 0.42);
+
+    expect(result).toHaveLength(4);
+    expect(result.filter((item) => !["q-1", "q-2", "q-3"].includes(item.id))).toHaveLength(3);
   });
 });

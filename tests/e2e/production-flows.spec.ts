@@ -28,10 +28,10 @@ function optionIndexes(ids: string[]) {
 }
 
 async function answerQuestion(page: Page, optionIds: string[]) {
-  const options = page.locator('button[class*="min-h-16"]');
+  const options = page.locator('input[type="radio"], input[type="checkbox"]');
   await expect(options).toHaveCount(4);
-  for (const index of optionIndexes(optionIds)) await options.nth(index).click();
-  await page.getByRole("button", { name: "提交答案" }).click();
+  for (const index of optionIndexes(optionIds)) await options.nth(index).check({ force: true });
+  await page.getByRole("button", { name: "提交答案" }).first().click();
   await expect(page.getByText(/回答正确|回答错误/, { exact: true })).toBeVisible();
 }
 

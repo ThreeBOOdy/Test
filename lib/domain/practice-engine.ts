@@ -32,6 +32,25 @@ export function shuffle<T>(items: readonly T[], random: () => number = Math.rand
   return result;
 }
 
+const questionNumberCollator = new Intl.Collator("zh-CN", { numeric: true, sensitivity: "base" });
+
+export function sortQuestionsByBankNumber<T extends Pick<Question, "id" | "externalQuestionCode" | "sourceBankCode">>(questions: readonly T[]): T[] {
+  return [...questions].sort((left, right) => {
+    const leftCode = left.externalQuestionCode?.trim() || left.sourceBankCode?.trim();
+    const rightCode = right.externalQuestionCode?.trim() || right.sourceBankCode?.trim();
+    if (leftCode && rightCode) return questionNumberCollator.compare(leftCode, rightCode) || left.id.localeCompare(right.id);
+    if (leftCode) return -1;
+    if (rightCode) return 1;
+    return left.id.localeCompare(right.id);
+  });
+}
+
+export function selectPrioritizedRandomQuestions<T extends Pick<Question, "id">>(questions: readonly T[], answeredQuestionIds: ReadonlySet<string>, count: number, random: () => number = Math.random): T[] {
+  const unanswered = questions.filter((question) => !answeredQuestionIds.has(question.id));
+  const answered = questions.filter((question) => answeredQuestionIds.has(question.id));
+  return [...shuffle(unanswered, random), ...shuffle(answered, random)].slice(0, Math.max(0, count));
+}
+
 export function selectPracticeQuestions(
   questions: readonly Question[],
   input: CreatePracticeInput,

@@ -1,6 +1,6 @@
 export type QuestionType = "SINGLE_CHOICE" | "MULTIPLE_CHOICE";
 export type QuestionStatus = "ACTIVE" | "DISABLED" | "ARCHIVED";
-export type PracticeMode = "LEVEL_COMPREHENSIVE" | "KNOWLEDGE_POINT" | "WRONG_QUESTION";
+export type PracticeMode = "LEVEL_COMPREHENSIVE" | "KNOWLEDGE_POINT" | "WRONG_QUESTION" | "QUESTION_ORDER" | "RANDOM_ALL" | "MOCK_EXAM";
 
 export type QuestionOption = {
   id: string;
@@ -45,6 +45,11 @@ export type Level = {
 export type PracticeRule = {
   singleCount: number;
   multipleCount: number;
+};
+
+export type ExamRule = PracticeRule & {
+  durationMinutes: number;
+  passingCount: number;
 };
 
 export type ImportQuestionRow = {
@@ -97,4 +102,9 @@ export type PublicPracticeSession = {
   total: number;
   questions: PublicQuestion[];
   initialResults: Record<string, PublicAnswerResult>;
+  exam?: {
+    durationMinutes: number;
+    passingCount: number;
+    expiresAt: string;
+  };
 };

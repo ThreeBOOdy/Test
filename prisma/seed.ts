@@ -4,6 +4,7 @@ import { Prisma, PrismaClient } from "../generated/prisma/client";
 import { knowledgePoints, levelRules, levels, questions } from "../lib/data/demo";
 import { getDatabaseSchema } from "../lib/domain/database-url";
 import { hashPassword } from "../lib/server/password";
+import { DEFAULT_EXAM_RULES } from "../lib/domain/exam-rules";
 
 const connectionString = process.env.DATABASE_URL ?? "postgresql://practice:practice@localhost:5432/practice?schema=public";
 const prisma = new PrismaClient({ adapter: new PrismaPg({ connectionString }, { schema: getDatabaseSchema(connectionString) }) });
@@ -21,6 +22,8 @@ async function main() {
     levelIds.set(level.id, storedLevel.id);
     const rule = levelRules[level.id];
     await prisma.levelPracticeRule.upsert({ where: { levelId: storedLevel.id }, update: rule, create: { levelId: storedLevel.id, ...rule } });
+    const examRule = DEFAULT_EXAM_RULES[level.code as keyof typeof DEFAULT_EXAM_RULES];
+    if (examRule) await prisma.examRule.upsert({ where: { levelId: storedLevel.id }, update: {}, create: { levelId: storedLevel.id, ...examRule } });
   }
 
   for (const point of knowledgePoints.toSorted((left, right) => left.depth - right.depth)) {

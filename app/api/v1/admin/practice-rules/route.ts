@@ -5,11 +5,13 @@ import { readJsonBody } from "@/lib/domain/request-body";
 import { assertSameOrigin } from "@/lib/server/http";
 import { writeAuditLog } from "@/lib/server/audit";
 import { ApiError, apiErrorResponse, requireRole } from "@/lib/server/api";
+import { validateExamRule } from "@/lib/domain/exam-rules";
 
 const count = z.number().int().min(0).max(1000);
 const schema = z.object({
   levelRules: z.array(z.object({ levelId: z.string(), singleCount: count, multipleCount: count })),
   knowledgeRules: z.array(z.object({ knowledgePointId: z.string(), levelId: z.string(), singleCount: count, multipleCount: count })),
+  examRules: z.array(z.object({ levelId: z.string(), singleCount: count, multipleCount: count, durationMinutes: z.number().int().min(1).max(1440), passingCount: z.number().int().min(1).max(1000) })),
 });
 
 export async function PUT(request: Request) {
@@ -35,14 +37,23 @@ export async function PUT(request: Request) {
       ]);
       if (rule.singleCount > singleAvailable || rule.multipleCount > multipleAvailable) throw new ApiError(`${point.code} 题量超过库存：单选 ${singleAvailable}，多选 ${multipleAvailable}`);
     }
+    for (const rule of input.examRules) {
+      try { validateExamRule(rule); } catch (error) { throw new ApiError(error instanceof Error ? error.message : "模拟考试规则无效"); }
+      const [singleAvailable, multipleAvailable] = await Promise.all([
+        prisma.question.count({ where: { levelId: rule.levelId, status: "ACTIVE", type: "SINGLE_CHOICE", knowledgePoint: { enabled: true } } }),
+        prisma.question.count({ where: { levelId: rule.levelId, status: "ACTIVE", type: "MULTIPLE_CHOICE", knowledgePoint: { enabled: true } } }),
+      ]);
+      if (rule.singleCount > singleAvailable || rule.multipleCount > multipleAvailable) throw new ApiError(`模拟考试题量超过库存：单选 ${singleAvailable}，多选 ${multipleAvailable}`);
+    }
     await prisma.$transaction(async (tx) => {
       for (const rule of input.levelRules) await tx.levelPracticeRule.upsert({ where: { levelId: rule.levelId }, update: { singleCount: rule.singleCount, multipleCount: rule.multipleCount, enabled: true }, create: { ...rule, enabled: true } });
       for (const rule of input.knowledgeRules) {
         if (rule.singleCount === 0 && rule.multipleCount === 0) await tx.knowledgePracticeRule.deleteMany({ where: { knowledgePointId: rule.knowledgePointId, levelId: rule.levelId } });
         else await tx.knowledgePracticeRule.upsert({ where: { knowledgePointId_levelId: { knowledgePointId: rule.knowledgePointId, levelId: rule.levelId } }, update: { singleCount: rule.singleCount, multipleCount: rule.multipleCount, enabled: true }, create: { ...rule, enabled: true } });
       }
+      for (const rule of input.examRules) await tx.examRule.upsert({ where: { levelId: rule.levelId }, update: { singleCount: rule.singleCount, multipleCount: rule.multipleCount, durationMinutes: rule.durationMinutes, passingCount: rule.passingCount, enabled: true }, create: { ...rule, enabled: true } });
     });
-    await writeAuditLog({ actorUserId: user.id, action: "PRACTICE_RULES_UPDATE", targetType: "PracticeRule", metadata: { levelRules: input.levelRules.length, knowledgeRules: input.knowledgeRules.length } });
+    await writeAuditLog({ actorUserId: user.id, action: "PRACTICE_RULES_UPDATE", targetType: "PracticeRule", metadata: { levelRules: input.levelRules.length, knowledgeRules: input.knowledgeRules.length, examRules: input.examRules.length } });
     return NextResponse.json({ saved: true });
   } catch (error) {
     return apiErrorResponse(error, "保存规则失败");

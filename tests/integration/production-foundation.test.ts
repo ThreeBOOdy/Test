@@ -3,7 +3,7 @@ import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "../../generated/prisma/client";
 import { getDatabaseSchema } from "../../lib/domain/database-url";
 import { commitImportBatch, getImportBatchReport, revertImportBatch } from "../../lib/server/import-service";
-import { createPracticeSession, getPracticeSession, submitPracticeAnswer } from "../../lib/server/practice-service";
+import { createPracticeSession, getPracticeSession, submitMockExam, submitPracticeAnswer } from "../../lib/server/practice-service";
 import { createSessionToken, findSessionUser, verifySessionToken } from "../../lib/server/session";
 
 const connectionString = process.env.DATABASE_URL;
@@ -25,6 +25,7 @@ beforeEach(async () => {
   await prisma.importBatchRow.deleteMany();
   await prisma.importBatch.deleteMany();
   await prisma.knowledgePracticeRule.deleteMany();
+  await prisma.examRule.deleteMany();
   await prisma.levelPracticeRule.deleteMany();
   await prisma.knowledgePoint.deleteMany();
   await prisma.level.deleteMany();
@@ -145,6 +146,52 @@ describe("production database foundation", () => {
     await submitPracticeAnswer(user.id, session.id, incorrectQuestion.id, ["B"]);
     expect(await prisma.wrongQuestion.findUniqueOrThrow({ where: { userId_questionId: { userId: user.id, questionId: correctQuestion.id } } })).toMatchObject({ mastered: true, wrongCount: 1 });
     expect(await prisma.wrongQuestion.findUniqueOrThrow({ where: { userId_questionId: { userId: user.id, questionId: incorrectQuestion.id } } })).toMatchObject({ mastered: false, wrongCount: 2 });
+  });
+
+  it("creates sequential practice in strict natural question-number order", async () => {
+    const user = await prisma.user.create({ data: { username: "order-user", displayName: "Order User", passwordHash: "test", role: "STUDENT" } });
+    const level = await prisma.level.create({ data: { code: "A", name: "A Level" } });
+    const point = await prisma.knowledgePoint.create({ data: { code: "9.1.1", name: "Order Point", path: "/9/9.1/9.1.1", depth: 2 } });
+    const questions = await Promise.all(["A10", "A2", "A1"].map((code) => prisma.question.create({ data: { levelId: level.id, knowledgePointId: point.id, externalQuestionCode: code, stem: code, type: "SINGLE_CHOICE", optionCount: 2, correctOptionCount: 1, selectionSpec: "2选1", options: [{ id: "A", text: "A" }, { id: "B", text: "B" }], correctOptionIds: ["A"] } })));
+    await prisma.levelPracticeRule.create({ data: { levelId: level.id, singleCount: 2, multipleCount: 0 } });
+    const answeredSession = await prisma.practiceSession.create({ data: { userId: user.id, mode: "LEVEL_COMPREHENSIVE", levelId: level.id, singleCountSnapshot: 1, multipleCountSnapshot: 0, status: "COMPLETED", completedAt: new Date() } });
+    await prisma.practiceAnswer.create({ data: { sessionId: answeredSession.id, questionId: questions.find((question) => question.externalQuestionCode === "A1")!.id, selectedOptionIds: ["A"], isCorrect: true } });
+
+    const session = await createPracticeSession(user.id, { mode: "order", levelCode: "A" });
+
+    expect(session.mode).toBe("QUESTION_ORDER");
+    expect(session.questions.map((question) => question.externalQuestionCode)).toEqual(["A1", "A2"]);
+  });
+
+  it("fills random practice entirely from unanswered questions when enough are available", async () => {
+    const user = await prisma.user.create({ data: { username: "random-user", displayName: "Random User", passwordHash: "test", role: "STUDENT" } });
+    const level = await prisma.level.create({ data: { code: "A", name: "A Level" } });
+    const point = await prisma.knowledgePoint.create({ data: { code: "9.2.1", name: "Random Point", path: "/9/9.2/9.2.1", depth: 2 } });
+    const questions = await Promise.all(Array.from({ length: 5 }, (_, index) => prisma.question.create({ data: { levelId: level.id, knowledgePointId: point.id, externalQuestionCode: `R-${index + 1}`, stem: `R-${index + 1}`, type: "SINGLE_CHOICE", optionCount: 2, correctOptionCount: 1, selectionSpec: "2选1", options: [{ id: "A", text: "A" }, { id: "B", text: "B" }], correctOptionIds: ["A"] } })));
+    await prisma.levelPracticeRule.create({ data: { levelId: level.id, singleCount: 3, multipleCount: 0 } });
+    const answeredSession = await prisma.practiceSession.create({ data: { userId: user.id, mode: "LEVEL_COMPREHENSIVE", levelId: level.id, singleCountSnapshot: 2, multipleCountSnapshot: 0, status: "COMPLETED", completedAt: new Date() } });
+    await prisma.practiceAnswer.createMany({ data: questions.slice(0, 2).map((question) => ({ sessionId: answeredSession.id, questionId: question.id, selectedOptionIds: ["A"], isCorrect: true })) });
+
+    const session = await createPracticeSession(user.id, { mode: "random", levelCode: "A" });
+
+    expect(session.mode).toBe("RANDOM_ALL");
+    expect(new Set(session.questions.map((question) => question.id))).toEqual(new Set(questions.slice(2).map((question) => question.id)));
+  });
+
+  it("snapshots and grades a timed mock exam on final submission", async () => {
+    const user = await prisma.user.create({ data: { username: "exam-user", displayName: "Exam User", passwordHash: "test", role: "STUDENT" } });
+    const level = await prisma.level.create({ data: { code: "A", name: "A Level" } });
+    const point = await prisma.knowledgePoint.create({ data: { code: "9.3.1", name: "Exam Point", path: "/9/9.3/9.3.1", depth: 2 } });
+    const single = await prisma.question.create({ data: { levelId: level.id, knowledgePointId: point.id, externalQuestionCode: "E-1", stem: "Single", type: "SINGLE_CHOICE", optionCount: 2, correctOptionCount: 1, selectionSpec: "2选1", options: [{ id: "A", text: "A" }, { id: "B", text: "B" }], correctOptionIds: ["A"] } });
+    const multiple = await prisma.question.create({ data: { levelId: level.id, knowledgePointId: point.id, externalQuestionCode: "E-2", stem: "Multiple", type: "MULTIPLE_CHOICE", optionCount: 3, correctOptionCount: 2, selectionSpec: "3选2", options: [{ id: "A", text: "A" }, { id: "B", text: "B" }, { id: "C", text: "C" }], correctOptionIds: ["A", "C"] } });
+    await prisma.examRule.create({ data: { levelId: level.id, singleCount: 1, multipleCount: 1, durationMinutes: 40, passingCount: 1 } });
+
+    const session = await createPracticeSession(user.id, { mode: "exam", levelCode: "A" });
+    const submission = await submitMockExam(user.id, session.id, [{ questionId: single.id, selectedOptionIds: ["A"] }, { questionId: multiple.id, selectedOptionIds: ["A"] }]);
+
+    expect(session.exam).toMatchObject({ durationMinutes: 40, passingCount: 1 });
+    expect(submission).toMatchObject({ correctCount: 1, total: 2, passingCount: 1, passed: true });
+    expect(await prisma.practiceSession.findUniqueOrThrow({ where: { id: session.id } })).toMatchObject({ status: "COMPLETED", durationMinutesSnapshot: 40, passingCountSnapshot: 1, correctCount: 1 });
   });
 
   it("deletes unused imported questions, archives referenced ones, and prevents repeated revert", async () => {
