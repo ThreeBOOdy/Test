@@ -26,28 +26,31 @@ export async function POST(request: Request) {
 
     const workbook = new ExcelJS.Workbook();
     await workbook.xlsx.load(await file.arrayBuffer());
-    const sheet = workbook.worksheets[0];
-    if (!sheet) return NextResponse.json({ message: "Excel 中没有工作表" }, { status: 400 });
-    const headers = new Map<string, number>();
-    sheet.getRow(1).eachCell((cell, column) => headers.set(cellText(cell.value).trim(), column));
-    const columnOf = (key: string) => aliases[key]?.map((alias) => headers.get(alias)).find(Boolean);
-    const missing = ["levelCode", "categoryCode", "stem", "rawAnswer"].filter((key) => !columnOf(key));
-    if (missing.length) return NextResponse.json({ message: `缺少必要表头：${missing.map((key) => aliases[key][0]).join("、")}` }, { status: 400 });
-
+    if (!workbook.worksheets.length) return NextResponse.json({ message: "Excel 中没有工作表" }, { status: 400 });
     const results: ValidatedQuestionRow[] = [];
-    const maxRows = Math.min(sheet.rowCount, 5001);
-    for (let rowNumber = 2; rowNumber <= maxRows; rowNumber += 1) {
-      const row = sheet.getRow(rowNumber);
-      const value = (key: string) => { const column = columnOf(key); return column ? cellText(row.getCell(column).value).trim() : ""; };
-      const stem = value("stem");
-      if (!stem && !Object.values(row.values ?? {}).some(Boolean)) continue;
-      const optionValues: Record<string, string> = {};
-      for (const optionId of ["A", "B", "C", "D", "E", "F", "G", "H"]) {
-        const column = headers.get(optionId);
-        if (column) optionValues[optionId] = cellText(row.getCell(column).value).trim();
+    const sheetNames: string[] = [];
+    for (const sheet of workbook.worksheets) {
+      if (results.length >= 5000) break;
+      const headers = new Map<string, number>();
+      sheet.getRow(1).eachCell((cell, column) => headers.set(cellText(cell.value).trim(), column));
+      const columnOf = (key: string) => aliases[key]?.map((alias) => headers.get(alias)).find(Boolean);
+      const missing = ["levelCode", "categoryCode", "stem", "rawAnswer"].filter((key) => !columnOf(key));
+      if (missing.length) throw new ApiError(`${sheet.name} 缺少必要表头：${missing.map((key) => aliases[key][0]).join("、")}`);
+      sheetNames.push(sheet.name);
+      const maxRows = Math.min(sheet.rowCount, 5001);
+      for (let rowNumber = 2; rowNumber <= maxRows && results.length < 5000; rowNumber += 1) {
+        const row = sheet.getRow(rowNumber);
+        const value = (key: string) => { const column = columnOf(key); return column ? cellText(row.getCell(column).value).trim() : ""; };
+        const stem = value("stem");
+        if (!stem && !Object.values(row.values ?? {}).some(Boolean)) continue;
+        const optionValues: Record<string, string> = {};
+        for (const optionId of ["A", "B", "C", "D", "E", "F", "G", "H"]) {
+          const column = headers.get(optionId);
+          if (column) optionValues[optionId] = cellText(row.getCell(column).value).trim();
+        }
+        const importRow: ImportQuestionRow = { rowNumber, sheetName: sheet.name, levelCode: value("levelCode"), sourceBankCode: value("sourceBankCode"), categoryCode: value("categoryCode"), knowledgePointName: value("knowledgePointName"), externalQuestionCode: value("externalQuestionCode"), stem, rawAnswer: value("rawAnswer"), declaredSelectionSpec: value("declaredSelectionSpec"), optionValues, enabled: !["否", "0", "false"].includes(value("enabled").toLowerCase()) };
+        results.push(validateImportRow(importRow));
       }
-      const importRow: ImportQuestionRow = { rowNumber, levelCode: value("levelCode"), sourceBankCode: value("sourceBankCode"), categoryCode: value("categoryCode"), knowledgePointName: value("knowledgePointName"), externalQuestionCode: value("externalQuestionCode"), stem, rawAnswer: value("rawAnswer"), declaredSelectionSpec: value("declaredSelectionSpec"), optionValues, enabled: !["否", "0", "false"].includes(value("enabled").toLowerCase()) };
-      results.push(validateImportRow(importRow));
     }
 
     const validRows = results.filter((item) => item.issues.every((issue) => issue.severity !== "error")).length;
@@ -57,7 +60,7 @@ export async function POST(request: Request) {
     const batch = await prisma.$transaction(async (tx) => {
       const created = await tx.importBatch.create({ data: { fileName: file.name, importedById: user.id, status: "PREVIEW", totalRows: results.length, validRows, warningRows, errorRows, expiresAt } });
       if (results.length) {
-        await tx.importBatchRow.createMany({ data: results.map((item) => ({ batchId: created.id, rowNumber: item.row.rowNumber, payload: JSON.parse(JSON.stringify(item.row)) as Prisma.InputJsonValue, issues: item.issues as Prisma.InputJsonValue, valid: item.issues.every((issue) => issue.severity !== "error") })) });
+        await tx.importBatchRow.createMany({ data: results.map((item, index) => ({ batchId: created.id, rowNumber: index + 1, payload: JSON.parse(JSON.stringify(item.row)) as Prisma.InputJsonValue, issues: item.issues as Prisma.InputJsonValue, valid: item.issues.every((issue) => issue.severity !== "error") })) });
       }
       return created;
     });
@@ -66,7 +69,7 @@ export async function POST(request: Request) {
       batchId: batch.id,
       status: batch.status,
       fileName: file.name,
-      sheetName: sheet.name,
+      sheetNames,
       stats: { totalRows: results.length, validRows, warningRows, errorRows },
       rows: results.slice(0, 100),
       pagination: { page: 1, pageSize: 100, total: results.length, totalPages: Math.max(1, Math.ceil(results.length / 100)) },

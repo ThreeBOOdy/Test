@@ -3,7 +3,7 @@ import { normalizeAnswer, validateImportRow } from "../lib/domain/question-impor
 import type { ImportQuestionRow } from "../lib/domain/types";
 
 function row(overrides: Partial<ImportQuestionRow> = {}): ImportQuestionRow {
-  return { rowNumber: 2, levelCode: "A", categoryCode: "4.1.1", externalQuestionCode: "MC2-0916", stem: "测试题目", rawAnswer: "AC", declaredSelectionSpec: "4选2", optionValues: { A: "选项A", B: "选项B", C: "选项C", D: "选项D" }, ...overrides };
+  return { rowNumber: 2, sheetName: "题库", levelCode: "A", categoryCode: "4.1.1", externalQuestionCode: "MC2-0916", stem: "测试题目", rawAnswer: "AC", declaredSelectionSpec: "4选2", optionValues: { A: "选项A", B: "选项B", C: "选项C", D: "选项D" }, ...overrides };
 }
 
 describe("question import validation", () => {
@@ -29,5 +29,9 @@ describe("question import validation", () => {
   it("warns when MC code conflicts with answer count", () => {
     const result = validateImportRow(row({ externalQuestionCode: "MC3-0916" }));
     expect(result.issues.some((issue) => issue.severity === "warning")).toBe(true);
+  });
+
+  it("keeps worksheet source in the validated row", () => {
+    expect(validateImportRow(row({ sheetName: "模拟考试" })).row.sheetName).toBe("模拟考试");
   });
 });

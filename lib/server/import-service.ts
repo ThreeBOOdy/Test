@@ -63,7 +63,7 @@ export async function commitImportBatch(importedById: string, batchId: string) {
     const levels = await tx.level.findMany({ where: { code: { in: levelCodes }, enabled: true } });
     const levelByCode = new Map(levels.map((level) => [level.code, level]));
     for (const item of validated) {
-      if (!levelByCode.has(item.row.levelCode)) throw new ApiError(`第 ${item.row.rowNumber} 行等级 ${item.row.levelCode} 不存在或已停用`, 409);
+      if (!levelByCode.has(item.row.levelCode)) throw new ApiError(`${formatImportLocation(item.row)} 等级 ${item.row.levelCode} 不存在或已停用`, 409);
     }
 
     const knowledgeByCode = new Map<string, Awaited<ReturnType<typeof ensureKnowledgePoint>>>();
@@ -82,7 +82,7 @@ export async function commitImportBatch(importedById: string, batchId: string) {
       const level = levelByCode.get(item.row.levelCode)!;
       const knowledgePoint = knowledgeByCode.get(item.row.categoryCode)!;
       if ((knowledgeById.get(knowledgePoint.id)?._count.children ?? 0) > 0) {
-        throw new ApiError(`第 ${item.row.rowNumber} 行知识点 ${knowledgePoint.code} 不是末级节点`, 409);
+        throw new ApiError(`${formatImportLocation(item.row)} 知识点 ${knowledgePoint.code} 不是末级节点`, 409);
       }
       return {
         levelId: level.id,
@@ -106,4 +106,8 @@ export async function commitImportBatch(importedById: string, batchId: string) {
     await tx.importBatch.update({ where: { id: batch.id }, data: { insertedRows: inserted, duplicateRows: skipped } });
     return { batchId: batch.id, inserted, skipped };
   }, { timeout: 60_000 });
+}
+
+function formatImportLocation(row: ImportQuestionRow) {
+  return row.sheetName ? `${row.sheetName}!${row.rowNumber}` : `第 ${row.rowNumber} 行`;
 }

@@ -54,6 +54,7 @@ export type ExamRule = PracticeRule & {
 
 export type ImportQuestionRow = {
   rowNumber: number;
+  sheetName?: string;
   levelCode: string;
   sourceBankCode?: string;
   categoryCode: string;

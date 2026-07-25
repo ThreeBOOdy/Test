@@ -28,12 +28,12 @@ export async function PUT(request: Request) {
       if (rule.singleCount > singleAvailable || rule.multipleCount > multipleAvailable) throw new ApiError(`等级题量超过库存：单选 ${singleAvailable}，多选 ${multipleAvailable}`);
     }
     for (const rule of input.knowledgeRules.filter((item) => item.singleCount > 0 || item.multipleCount > 0)) {
-      const point = await prisma.knowledgePoint.findUnique({ where: { id: rule.knowledgePointId } });
+      const point = await prisma.knowledgePoint.findUnique({ where: { id: rule.knowledgePointId }, include: { _count: { select: { children: true } } } });
       if (!point || !point.enabled) throw new ApiError("知识点不存在或已停用", 404);
-      const knowledgeScope = { OR: [{ id: point.id }, { path: { startsWith: `${point.path}/` } }] };
+      if (point.depth !== 2 || point._count.children > 0) throw new ApiError("专项练习规则只能配置二级末级知识点");
       const [singleAvailable, multipleAvailable] = await Promise.all([
-        prisma.question.count({ where: { levelId: rule.levelId, status: "ACTIVE", type: "SINGLE_CHOICE", knowledgePoint: { is: knowledgeScope } } }),
-        prisma.question.count({ where: { levelId: rule.levelId, status: "ACTIVE", type: "MULTIPLE_CHOICE", knowledgePoint: { is: knowledgeScope } } }),
+        prisma.question.count({ where: { levelId: rule.levelId, knowledgePointId: point.id, status: "ACTIVE", type: "SINGLE_CHOICE" } }),
+        prisma.question.count({ where: { levelId: rule.levelId, knowledgePointId: point.id, status: "ACTIVE", type: "MULTIPLE_CHOICE" } }),
       ]);
       if (rule.singleCount > singleAvailable || rule.multipleCount > multipleAvailable) throw new ApiError(`${point.code} 题量超过库存：单选 ${singleAvailable}，多选 ${multipleAvailable}`);
     }
