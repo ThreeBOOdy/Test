@@ -1,0 +1,3 @@
+CREATE DATABASE IF NOT EXISTS practice_shadow CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci;
+GRANT ALL PRIVILEGES ON practice_shadow.* TO 'practice'@'%';
+FLUSH PRIVILEGES;

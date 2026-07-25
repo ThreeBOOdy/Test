@@ -8,21 +8,22 @@ jobs:
   verify:
     runs-on: ubuntu-latest
     services:
-      postgres:
-        image: postgres:18-alpine
+      mysql:
+        image: mysql:8.0.46
         env:
-          POSTGRES_DB: practice
-          POSTGRES_USER: practice
-          POSTGRES_PASSWORD: practice
+          MYSQL_DATABASE: practice_ci_integration
+          MYSQL_USER: practice
+          MYSQL_PASSWORD: practice
+          MYSQL_ROOT_PASSWORD: root-practice
         ports:
-          - 5432:5432
+          - 3306:3306
         options: >-
-          --health-cmd "pg_isready -U practice -d practice"
+          --health-cmd "mysqladmin ping -h 127.0.0.1 -u root -proot-practice --silent"
           --health-interval 5s
           --health-timeout 5s
-          --health-retries 20
+          --health-retries 30
     env:
-      DATABASE_URL: postgresql://practice:practice@localhost:5432/practice?schema=public
+      DATABASE_URL: mysql://practice:practice@127.0.0.1:3306/practice_ci_integration
       AUTH_SECRET: ci-auth-secret-with-at-least-thirty-two-characters
       COOKIE_SECURE: "true"
     steps:
@@ -34,21 +35,24 @@ jobs:
       - run: npm ci
       - run: npm run db:generate
       - run: npm test
+      - run: npx prisma db execute --file scripts/mysql-ci-init.sql
+        env:
+          DATABASE_URL: mysql://root:root-practice@127.0.0.1:3306/mysql
       - run: npx prisma migrate deploy
         env:
-          DATABASE_URL: postgresql://practice:practice@localhost:5432/practice?schema=ci_integration
+          DATABASE_URL: mysql://practice:practice@127.0.0.1:3306/practice_ci_integration
       - run: npm run test:integration
         env:
-          DATABASE_URL: postgresql://practice:practice@localhost:5432/practice?schema=ci_integration
+          DATABASE_URL: mysql://practice:practice@127.0.0.1:3306/practice_ci_integration
       - run: npm run lint
       - run: npm run build
       - run: npx playwright install --with-deps chromium
       - run: npx prisma migrate deploy
         env:
-          DATABASE_URL: postgresql://practice:practice@localhost:5432/practice?schema=ci_e2e
+          DATABASE_URL: mysql://practice:practice@127.0.0.1:3306/practice_ci_e2e
       - run: npm run db:seed
         env:
-          DATABASE_URL: postgresql://practice:practice@localhost:5432/practice?schema=ci_e2e
+          DATABASE_URL: mysql://practice:practice@127.0.0.1:3306/practice_ci_e2e
       - run: npm run test:e2e
         env:
-          DATABASE_URL: postgresql://practice:practice@localhost:5432/practice?schema=ci_e2e
+          DATABASE_URL: mysql://practice:practice@127.0.0.1:3306/practice_ci_e2e

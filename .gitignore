@@ -8,7 +8,7 @@ test-results/
 .env
 .env.local
 *.log
-postgres-data/
+mysql-data/
 .patch-input.txt
 test.patch-probe
 .tools/

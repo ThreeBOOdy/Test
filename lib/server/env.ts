@@ -4,7 +4,7 @@ export function getDatabaseUrl() {
   const value = process.env.DATABASE_URL;
   if (value) return value;
   if (process.env.NODE_ENV === "production") throw new Error("DATABASE_URL is required in production");
-  return "postgresql://practice:practice@localhost:5432/practice?schema=public";
+  return "mysql://practice:practice@127.0.0.1:3306/practice_dev";
 }
 
 export function assertProductionAuthEnvironment() {

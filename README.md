@@ -2,7 +2,7 @@
 
 一套面向学校、培训机构和家庭学习场景的移动优先刷题系统。系统支持按照 **等级** 与 **树形知识点** 两种维度随机抽题，教师可以分别配置单选题、多选题数量，学生完成练习后会自动生成历史记录、正确率和错题数据。
 
-当前版本已将生产增强、认证更新、无线电训练 UI 与正式美术资源统一到 `main` 主线。项目采用 Next.js 模块化单体架构，前后端、权限、业务接口和教师管理页面位于同一代码仓库，使用 PostgreSQL 持久化数据，并提供本地与生产两套 Docker Compose 部署方案。当前版本已经完成练习快照、错题闭环、服务端导入批次、会话失效、登录限流、审计日志、分页、教学统计、移动端完整导航、CI 和 HTTPS 反向代理等基础能力。
+当前版本已将生产增强、认证更新、无线电训练 UI 与正式美术资源统一到 `main` 主线。项目采用 Next.js 模块化单体架构，前后端、权限、业务接口和教师管理页面位于同一代码仓库，使用 MySQL 8.0.46 持久化数据，并提供本地与生产两套 Docker Compose 部署方案。当前版本已经完成练习快照、错题闭环、服务端导入批次、会话失效、登录限流、审计日志、分页、教学统计、移动端完整导航、CI 和 HTTPS 反向代理等基础能力。
 
 ## 当前版本组成
 
@@ -131,7 +131,7 @@ flowchart LR
     API --> Service[练习 / 导入 / 知识点服务]
     RSC --> Prisma[Prisma 7]
     Service --> Prisma
-    Prisma --> PostgreSQL[(PostgreSQL 18)]
+    Prisma --> MySQL[(MySQL 8.0.46)]
     Excel[Excel 题库文件] --> Import[ExcelJS 解析与校验]
     Import --> API
 ```
@@ -143,14 +143,14 @@ flowchart LR
 | 全栈框架 | Next.js 16 | 页面、服务端组件、API Route Handlers |
 | 前端 | React 19、TypeScript 6 | 页面与交互组件 |
 | 样式 | Tailwind CSS 4 | 响应式界面和移动端布局 |
-| 数据库 | PostgreSQL 18 | 题库、练习、答案、错题和账号数据 |
-| ORM | Prisma 7、`@prisma/adapter-pg` | 类型安全查询、关系和迁移 |
+| 数据库 | MySQL 8.0.46 | 题库、练习、答案、错题和账号数据 |
+| ORM | Prisma 7、`@prisma/adapter-mariadb` | 类型安全查询、关系和迁移 |
 | 身份认证 | jose、HTTP-only Cookie | HS256 JWT、会话版本和角色权限 |
 | Excel | ExcelJS | Excel 读取、表头映射和导入预览 |
 | 参数校验 | Zod 4 | API 请求和导入数据校验 |
 | 图标 | Lucide React | 学生端和教师端界面图标 |
-| 测试 | Vitest、Playwright | 单元、PostgreSQL 集成和浏览器端到端测试 |
-| 部署 | Docker、Docker Compose、Caddy | 应用、迁移任务、PostgreSQL 和自动 HTTPS |
+| 测试 | Vitest、Playwright | 单元、MySQL 集成和浏览器端到端测试 |
+| 部署 | Docker、Docker Compose、Caddy | 应用、迁移任务、MySQL 和自动 HTTPS |
 
 ## 数据模型
 
@@ -199,14 +199,14 @@ lib/
 ├── client/                 # 浏览器请求封装
 └── db.ts                   # Prisma 数据库客户端
 prisma/
-├── migrations/             # PostgreSQL 迁移
+├── migrations/             # MySQL 迁移
 ├── schema.prisma           # 数据库模型
 └── seed.ts                 # 演示账号、等级、知识点和题目数据
 tests/
-├── integration/            # PostgreSQL 集成测试
+├── integration/            # MySQL 集成测试
 ├── e2e/                    # Playwright 完整业务流程
 └── *.test.{ts,tsx}         # 领域规则与 React UI 单元测试
-scripts/                    # PostgreSQL 备份和恢复脚本
+scripts/                    # MySQL 初始化、备份和恢复脚本
 docker-compose.prod.yml     # 应用、迁移、数据库和 Caddy 生产编排
 Caddyfile                   # HTTPS 反向代理配置
 .github/workflows/ci.yml    # GitHub Actions 全量质量门禁
@@ -225,7 +225,7 @@ flowchart LR
     Routes --> Services[服务端业务服务]
     Services --> Domain
     Services --> Prisma
-    Prisma --> PostgreSQL[(PostgreSQL 18)]
+    Prisma --> MySQL[(MySQL 8.0.46)]
     Excel[Excel 文件] --> ExcelJS[ExcelJS 解析]
     ExcelJS --> Domain
 ```
@@ -242,14 +242,15 @@ flowchart LR
 
 ## 环境要求
 
-推荐使用：
+本机源码开发推荐使用：
 
 - Windows 10/11、macOS 或 Linux。
 - Node.js 24。
 - npm 11 或兼容版本。
-- Docker Desktop 与 Docker Compose v2。
 - Git。
-- PostgreSQL 可以使用 Docker 容器，无需单独安装。
+- MySQL 8.0.46，可以使用本机服务或 Docker 容器。
+
+生产服务器不需要单独安装 Node.js、npm、Prisma、MySQL 或 Caddy，只需要安装 Docker Engine 与 Docker Compose v2；这些运行环境及其版本均由镜像和 Compose 固定。
 
 ## 环境变量
 
@@ -261,11 +262,13 @@ Copy-Item .env.example .env
 
 | 变量 | 示例 | 说明 |
 | --- | --- | --- |
-| `DATABASE_URL` | `postgresql://practice:practice@localhost:5432/practice?schema=public` | Prisma 使用的 PostgreSQL 地址；支持通过 `schema` 参数指定非 `public` Schema |
+| `DATABASE_URL` | `mysql://practice:URL编码后的密码@127.0.0.1:3306/practice_dev` | Prisma 使用的 MySQL 地址；密码中的特殊字符必须进行 URL 编码 |
+| `SHADOW_DATABASE_URL` | `mysql://practice:URL编码后的密码@127.0.0.1:3306/practice_shadow` | `prisma migrate dev` 使用的独立 shadow database |
 | `APP_SEED_PASSWORD` | `ChangeMe123!` | 演示账号种子密码 |
 | `AUTH_SECRET` | 至少 32 字符随机字符串 | JWT 签名密钥 |
 | `COOKIE_SECURE` | `false` | 本地 HTTP 为 `false`，正式 HTTPS 为 `true` |
-| `POSTGRES_PASSWORD` | 高熵随机密码 | 生产 Compose 的 PostgreSQL 密码 |
+| `MYSQL_PASSWORD` | 高熵随机密码 | 生产 MySQL 应用账号密码；保持原始值，不做 URL 编码 |
+| `MYSQL_ROOT_PASSWORD` | 独立高熵随机密码 | 生产 MySQL root 密码，仅用于容器初始化与健康检查 |
 | `APP_DOMAIN` | `practice.example.com` | Caddy 申请 HTTPS 证书使用的公网域名 |
 
 PowerShell 生成随机 `AUTH_SECRET`：
@@ -278,104 +281,119 @@ $bytes = New-Object byte[] 32
 
 > `.env` 已加入 `.gitignore`，不要将真实密钥提交到 GitHub。
 
-## 快速启动：Docker
+## Windows 本机 MySQL 开发
 
-### 1. 安装 Node.js 依赖
+首次初始化：
 
 ```powershell
+cd D:\Tests\Test
 npm.cmd install
-```
-
-### 2. 创建环境变量
-
-```powershell
 Copy-Item .env.example .env
 ```
 
-将 `.env` 中的 `AUTH_SECRET` 替换为至少 32 字符的随机值。
+在 MySQL Workbench 中打开 `scripts/mysql-bootstrap.sql`，将 `CHANGE_ME_PRACTICE_PASSWORD` 替换为高强度密码后执行。然后把同一密码经过 URL 编码后写入 `.env`：
 
-### 3. 启动 PostgreSQL
-
-```powershell
-docker compose up -d db
+```dotenv
+DATABASE_URL="mysql://practice:URL编码后的密码@127.0.0.1:3306/practice_dev"
+SHADOW_DATABASE_URL="mysql://practice:URL编码后的密码@127.0.0.1:3306/practice_shadow"
 ```
 
-### 4. 执行数据库迁移
-
-已有迁移应使用：
+完成首次迁移和演示数据写入：
 
 ```powershell
-npx.cmd prisma migrate deploy
+npm.cmd exec prisma migrate deploy
+npm.cmd run db:seed
 ```
 
-> 首次启动和升级已有数据库时都必须执行该命令。本整合版本需要 `20260721160000_production_foundation` 迁移来创建会话版本、登录尝试和审计日志结构；遗漏迁移会导致登录接口返回 500。
+日常启动只需要：
 
-开发数据库需要创建新迁移时使用：
+```powershell
+cd D:\Tests\Test
+Start-Service MySQL80
+npm.cmd run dev
+```
+
+如果 `MySQL80` 已经运行，可以省略 `Start-Service MySQL80`。Next.js 页面和 API 后端会由同一个开发服务器启动，默认访问 `http://localhost:3000`。
+
+拉取包含新迁移的代码后执行：
+
+```powershell
+npm.cmd exec prisma migrate deploy
+```
+
+修改 `prisma/schema.prisma` 并创建开发迁移时使用：
 
 ```powershell
 npm.cmd run db:migrate -- --name your_migration_name
 ```
 
-### 5. 写入演示数据
+> 当前 MySQL 初始迁移为 `20260724180000_mysql_init`。旧 PostgreSQL 迁移不能应用到 MySQL；现有 PostgreSQL 开发数据应舍弃并在空 MySQL 数据库中重新迁移和 seed。
+
+## Docker 开发模式
+
+如果本机没有安装 MySQL，也可以让 Docker 启动开发数据库和应用：
 
 ```powershell
-npm.cmd run db:seed
+Copy-Item .env.example .env
+docker compose up -d --build
 ```
 
-### 6. 构建并启动应用
-
-```powershell
-docker compose up -d --build app
-```
-
-访问：
-
-- 首页：`http://localhost:3000`
-- 登录页：`http://localhost:3000/login`
-- 学生端：`http://localhost:3000/student`
-- 教师端：`http://localhost:3000/teacher`
-
-查看容器状态：
+访问 `http://localhost:3000`。查看状态和日志：
 
 ```powershell
 docker compose ps
-```
-
-查看应用日志：
-
-```powershell
 docker compose logs -f app
 ```
 
-停止服务但保留数据库：
+停止容器但保留数据库：
 
 ```powershell
 docker compose down
 ```
 
-停止服务并删除数据库卷：
+删除容器及数据库卷：
 
 ```powershell
 docker compose down -v
 ```
 
-> `docker compose down -v` 会永久删除本机容器数据库，使用前必须确认已经备份。
+> `docker compose down -v` 会永久删除 Docker 中的开发数据库，只应在确认数据可丢弃时使用。Windows 本机 `MySQL80` 与 Docker MySQL 都会占用 `3306`，两者不要同时启动。
 
-## 本地开发模式
+## 服务器 Docker 部署
 
-```powershell
-npm.cmd install
-Copy-Item .env.example .env
-docker compose up -d db
-npx.cmd prisma migrate deploy
-npm.cmd run db:seed
-npm.cmd run dev
+生产服务器只需安装 Docker Engine 和 Docker Compose v2，不需要安装项目依赖对应版本的 Node.js、MySQL、Prisma 或 Caddy。
+
+首次部署时复制生产代码并创建 `.env`：
+
+```dotenv
+DATABASE_URL="mysql://practice:URL编码后的MYSQL_PASSWORD@db:3306/practice"
+MYSQL_PASSWORD="数据库应用账号原始密码"
+MYSQL_ROOT_PASSWORD="独立的MySQL管理员密码"
+AUTH_SECRET="至少32字符的随机字符串"
+APP_DOMAIN="practice.example.com"
 ```
 
-开发服务器默认地址：
+注意生产 `DATABASE_URL` 的主机名必须为 `db`，其中的密码需要 URL 编码；`MYSQL_PASSWORD` 保持原始值。真实 `.env` 不得提交到 GitHub。
 
-```text
-http://localhost:3000
+启动或升级：
+
+```bash
+docker compose -f docker-compose.prod.yml up -d --build
+```
+
+Compose 会自动启动 MySQL 8.0.46、执行 Prisma `migrate deploy`、启动 Next.js 和 Caddy，并通过 Caddy 为 `APP_DOMAIN` 申请和续期 HTTPS 证书。MySQL 不暴露宿主机端口，正式数据保存在 `practice-mysql` Docker Volume 中。
+
+查看状态和日志：
+
+```bash
+docker compose -f docker-compose.prod.yml ps
+docker compose -f docker-compose.prod.yml logs -f
+```
+
+生产环境不会自动执行演示数据 seed。仅部署演示环境时，在首次迁移成功后执行一次：
+
+```bash
+docker compose -f docker-compose.prod.yml run --rm migrate npm run db:seed
 ```
 
 ## 演示账号
@@ -482,7 +500,7 @@ http://localhost:3000
 npm.cmd test
 ```
 
-运行 PostgreSQL 集成测试：
+运行 MySQL 集成测试：
 
 ```powershell
 npm.cmd run test:integration
@@ -533,8 +551,8 @@ npm.cmd run build
 
 当前版本验证基线：
 
-- Vitest 单元与 UI 测试：37 项，覆盖 8 个测试文件。
-- PostgreSQL 集成测试：9 项。
+- Vitest 单元、UI 与仓库规则测试：55 项，覆盖 12 个测试文件。
+- MySQL 集成测试：覆盖 JSON 答案数组、长题干、练习、导入、错题和模拟考试。
 - Playwright 端到端测试套件：包含 3 条完整业务流程。
 - ESLint、Prisma Schema 校验和 Next.js 生产构建。
 - `npm audit`：当前报告 1 个高危依赖告警；尚未执行可能引入破坏性升级的 `npm audit fix --force`。
@@ -552,7 +570,7 @@ npx.cmd prisma validate
 npm.cmd audit
 ```
 
-GitHub Actions 使用 PostgreSQL 18 服务容器，自动执行依赖安装、Prisma Generate、数据库迁移、Seed、单元测试、集成测试、ESLint、生产构建和 Playwright E2E。
+GitHub Actions 使用 MySQL 8.0.46 服务容器，并为集成测试和端到端测试创建独立数据库，自动执行依赖安装、Prisma Generate、数据库迁移、Seed、单元测试、集成测试、ESLint、生产构建和 Playwright E2E。
 
 ## 数据备份与恢复
 
@@ -567,10 +585,10 @@ GitHub Actions 使用 PostgreSQL 18 服务容器，自动执行依赖安装、Pr
 恢复前应停止应用写入，并确认目标数据库可以被覆盖：
 
 ```powershell
-.\scripts\restore.ps1 -BackupFile .\backups\practice-YYYYMMDD-HHMMSS.dump
+.\scripts\restore.ps1 -BackupFile .\backups\practice-YYYYMMDD-HHMMSS.sql
 ```
 
-脚本使用 PostgreSQL 自定义备份格式，并通过 `docker compose cp` 传输文件，避免 Windows PowerShell 文本管道造成编码损坏。
+脚本在 MySQL 容器内使用 `mysqldump` / `mysql`，并通过 `docker compose cp` 传输 SQL 文件，避免 Windows PowerShell 文本管道造成编码损坏。
 
 生产环境建议使用云数据库自动备份，并定期验证备份文件可以正常恢复。
 
@@ -604,7 +622,7 @@ Copy-Item .env.example .env
 docker compose -f docker-compose.prod.yml up -d --build
 ```
 
-生产环境必须设置随机的 `POSTGRES_PASSWORD`、至少 32 字符的 `AUTH_SECRET` 和真实 `APP_DOMAIN`。数据库不暴露宿主机端口，应用会在迁移任务成功后启动。
+生产环境必须设置完整且密码已 URL 编码的 `DATABASE_URL`、随机的 `MYSQL_PASSWORD` 与 `MYSQL_ROOT_PASSWORD`、至少 32 字符的 `AUTH_SECRET` 和真实 `APP_DOMAIN`。数据库不暴露宿主机端口，应用会在迁移任务成功后启动。
 
 健康检查：
 
@@ -617,7 +635,7 @@ docker compose -f docker-compose.prod.yml up -d --build
 
 ```powershell
 .\scripts\backup.ps1
-.\scripts\restore.ps1 -BackupFile .\backups\practice-YYYYMMDD-HHMMSS.dump
+.\scripts\restore.ps1 -BackupFile .\backups\practice-YYYYMMDD-HHMMSS.sql
 ```
 
 升级步骤：
@@ -630,7 +648,7 @@ docker compose -f docker-compose.prod.yml up -d --build
 回滚步骤：
 
 1. 若仅应用代码异常且迁移向后兼容，切回上一版本镜像并重新运行生产 Compose。
-2. 若数据库迁移不兼容，停止应用，使用升级前 `.dump` 文件执行 `scripts/restore.ps1`，再启动上一版本镜像。
+2. 若数据库迁移不兼容，停止应用，使用升级前 `.sql` 文件执行 `scripts/restore.ps1`，再启动上一版本镜像。
 3. Prisma 生产迁移不自动执行向下迁移；任何破坏性 Schema 变更都必须先验证备份恢复。
 
 正式公网部署后仍建议接入外部监控、集中日志、异常告警和异地备份。
@@ -639,14 +657,14 @@ docker compose -f docker-compose.prod.yml up -d --build
 
 ### 页面无法连接数据库
 
-确认 PostgreSQL 容器健康：
+确认 MySQL 容器健康：
 
 ```powershell
 docker compose ps
 docker compose logs db
 ```
 
-本地开发使用 `localhost:5432`，应用容器内部使用主机名 `db:5432`，不要混用两个地址。
+本地开发使用 `127.0.0.1:3306`，应用容器内部使用主机名 `db:3306`，不要混用两个地址。
 
 ### 登录返回 500 或“登录失败”
 
@@ -657,7 +675,7 @@ npx.cmd prisma migrate status
 npx.cmd prisma migrate deploy
 ```
 
-当前版本必须包含 `20260721160000_production_foundation`。该迁移增加 `User.sessionVersion`、`LoginAttempt` 和 `AuditLog` 等认证所需结构。迁移完成后重新登录，无需删除或重新初始化数据库。
+当前版本必须包含 `20260724180000_mysql_init`。该迁移创建完整 MySQL 数据结构；如果数据库仍保存旧 PostgreSQL 迁移记录，应新建空 MySQL 数据库后执行迁移和 seed。
 
 ### `AUTH_SECRET` 报错
 
@@ -669,22 +687,22 @@ docker compose up -d --force-recreate app
 
 ### 端口被占用
 
-检查 `3000` 或 `5432` 端口：
+检查 `3000` 或 `3306` 端口：
 
 ```powershell
-Get-NetTCPConnection -LocalPort 3000,5432 -ErrorAction SilentlyContinue
+Get-NetTCPConnection -LocalPort 3000,3306 -ErrorAction SilentlyContinue
 ```
 
 ### Docker Hub 无法访问
 
-项目默认使用 AWS Public ECR 中的 Docker Official Images 镜像：
+Node.js 和 Caddy 使用 AWS Public ECR，MySQL 8.0.46 使用 Docker Official Image：
 
 ```text
 public.ecr.aws/docker/library/node:24-alpine
-public.ecr.aws/docker/library/postgres:18-alpine
+mysql:8.0.46
 ```
 
-因此不依赖直接访问 Docker Hub。
+如果网络无法访问 Docker Hub，需要在可联网环境预先拉取并导入 `mysql:8.0.46`，或将 Compose 中的 MySQL 镜像替换为组织内部镜像仓库地址。
 
 ## 当前限制与后续规划
 
@@ -703,7 +721,7 @@ public.ecr.aws/docker/library/postgres:18-alpine
 
 当前统一主线：`main`。
 
-CI 为集成测试与端到端测试使用独立 PostgreSQL schema，并在端到端测试前单独执行迁移和演示数据写入，避免测试数据互相污染。
+CI 为集成测试与端到端测试使用独立 MySQL 数据库，并在端到端测试前单独执行迁移和演示数据写入，避免测试数据互相污染。
 
 提交代码前建议执行完整质量门禁：
 

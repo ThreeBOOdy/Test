@@ -44,11 +44,12 @@ describe("repository release quality", () => {
     expect(read("app/layout.tsx")).toContain('data-scroll-behavior="smooth"');
   });
 
-  it("isolates integration and end-to-end database schemas in CI", () => {
+  it("isolates integration and end-to-end MySQL databases in CI", () => {
     const workflow = read(".github/workflows/ci.yml");
-    expect(workflow).toContain("schema=ci_integration");
-    expect(workflow).toContain("schema=ci_e2e");
-    expect(workflow.indexOf("schema=ci_e2e")).toBeLessThan(workflow.lastIndexOf("npm run db:seed"));
+    expect(workflow).toContain("practice_ci_integration");
+    expect(workflow).toContain("practice_ci_e2e");
+    expect(workflow).toContain("mysql:8.0.46");
+    expect(workflow.indexOf("practice_ci_e2e")).toBeLessThan(workflow.lastIndexOf("npm run db:seed"));
     expect(workflow.lastIndexOf("npm run db:seed")).toBeLessThan(workflow.indexOf("npm run test:e2e"));
   });
 

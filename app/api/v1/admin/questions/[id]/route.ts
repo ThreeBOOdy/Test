@@ -52,7 +52,7 @@ export async function PUT(request: Request, context: { params: Promise<{ id: str
         correctOptionCount: normalized.correctOptionCount,
         selectionSpec: normalized.selectionSpec,
         options: normalized.options as Prisma.InputJsonValue,
-        correctOptionIds: normalized.correctOptionIds,
+        correctOptionIds: normalized.correctOptionIds as Prisma.InputJsonValue,
         status: input.status,
       },
     });

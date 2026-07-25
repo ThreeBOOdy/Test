@@ -2,7 +2,6 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { isImportBatchExpired } from "../lib/domain/import-batch";
 import { isLoginBlocked, validatePasswordPolicy } from "../lib/domain/security";
 import { ApiError, mapPublicError } from "../lib/domain/api-error";
-import { getDatabaseSchema } from "../lib/domain/database-url";
 import { assertRequestBodySize, readJsonBody } from "../lib/domain/request-body";
 import { normalizePagination } from "../lib/server/pagination";
 
@@ -76,12 +75,5 @@ describe("request body limits", () => {
 
     const malformed = new Request("http://localhost/api", { method: "POST", body: "{" });
     await expect(readJsonBody(malformed, 1024)).rejects.toEqual(new ApiError("请求体不是有效 JSON", 400));
-  });
-});
-
-describe("database URL schema", () => {
-  it("uses the configured PostgreSQL schema and defaults to public", () => {
-    expect(getDatabaseSchema("postgresql://user:pass@localhost:5432/app?schema=tenant_a")).toBe("tenant_a");
-    expect(getDatabaseSchema("postgresql://user:pass@localhost:5432/app")).toBe("public");
   });
 });

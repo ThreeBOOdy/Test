@@ -1,26 +1,29 @@
 services:
   db:
-    image: public.ecr.aws/docker/library/postgres:18-alpine
+    image: mysql:8.0.46
     restart: unless-stopped
+    command: ["--character-set-server=utf8mb4", "--collation-server=utf8mb4_0900_ai_ci"]
     environment:
-      POSTGRES_DB: practice
-      POSTGRES_USER: practice
-      POSTGRES_PASSWORD: practice
+      MYSQL_DATABASE: practice_dev
+      MYSQL_USER: practice
+      MYSQL_PASSWORD: practice
+      MYSQL_ROOT_PASSWORD: root-practice
     ports:
-      - "127.0.0.1:5432:5432"
+      - "127.0.0.1:3306:3306"
     volumes:
-      - practice-db:/var/lib/postgresql
+      - practice-mysql:/var/lib/mysql
+      - ./scripts/mysql-docker-init.sql:/docker-entrypoint-initdb.d/01-practice-databases.sql:ro
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U practice -d practice"]
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -u root -p$$MYSQL_ROOT_PASSWORD --silent"]
       interval: 5s
       timeout: 5s
-      retries: 12
+      retries: 30
 
   app:
     build: .
     restart: unless-stopped
     environment:
-      DATABASE_URL: postgresql://practice:practice@db:5432/practice?schema=public
+      DATABASE_URL: mysql://practice:practice@db:3306/practice_dev
       AUTH_SECRET: ${AUTH_SECRET}
       COOKIE_SECURE: "false"
       NODE_ENV: production
@@ -31,4 +34,4 @@ services:
         condition: service_healthy
 
 volumes:
-  practice-db:
+  practice-mysql:

@@ -1,13 +1,12 @@
 import "dotenv/config";
-import { PrismaPg } from "@prisma/adapter-pg";
+import { PrismaMariaDb } from "@prisma/adapter-mariadb";
 import { Prisma, PrismaClient } from "../generated/prisma/client";
 import { knowledgePoints, levelRules, levels, questions } from "../lib/data/demo";
-import { getDatabaseSchema } from "../lib/domain/database-url";
 import { hashPassword } from "../lib/server/password";
 import { DEFAULT_EXAM_RULES } from "../lib/domain/exam-rules";
 
-const connectionString = process.env.DATABASE_URL ?? "postgresql://practice:practice@localhost:5432/practice?schema=public";
-const prisma = new PrismaClient({ adapter: new PrismaPg({ connectionString }, { schema: getDatabaseSchema(connectionString) }) });
+const connectionString = process.env.DATABASE_URL ?? "mysql://practice:practice@127.0.0.1:3306/practice_dev";
+const prisma = new PrismaClient({ adapter: new PrismaMariaDb(connectionString) });
 
 
 async function main() {
@@ -45,7 +44,7 @@ async function main() {
       correctOptionCount: question.correctOptionCount,
       selectionSpec: question.selectionSpec,
       options: question.options as Prisma.InputJsonValue,
-      correctOptionIds: question.correctOptionIds,
+      correctOptionIds: question.correctOptionIds as Prisma.InputJsonValue,
       status: question.status,
     })),
     skipDuplicates: true,

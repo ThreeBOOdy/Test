@@ -1,17 +1,17 @@
 import { beforeAll, beforeEach, describe, expect, it } from "vitest";
-import { PrismaPg } from "@prisma/adapter-pg";
-import { PrismaClient } from "../../generated/prisma/client";
-import { getDatabaseSchema } from "../../lib/domain/database-url";
+import { PrismaMariaDb } from "@prisma/adapter-mariadb";
+import { Prisma, PrismaClient } from "../../generated/prisma/client";
+import { assertDatabaseName } from "../../lib/domain/database-url";
 import { commitImportBatch, getImportBatchReport, revertImportBatch } from "../../lib/server/import-service";
 import { createPracticeSession, getPracticeSession, submitMockExam, submitPracticeAnswer } from "../../lib/server/practice-service";
 import { createSessionToken, findSessionUser, verifySessionToken } from "../../lib/server/session";
 
 const connectionString = process.env.DATABASE_URL;
 if (!connectionString) throw new Error("DATABASE_URL is required for integration tests");
-const prisma = new PrismaClient({ adapter: new PrismaPg({ connectionString }, { schema: getDatabaseSchema(connectionString) }) });
+const prisma = new PrismaClient({ adapter: new PrismaMariaDb(connectionString) });
 
 beforeAll(() => {
-  if (!connectionString.includes("practice")) throw new Error("Integration tests require an isolated practice database");
+  assertDatabaseName(connectionString, "practice_ci_integration");
 });
 
 beforeEach(async () => {
@@ -41,6 +41,46 @@ async function createBaseRecords() {
 }
 
 describe("production database foundation", () => {
+  it("round-trips long question text and JSON answer arrays", async () => {
+    const { user, level, point, question } = await createBaseRecords();
+    const longStem = "无线电题干".repeat(1000);
+    const updated = await prisma.question.update({ where: { id: question.id }, data: { stem: longStem, correctOptionIds: ["A"] } });
+    expect(updated.stem).toHaveLength(longStem.length);
+    expect(updated.correctOptionIds).toEqual(["A"]);
+
+    const snapshot = { questionId: question.id, levelId: level.id, knowledgePointId: point.id, stem: longStem, type: "SINGLE_CHOICE" as const, optionCount: 2, correctOptionCount: 1, selectionSpec: "2选1", options: [{ id: "A", text: "A" }, { id: "B", text: "B" }], correctOptionIds: ["A"], levelCode: "A", knowledgeName: "Point" };
+    const session = await prisma.practiceSession.create({ data: { userId: user.id, mode: "LEVEL_COMPREHENSIVE", levelId: level.id, singleCountSnapshot: 1, multipleCountSnapshot: 0 } });
+    await prisma.practiceSessionQuestion.create({ data: { sessionId: session.id, questionId: question.id, position: 0, snapshot } });
+    await submitPracticeAnswer(user.id, session.id, question.id, ["A"]);
+
+    const answer = await prisma.practiceAnswer.findUniqueOrThrow({ where: { sessionId_questionId: { sessionId: session.id, questionId: question.id } } });
+    expect(answer.selectedOptionIds).toEqual(["A"]);
+  });
+
+  it("runs MySQL aggregate and learning-duration queries", async () => {
+    const { user, point, question } = await createBaseRecords();
+    const startedAt = new Date("2026-07-24T10:00:00.000Z");
+    const completedAt = new Date("2026-07-24T10:42:00.000Z");
+    const session = await prisma.practiceSession.create({ data: { userId: user.id, mode: "LEVEL_COMPREHENSIVE", status: "COMPLETED", singleCountSnapshot: 1, multipleCountSnapshot: 0, correctCount: 1, startedAt, completedAt } });
+    await prisma.practiceAnswer.create({ data: { sessionId: session.id, questionId: question.id, selectedOptionIds: ["A"], isCorrect: true, submittedAt: completedAt } });
+
+    const [activeRows, knowledgeRows, studentRows, durationRows] = await Promise.all([
+      prisma.$queryRaw<Array<{ count: number | bigint | string }>>(Prisma.sql`SELECT CAST(COUNT(DISTINCT \`userId\`) AS SIGNED) AS count FROM \`PracticeSession\` WHERE \`startedAt\` >= ${startedAt}`),
+      prisma.$queryRaw<Array<{ code: string; answered: number | bigint | string; correct: number | bigint | string }>>(Prisma.sql`SELECT kp.code, CAST(COUNT(pa.id) AS SIGNED) AS answered, CAST(SUM(CASE WHEN pa.\`isCorrect\` = TRUE THEN 1 ELSE 0 END) AS SIGNED) AS correct FROM \`PracticeAnswer\` pa JOIN \`Question\` q ON q.id = pa.\`questionId\` JOIN \`KnowledgePoint\` kp ON kp.id = q.\`knowledgePointId\` GROUP BY kp.id, kp.code`),
+      prisma.$queryRaw<Array<{ userId: string; sessionCount: number | bigint | string; answered: number | bigint | string; correct: number | bigint | string }>>(Prisma.sql`SELECT ps.\`userId\`, CAST(COUNT(DISTINCT ps.id) AS SIGNED) AS \`sessionCount\`, CAST(COUNT(pa.id) AS SIGNED) AS answered, CAST(SUM(CASE WHEN pa.\`isCorrect\` = TRUE THEN 1 ELSE 0 END) AS SIGNED) AS correct FROM \`PracticeSession\` ps LEFT JOIN \`PracticeAnswer\` pa ON pa.\`sessionId\` = ps.id WHERE ps.\`userId\` = ${user.id} GROUP BY ps.\`userId\``),
+      prisma.$queryRaw<Array<{ minutes: number | string }>>(Prisma.sql`SELECT CAST(COALESCE(SUM(TIMESTAMPDIFF(SECOND, \`startedAt\`, \`completedAt\`)), 0) AS SIGNED) / 60 AS minutes FROM \`PracticeSession\` WHERE \`userId\` = ${user.id} AND \`status\` = 'COMPLETED'`),
+    ]);
+
+    expect(Number(activeRows[0]?.count)).toBe(1);
+    expect(knowledgeRows[0]).toMatchObject({ code: point.code });
+    expect(Number(knowledgeRows[0]?.answered)).toBe(1);
+    expect(Number(knowledgeRows[0]?.correct)).toBe(1);
+    expect(Number(studentRows[0]?.sessionCount)).toBe(1);
+    expect(Number(studentRows[0]?.answered)).toBe(1);
+    expect(Number(studentRows[0]?.correct)).toBe(1);
+    expect(Number(durationRows[0]?.minutes)).toBe(42);
+  });
+
   it("keeps a question snapshot unchanged after the source question is edited", async () => {
     const { user, level, point, question } = await createBaseRecords();
     const snapshot = { questionId: question.id, levelId: level.id, knowledgePointId: point.id, stem: "Original", type: "SINGLE_CHOICE", optionCount: 2, correctOptionCount: 1, selectionSpec: "2选1", options: [{ id: "A", text: "A" }, { id: "B", text: "B" }], correctOptionIds: ["A"], levelCode: "A", knowledgeName: "Point" };

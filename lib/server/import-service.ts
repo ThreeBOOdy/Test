@@ -95,7 +95,7 @@ export async function commitImportBatch(importedById: string, batchId: string) {
         correctOptionCount: item.correctOptionCount,
         selectionSpec: item.selectionSpec,
         options: item.options as Prisma.InputJsonValue,
-        correctOptionIds: item.correctOptionIds,
+        correctOptionIds: item.correctOptionIds as Prisma.InputJsonValue,
         status: item.row.enabled === false ? "DISABLED" : "ACTIVE",
         importBatchId: batch.id,
       };

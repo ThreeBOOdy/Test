@@ -2,6 +2,7 @@ import "server-only";
 import { Prisma } from "@/generated/prisma/client";
 import { prisma } from "@/lib/db";
 import { ApiError } from "@/lib/domain/api-error";
+import { parseJsonStringArray } from "@/lib/domain/json-string-array";
 import { selectPracticeQuestions, selectPrioritizedRandomQuestions, shuffle, sortQuestionsByBankNumber } from "@/lib/domain/practice-engine";
 import { createQuestionSnapshot, gradeQuestionSnapshot, toPublicQuestionSnapshot, type QuestionSnapshot } from "@/lib/domain/practice-snapshot";
 import type { ExamRule, PracticeMode, PublicAnswerResult, PublicPracticeSession, Question, QuestionOption } from "@/lib/domain/types";
@@ -23,7 +24,7 @@ type QuestionRecord = {
   correctOptionCount: number;
   selectionSpec: string;
   options: unknown;
-  correctOptionIds: string[];
+  correctOptionIds: unknown;
   status: "ACTIVE" | "DISABLED" | "ARCHIVED";
   level: { code: string };
   knowledgePoint: { name: string };
@@ -100,7 +101,7 @@ export async function getPracticeSession(userId: string, sessionId: string): Pro
   const correctCount = session.answers.filter((answer) => answer.isCorrect).length;
   const results = Object.fromEntries(session.answers.map((answer) => {
     const snapshot = snapshots.find((item) => item.questionId === answer.questionId);
-    return [answer.questionId, { isCorrect: answer.isCorrect, correctOptionIds: snapshot?.correctOptionIds ?? [], selectedOptionIds: answer.selectedOptionIds, answeredCount: session.answers.length, correctCount }];
+    return [answer.questionId, { isCorrect: answer.isCorrect, correctOptionIds: snapshot?.correctOptionIds ?? [], selectedOptionIds: parseJsonStringArray(answer.selectedOptionIds, "selectedOptionIds"), answeredCount: session.answers.length, correctCount }];
   }));
   const exam = session.mode === "MOCK_EXAM" && session.durationMinutesSnapshot && session.passingCountSnapshot && session.expiresAt
     ? { durationMinutes: session.durationMinutesSnapshot, passingCount: session.passingCountSnapshot, expiresAt: session.expiresAt }
@@ -119,7 +120,7 @@ export async function submitPracticeAnswer(userId: string, sessionId: string, qu
     const snapshot = sessionQuestion.snapshot as unknown as QuestionSnapshot;
     validateSelection(snapshot, selectedOptionIds, false);
     const isCorrect = gradeQuestionSnapshot(snapshot, selectedOptionIds);
-    await tx.practiceAnswer.create({ data: { sessionId, questionId, selectedOptionIds, isCorrect } });
+    await tx.practiceAnswer.create({ data: { sessionId, questionId, selectedOptionIds: selectedOptionIds as Prisma.InputJsonValue, isCorrect } });
     await updateWrongQuestion(tx, userId, questionId, isCorrect);
     const [answeredCount, correctCount, total] = await Promise.all([tx.practiceAnswer.count({ where: { sessionId } }), tx.practiceAnswer.count({ where: { sessionId, isCorrect: true } }), tx.practiceSessionQuestion.count({ where: { sessionId } })]);
     await tx.practiceSession.update({ where: { id: sessionId }, data: { currentIndex: answeredCount, correctCount, ...(answeredCount === total ? { status: "COMPLETED", completedAt: new Date() } : {}) } });
@@ -144,7 +145,7 @@ export async function submitMockExam(userId: string, sessionId: string, submitte
       validateSelection(snapshot, selectedOptionIds, true);
       return { questionId: item.questionId, snapshot, selectedOptionIds, isCorrect: gradeQuestionSnapshot(snapshot, selectedOptionIds) };
     });
-    await tx.practiceAnswer.createMany({ data: graded.map((answer) => ({ sessionId, questionId: answer.questionId, selectedOptionIds: answer.selectedOptionIds, isCorrect: answer.isCorrect })) });
+    await tx.practiceAnswer.createMany({ data: graded.map((answer) => ({ sessionId, questionId: answer.questionId, selectedOptionIds: answer.selectedOptionIds as Prisma.InputJsonValue, isCorrect: answer.isCorrect })) });
     for (const answer of graded) await updateWrongQuestion(tx, userId, answer.questionId, answer.isCorrect);
     const correctCount = graded.filter((answer) => answer.isCorrect).length;
     const completedAt = new Date();
@@ -222,5 +223,5 @@ function sessionTitle(mode: PracticeMode, snapshots: QuestionSnapshot[]) {
 }
 
 function toDomainQuestion(record: Omit<QuestionRecord, "level" | "knowledgePoint"> | QuestionRecord): Question {
-  return { id: record.id, levelId: record.levelId, knowledgePointId: record.knowledgePointId, sourceBankCode: record.sourceBankCode ?? undefined, externalQuestionCode: record.externalQuestionCode ?? undefined, stem: record.stem, type: record.type, optionCount: record.optionCount, correctOptionCount: record.correctOptionCount, selectionSpec: record.selectionSpec, options: record.options as QuestionOption[], correctOptionIds: record.correctOptionIds, status: record.status };
+  return { id: record.id, levelId: record.levelId, knowledgePointId: record.knowledgePointId, sourceBankCode: record.sourceBankCode ?? undefined, externalQuestionCode: record.externalQuestionCode ?? undefined, stem: record.stem, type: record.type, optionCount: record.optionCount, correctOptionCount: record.correctOptionCount, selectionSpec: record.selectionSpec, options: record.options as QuestionOption[], correctOptionIds: parseJsonStringArray(record.correctOptionIds, "correctOptionIds"), status: record.status };
 }
