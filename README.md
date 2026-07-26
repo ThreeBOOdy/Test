@@ -2,13 +2,14 @@
 
 一套面向学校、培训机构和家庭学习场景的移动优先刷题系统。系统支持按照 **等级** 与 **树形知识点** 两种维度随机抽题，教师可以分别配置单选题、多选题数量，学生完成练习后会自动生成历史记录、正确率和错题数据。
 
-当前版本已将生产增强、认证更新、无线电训练 UI 与正式美术资源统一到 `main` 主线。项目采用 Next.js 模块化单体架构，前后端、权限、业务接口和教师管理页面位于同一代码仓库，使用 MySQL 8.0.46 持久化数据，并提供本地与生产两套 Docker Compose 部署方案。当前版本已经完成练习快照、错题闭环、服务端导入批次、会话失效、登录限流、审计日志、分页、教学统计、移动端完整导航、CI 和 HTTPS 反向代理等基础能力。
+当前版本已将生产增强、学生账号注册审核、认证更新、无线电训练 UI 与正式美术资源统一到同一主线。项目采用 Next.js 模块化单体架构，前后端、权限、业务接口和管理页面位于同一代码仓库，使用 MySQL 8.0.46 持久化数据，并提供本地与生产两套 Docker Compose 部署方案。当前版本已经完成学生自主注册、管理员审核、账号有效期、学生 Excel 批量导入、练习快照、错题闭环、服务端导入批次、会话失效、登录限流、审计日志、分页、教学统计、移动端完整导航、CI 和 HTTPS 反向代理等基础能力。
 
 ## 当前版本组成
 
 - **生产增强**：会话版本、登录限流、审计日志、练习快照、服务端 Excel 批次、分页、教学统计、健康检查、CI、备份恢复和生产部署。
 - **认证与视觉**：浏览器会话检查、登录体验、无线电主题视觉资源和统一页面风格。
 - **训练 UI 重构**：题目导航、草稿选择状态、频谱进度、即时判题、完成摘要，以及教师移动端“更多”功能面板。
+- **学生账号体系**：自主注册、管理员审核、拒绝修改与重新提交、一年默认有效期、长期账号、敏感资料加密和 Excel 批量导入。
 - **兼容修复**：导航配置拆出 Client Component 边界，现有视觉资源替代缺失插画，端到端测试同步新版交互文案。
 
 ## 功能概览
@@ -16,6 +17,10 @@
 ### 学生端
 
 - 用户名和密码登录。
+- 可从登录页自主注册，填写姓名、身份证号、学校、年级、手机号和密码。
+- 自主注册后进入申请状态页，只有管理员审核通过后才能进入练习系统。
+- 审核拒绝时可查看原因、修改资料并主动重新提交。
+- 普通账号默认从审核日期起有效一年；长期账号不受日期限制，直到管理员关闭长期开关或停用账号。
 - 按 A、B、C 等等级进行综合练习。
 - 按“知识点 + 等级”进行专项练习。
 - 只展示教师已经配置且库存充足的练习入口。
@@ -36,7 +41,7 @@
 
 ### 教师端
 
-- 查看题库、知识点、学生和近期练习概览。
+- 查看题库、知识点和近期练习概览。
 - 新增和编辑题目。
 - 设置题目等级、知识点、题库编号、题目编号、选项和答案。
 - 自动根据有效选项和答案生成 `4选1`、`4选2` 等选项规格。
@@ -44,8 +49,6 @@
 - 创建树形知识点，缺失的父级知识点自动补齐。
 - 修改知识点名称、排序和启用状态。
 - 停用父级知识点时同步停用全部后代节点。
-- 创建学生账号、修改学生姓名、停用账号。
-- 为学生生成一次性临时密码。
 - 查看按日期、等级、学生和知识点筛选的练习次数、实际答题量、正确率和活跃学生统计。
 - 配置每个等级综合练习的单选、多选题量。
 - 配置每个“知识点 + 等级”专项练习的单选、多选题量。
@@ -53,6 +56,16 @@
 - 查看题目、知识点、学生和练习的真实数据库数据。
 - 题库、学生、练习历史、错题和导入批次使用服务端分页，默认每页 20 条、最大 100 条。
 - 移动端底部导航保留常用教师入口，其余功能通过“更多”面板访问，避免入口被三列布局截断。
+
+### 管理员端
+
+- 管理员拥有全部教师教学能力，并独占学生账号管理权限。
+- 审核学生自主注册申请，支持通过、拒绝、填写拒绝原因和批量通过。
+- 管理年级代码、名称、排序和启用状态；已被学生引用的年级不能删除。
+- 查看和编辑学生姓名、身份证号、学校、年级、手机号、启停状态、有效期和长期账号开关。
+- 重置学生密码；重置后的学生必须在首次登录时修改密码。
+- 上传学生账号 Excel，多工作表预检后可逐行编辑全部账号字段、重新校验并原子提交。
+- Excel 导入的学生账号直接生效，无需再次审核，但首次登录必须修改密码。
 
 ### Excel 题库导入
 
@@ -402,14 +415,17 @@ docker compose -f docker-compose.prod.yml run --rm migrate npm run db:seed
 
 | 角色 | 用户名 | 默认密码 |
 | --- | --- | --- |
-| 教师 | `teacher` | `ChangeMe123!` |
+| 管理员 | `teacher` | `ChangeMe123!` |
+| 教师 | `instructor` | `ChangeMe123!` |
 | 学生 | `student` | `ChangeMe123!` |
 
 如果修改了 `APP_SEED_PASSWORD`，密码以环境变量为准。Seed 按等级代码和知识点分类号等业务唯一键对齐数据，可以在同一开发数据库中重复执行。
 
-演示账号为了便于本地验收不会强制修改密码。教师新建学生或重置学生密码时，新账号会被标记为“待修改密码”。
+演示账号为了便于本地验收不会强制修改密码。管理员通过 Excel 导入学生或重置学生密码时，账号会被标记为“待修改密码”。
 
 ## Excel 模板
+
+### 题库模板
 
 推荐表头：
 
@@ -451,6 +467,24 @@ docker compose -f docker-compose.prod.yml run --rm migrate npm run db:seed
 - 答案数量与填写的选项规格不一致。
 - 所有选项都被设置成正确答案。
 
+### 学生账号模板
+
+管理员学生账号导入推荐表头：
+
+```text
+用户名 | 姓名 | 身份证号 | 学校 | 年级 | 手机号 | 初始密码 | 启用 | 开始日期 | 结束日期 | 长期
+```
+
+字段规则：
+
+- 用户名、身份证号和手机号必须在数据库及整个工作簿内保持唯一。
+- 身份证号必须是有效的 18 位中国大陆居民身份证号，性别由证件号自动推导。
+- 年级可以填写启用年级的代码或名称。
+- 开始日期和结束日期使用 `YYYY-MM-DD`；两者均未填写时默认从导入日期起一年。
+- `启用` 和 `长期` 支持“是/否”、`true/false`、`1/0` 等常用写法。
+- 初始密码必须满足系统密码策略；提交成功后不会继续保留导入草稿中的密码密文。
+- 导入账号直接进入 `ACTIVE` 状态，无需审核，但首次登录必须修改密码。
+
 ## API 概览
 
 ### 认证
@@ -458,8 +492,12 @@ docker compose -f docker-compose.prod.yml run --rm migrate npm run db:seed
 | 方法 | 路径 | 说明 |
 | --- | --- | --- |
 | `POST` | `/api/v1/auth/login` | 用户名密码登录 |
+| `POST` | `/api/v1/auth/register` | 提交学生自主注册申请并创建受限会话 |
 | `POST` | `/api/v1/auth/logout` | 清除登录 Cookie |
 | `POST` | `/api/v1/auth/change-password` | 修改当前账号密码 |
+| `GET` | `/api/v1/registration` | 查看学生申请状态或本人可编辑资料 |
+| `PATCH` | `/api/v1/registration` | 修改待审核或被拒绝的申请资料 |
+| `POST` | `/api/v1/registration/resubmit` | 被拒绝学生主动重新提交审核 |
 
 ### 学生练习
 
@@ -468,7 +506,7 @@ docker compose -f docker-compose.prod.yml run --rm migrate npm run db:seed
 | `POST` | `/api/v1/practice-sessions` | 创建等级综合、知识点专项或最多 20 道错题巩固练习 |
 | `POST` | `/api/v1/practice-sessions/:id/answers` | 提交一道题的答案 |
 
-### 教师管理
+### 教师与管理员管理
 
 | 方法 | 路径 | 说明 |
 | --- | --- | --- |
@@ -477,8 +515,17 @@ docker compose -f docker-compose.prod.yml run --rm migrate npm run db:seed
 | `POST` | `/api/v1/admin/knowledge-points` | 新增知识点 |
 | `PUT` | `/api/v1/admin/knowledge-points/:id` | 编辑、排序或停用知识点 |
 | `PUT` | `/api/v1/admin/practice-rules` | 保存综合或专项抽题规则 |
-| `POST` | `/api/v1/admin/students` | 创建学生账号 |
-| `PUT` | `/api/v1/admin/students/:id` | 编辑学生或重置密码 |
+| `GET` | `/api/v1/admin/registrations` | 管理员查询学生注册申请 |
+| `POST` | `/api/v1/admin/registrations/:id/approve` | 管理员审核通过注册申请 |
+| `POST` | `/api/v1/admin/registrations/:id/reject` | 管理员填写原因并拒绝注册申请 |
+| `POST` | `/api/v1/admin/registrations/bulk-approve` | 管理员批量通过待审核申请 |
+| `GET` | `/api/v1/admin/students` | 管理员查询学生账号列表 |
+| `GET` | `/api/v1/admin/students/:id` | 管理员读取学生完整可编辑资料 |
+| `PUT` | `/api/v1/admin/students/:id` | 管理员编辑学生资料、状态和有效期 |
+| `POST` | `/api/v1/admin/students/:id/reset-password` | 管理员重置学生密码 |
+| `GET` | `/api/v1/admin/grades` | 管理员查询年级 |
+| `POST` | `/api/v1/admin/grades` | 管理员创建年级 |
+| `PUT` | `/api/v1/admin/grades/:id` | 管理员编辑年级 |
 
 ### Excel 导入
 
@@ -489,8 +536,13 @@ docker compose -f docker-compose.prod.yml run --rm migrate npm run db:seed
 | `GET` | `/api/v1/admin/import-batches` | 分页查询导入批次 |
 | `GET` | `/api/v1/admin/import-batches/:id` | 分页查询批次预检行或问题报告 |
 | `POST` | `/api/v1/admin/import-batches/:id/revert` | 撤销已提交导入批次 |
+| `POST` | `/api/v1/admin/student-imports/preview` | 管理员预检学生账号 Excel |
+| `GET` | `/api/v1/admin/student-imports/:id` | 读取本人创建且未过期的学生导入草稿 |
+| `PUT` | `/api/v1/admin/student-imports/:id/rows/:rowId` | 编辑学生导入行并重新执行整批校验 |
+| `POST` | `/api/v1/admin/student-imports/:id/validate` | 重新校验全部学生导入行 |
+| `POST` | `/api/v1/admin/student-imports/:id/commit` | 原子提交并直接启用全部学生账号 |
 
-所有教师管理接口都会在服务端验证当前登录用户角色，不能只依赖前端页面限制。
+所有管理接口都会在服务端验证能力。管理员可以使用教师教学接口；普通教师不能访问学生审核、账号管理、年级管理或学生 Excel 导入接口。
 
 ## 质量检查
 
@@ -544,16 +596,18 @@ npm.cmd run build
 - 数据库唯一约束阻止并发重复题号写入。
 - 教师题目编辑选项连续性校验。
 - 分类号格式和空段校验。
-- 教师创建学生、重置密码和学生首次强制改密。
+- 学生自主注册、拒绝修改、重新提交、管理员审核和默认一年有效期。
+- 管理员学生账号编辑、启停、长期账号、重置密码和会话失效。
+- 学生 Excel 多工作表预检、全字段编辑、整批重复校验、原子提交和首次强制改密。
 - 等级练习即时判题、刷新恢复、历史记录、错题产生、错题组卷和掌握状态更新。
 - 教师移动端“更多”面板可访问全部管理入口，练习题目导航、草稿选择和完成摘要可独立渲染测试。
 - Excel 预检、警告报告、101 行完整提交和撤销。
 
 当前版本验证基线：
 
-- Vitest 单元、UI 与仓库规则测试：55 项，覆盖 12 个测试文件。
-- MySQL 集成测试：覆盖 JSON 答案数组、长题干、练习、导入、错题和模拟考试。
-- Playwright 端到端测试套件：包含 3 条完整业务流程。
+- Vitest 单元、UI 与仓库规则测试：233 项，覆盖 27 个测试文件。
+- MySQL 集成测试：28 项，覆盖生产基础、年级、学生注册审核和学生 Excel 导入工作流。
+- Playwright 端到端测试套件：3 条完整业务流程，覆盖管理员导入学生并首次改密、练习闭环和题库 Excel 导入撤销。
 - ESLint、Prisma Schema 校验和 Next.js 生产构建。
 - `npm audit`：当前报告 1 个高危依赖告警；尚未执行可能引入破坏性升级的 `npm audit fix --force`。
 
@@ -602,9 +656,11 @@ GitHub Actions 使用 MySQL 8.0.46 服务容器，并为集成测试和端到端
 - HTTP-only Cookie。
 - `SameSite=Lax` Cookie。
 - 生产环境强制 `COOKIE_SECURE=true`。
-- 学生和教师服务端角色校验。
-- 停用账号后旧会话自动失效。
+- 管理员、教师、正式学生和注册受限学生的服务端能力校验。
+- 学生账号停用、审核状态、有效期、长期账号或管理员资料更新后旧会话自动失效。
 - 管理员重置密码后的强制改密。
+- 身份证号和手机号严格校验、HMAC 唯一索引、AES-256-GCM 加密和脱敏展示。
+- 生产启动时强制要求两把不同的 32 字节 Base64 学生数据密钥。
 - 学生题目接口不会提前返回标准答案。
 - 登录失败按用户名和 IP 进行 15 分钟窗口限流。
 - 密码修改、密码重置和账号停用会使旧会话立即失效。
@@ -622,7 +678,25 @@ Copy-Item .env.example .env
 docker compose -f docker-compose.prod.yml up -d --build
 ```
 
-生产环境必须设置完整且密码已 URL 编码的 `DATABASE_URL`、随机的 `MYSQL_PASSWORD` 与 `MYSQL_ROOT_PASSWORD`、至少 32 字符的 `AUTH_SECRET` 和真实 `APP_DOMAIN`。数据库不暴露宿主机端口，应用会在迁移任务成功后启动。
+生产环境必须设置完整且密码已 URL 编码的 `DATABASE_URL`、随机的 `MYSQL_PASSWORD` 与 `MYSQL_ROOT_PASSWORD`、至少 32 字符的 `AUTH_SECRET`、真实 `APP_DOMAIN`，以及两个不同的学生敏感数据密钥。`APP_TIME_ZONE` 未设置时默认使用 `Asia/Taipei`。数据库不暴露宿主机端口，应用会在迁移任务成功后启动。
+
+`STUDENT_DATA_ENCRYPTION_KEY` 与 `STUDENT_DATA_HASH_KEY` 都必须是精确 32 个随机字节的 Base64 编码，并分别生成。可在 PowerShell 中运行以下函数两次，将两次输出分别写入 `.env`；不要将密钥打印到应用日志或提交到版本库：
+
+```powershell
+function New-StudentDataKey {
+  $bytes = New-Object byte[] 32
+  $generator = [System.Security.Cryptography.RandomNumberGenerator]::Create()
+  try {
+    $generator.GetBytes($bytes)
+    [Convert]::ToBase64String($bytes)
+  } finally {
+    $generator.Dispose()
+  }
+}
+
+New-StudentDataKey
+New-StudentDataKey
+```
 
 健康检查：
 
@@ -707,7 +781,7 @@ mysql:8.0.46
 ## 当前限制与后续规划
 
 - 增加知识点分类号重命名和批量调整。
-- 增加题库 Excel 导出和学生批量导入。
+- 增加题库 Excel 导出和学生导入历史导出。
 - 增加更复杂的题库批量编辑和批量状态维护。
 - 继续优化超大规模题库下的索引、查询计划和后台任务队列。
 - 增加更细粒度的掌握度复习策略。

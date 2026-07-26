@@ -6,7 +6,7 @@ import { normalizeQuestionEditorInput } from "@/lib/domain/question-editor";
 import { readJsonBody } from "@/lib/domain/request-body";
 import { assertSameOrigin } from "@/lib/server/http";
 import { writeAuditLog } from "@/lib/server/audit";
-import { ApiError, apiErrorResponse, requireRole } from "@/lib/server/api";
+import { ApiError, apiErrorResponse, requireTeachingUser } from "@/lib/server/api";
 
 const schema = z.object({
   levelId: z.string().min(1),
@@ -22,7 +22,7 @@ const schema = z.object({
 export async function POST(request: Request) {
   try {
     assertSameOrigin(request);
-    const user = await requireRole("TEACHER");
+    const user = await requireTeachingUser();
     const input = schema.parse(await readJsonBody(request));
     const normalized = normalizeQuestionEditorInput(input);
     const [level, point] = await Promise.all([

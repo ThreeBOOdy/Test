@@ -4,9 +4,11 @@ import { useState, type FormEvent } from "react";
 import { useSearchParams } from "next/navigation";
 import { Eye, EyeOff, KeyRound, LogIn, UserRound } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { canUseNextPath, getDefaultPathForCapability } from "@/lib/domain/auth-routing";
+import type { AccessCapability } from "@/lib/domain/student-access";
 
-type LoginResult = { message?: string; user?: { role: "STUDENT" | "TEACHER"; mustChangePassword: boolean; }; };
-function safeNext(value: string) { return value.startsWith("/") && !value.startsWith("//") ? value : null; }
+type LoginResult = { message?: string; user?: { role: "STUDENT" | "TEACHER" | "ADMIN"; mustChangePassword: boolean; capability: AccessCapability | null; }; };
+function safeNext(value: string, role: "STUDENT" | "TEACHER" | "ADMIN") { return value.startsWith("/") && !value.startsWith("//") && canUseNextPath(value, role) ? value : null; }
 async function browserSessionIsReady() { const response = await fetch("/api/v1/auth/session", { credentials: "include", cache: "no-store" }); return response.ok; }
 
 export function LoginForm() {
@@ -14,7 +16,7 @@ export function LoginForm() {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [passwordVisible, setPasswordVisible] = useState(false);
-  const [error, setError] = useState(searchParams.get("error") ?? "");
+  const [error, setError] = useState(searchParams.get("error") === "role-mismatch" ? "当前浏览器登录的是另一种角色，请输入对应账号切换频道。" : searchParams.get("error") ?? "");
   const [pending, setPending] = useState(false);
   const next = searchParams.get("next") ?? "";
 
@@ -25,8 +27,13 @@ export function LoginForm() {
       const data = await response.json() as LoginResult;
       if (!response.ok || !data.user) { setError(data.message ?? "登录失败"); return; }
       if (!await browserSessionIsReady()) { setError("浏览器未保存本站登录状态。请允许 localhost 使用 Cookie 后重试；页面不会自动跳转。"); return; }
-      const fallback = data.user.role === "TEACHER" ? "/teacher" : "/student";
-      window.location.assign(data.user.mustChangePassword ? "/change-password" : safeNext(next) ?? fallback);
+      const fallback = data.user.capability ? getDefaultPathForCapability(data.user.capability) : "/change-password";
+      const destination = data.user.mustChangePassword
+        ? "/change-password"
+        : data.user.capability === "REGISTRATION_ONLY"
+          ? fallback
+          : safeNext(next, data.user.role) ?? fallback;
+      window.location.assign(destination);
     } catch { setError("登录失败：无法连接服务器，请确认服务正在运行后重试。"); }
     finally { setPending(false); }
   }

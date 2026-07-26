@@ -1,0 +1,2 @@
+import{NextResponse}from"next/server";import{apiErrorResponse,requireAdministrator}from"@/lib/server/api";import{assertSameOrigin}from"@/lib/server/http";import{revalidateStudentImport}from"@/lib/server/student-import-service";
+export async function POST(request:Request,context:{params:Promise<{id:string}>}){try{assertSameOrigin(request);const admin=await requireAdministrator();const{id}=await context.params;return NextResponse.json(await revalidateStudentImport(admin.id,id))}catch(error){return apiErrorResponse(error,"重新校验失败")}}

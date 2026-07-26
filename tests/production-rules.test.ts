@@ -1,9 +1,14 @@
+import fs from "node:fs";
+import path from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { isImportBatchExpired } from "../lib/domain/import-batch";
 import { isLoginBlocked, validatePasswordPolicy } from "../lib/domain/security";
 import { ApiError, mapPublicError } from "../lib/domain/api-error";
 import { assertRequestBodySize, readJsonBody } from "../lib/domain/request-body";
 import { normalizePagination } from "../lib/server/pagination";
+import { register } from "../instrumentation";
+
+const root = path.resolve(__dirname, "..");
 
 afterEach(() => {
   vi.unstubAllEnvs();
@@ -75,5 +80,44 @@ describe("request body limits", () => {
 
     const malformed = new Request("http://localhost/api", { method: "POST", body: "{" });
     await expect(readJsonBody(malformed, 1024)).rejects.toEqual(new ApiError("请求体不是有效 JSON", 400));
+  });
+});
+
+describe("production startup", () => {
+  const encryptionKey = Buffer.alloc(32, 17).toString("base64");
+  const hashKey = Buffer.alloc(32, 29).toString("base64");
+
+  it("rejects missing student data secrets in the production Node runtime", async () => {
+    vi.stubEnv("NODE_ENV", "production");
+    vi.stubEnv("NEXT_RUNTIME", "nodejs");
+    vi.stubEnv("STUDENT_DATA_ENCRYPTION_KEY", "");
+    vi.stubEnv("STUDENT_DATA_HASH_KEY", "");
+
+    await expect(register()).rejects.toThrowError("STUDENT_DATA_ENCRYPTION_KEY must be a Base64-encoded 32-byte key");
+  });
+
+  it("accepts valid student data secrets in the production Node runtime", async () => {
+    vi.stubEnv("NODE_ENV", "production");
+    vi.stubEnv("NEXT_RUNTIME", "nodejs");
+    vi.stubEnv("STUDENT_DATA_ENCRYPTION_KEY", encryptionKey);
+    vi.stubEnv("STUDENT_DATA_HASH_KEY", hashKey);
+
+    await expect(register()).resolves.toBeUndefined();
+  });
+
+  it("skips Node-only student data validation in the edge runtime", async () => {
+    vi.stubEnv("NODE_ENV", "production");
+    vi.stubEnv("NEXT_RUNTIME", "edge");
+    vi.stubEnv("STUDENT_DATA_ENCRYPTION_KEY", "");
+    vi.stubEnv("STUDENT_DATA_HASH_KEY", "");
+
+    await expect(register()).resolves.toBeUndefined();
+  });
+
+  it("maps both student data secrets into the production app container", () => {
+    const compose = fs.readFileSync(path.join(root, "docker-compose.prod.yml"), "utf8");
+
+    expect(compose).toContain("STUDENT_DATA_ENCRYPTION_KEY: ${STUDENT_DATA_ENCRYPTION_KEY}");
+    expect(compose).toContain("STUDENT_DATA_HASH_KEY: ${STUDENT_DATA_HASH_KEY}");
   });
 });

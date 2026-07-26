@@ -4,7 +4,7 @@ import { prisma } from "@/lib/db";
 import { readJsonBody } from "@/lib/domain/request-body";
 import { assertSameOrigin } from "@/lib/server/http";
 import { writeAuditLog } from "@/lib/server/audit";
-import { ApiError, apiErrorResponse, requireRole } from "@/lib/server/api";
+import { ApiError, apiErrorResponse, requireTeachingUser } from "@/lib/server/api";
 import { validateExamRule } from "@/lib/domain/exam-rules";
 
 const count = z.number().int().min(0).max(1000);
@@ -17,7 +17,7 @@ const schema = z.object({
 export async function PUT(request: Request) {
   try {
     assertSameOrigin(request);
-    const user = await requireRole("TEACHER");
+    const user = await requireTeachingUser();
     const input = schema.parse(await readJsonBody(request));
     for (const rule of input.levelRules) {
       if (rule.singleCount === 0 && rule.multipleCount === 0) throw new ApiError("等级综合练习的单选和多选不能同时为 0");

@@ -15,6 +15,9 @@ beforeAll(() => {
 });
 
 beforeEach(async () => {
+  await prisma.studentImportRow.deleteMany();
+  await prisma.studentImportBatch.deleteMany();
+  await prisma.studentReviewRecord.deleteMany();
   await prisma.auditLog.deleteMany();
   await prisma.loginAttempt.deleteMany();
   await prisma.practiceAnswer.deleteMany();
@@ -30,6 +33,7 @@ beforeEach(async () => {
   await prisma.knowledgePoint.deleteMany();
   await prisma.level.deleteMany();
   await prisma.user.deleteMany();
+  await prisma.grade.deleteMany();
 });
 
 async function createBaseRecords() {
@@ -41,6 +45,30 @@ async function createBaseRecords() {
 }
 
 describe("production database foundation", () => {
+  it("persists student account foundations and review history", async () => {
+    const grade = await prisma.grade.create({ data: { code: "GRADE_7", name: "七年级", sortOrder: 7 } });
+    const administrator = await prisma.user.create({ data: { username: "administrator", displayName: "Administrator", passwordHash: "test", role: "ADMIN" } });
+    const student = await prisma.user.create({ data: {
+      username: "legacy-student", displayName: "Legacy Student", passwordHash: "test", role: "STUDENT",
+      studentStatus: "ACTIVE", registrationSource: "LEGACY", nationalIdEncrypted: "encrypted-id", nationalIdHash: "id-hash", nationalIdLast4: "1234",
+      gender: "MALE", school: "Test School", gradeId: grade.id, phoneEncrypted: "encrypted-phone", phoneHash: "phone-hash", phoneLast4: "5678",
+      reviewedAt: new Date("2026-07-26T00:00:00.000Z"), reviewedById: administrator.id, isLongTerm: true, profileIncomplete: false,
+    } });
+    const review = await prisma.studentReviewRecord.create({ data: {
+      studentId: student.id, actorUserId: administrator.id, action: "APPROVED", beforeStatus: "PENDING", afterStatus: "ACTIVE",
+      profileSnapshot: { displayName: student.displayName, school: student.school, gradeCode: grade.code },
+    } });
+
+    expect(await prisma.user.findUniqueOrThrow({ where: { id: student.id }, include: { grade: true, reviewedBy: true } })).toMatchObject({
+      studentStatus: "ACTIVE", registrationSource: "LEGACY", isLongTerm: true, grade: { code: "GRADE_7" }, reviewedBy: { role: "ADMIN" },
+    });
+    expect(await prisma.studentReviewRecord.findUniqueOrThrow({ where: { id: review.id }, include: { student: true, actor: true } })).toMatchObject({
+      action: "APPROVED", beforeStatus: "PENDING", afterStatus: "ACTIVE", student: { id: student.id }, actor: { id: administrator.id },
+    });
+    await expect(prisma.user.create({ data: { username: "duplicate-id", displayName: "Duplicate", passwordHash: "test", nationalIdHash: "id-hash" } })).rejects.toBeTruthy();
+    await expect(prisma.user.create({ data: { username: "duplicate-phone", displayName: "Duplicate", passwordHash: "test", phoneHash: "phone-hash" } })).rejects.toBeTruthy();
+  });
+
   it("round-trips long question text and JSON answer arrays", async () => {
     const { user, level, point, question } = await createBaseRecords();
     const longStem = "无线电题干".repeat(1000);
@@ -158,15 +186,60 @@ describe("production database foundation", () => {
   });
 
   it("invalidates an old session after the user session version changes", async () => {
-    const user = await prisma.user.create({ data: { username: "session-user", displayName: "Session User", passwordHash: "test", role: "STUDENT" } });
+    const user = await prisma.user.create({ data: {
+      username: "session-user", displayName: "Session User", passwordHash: "test", role: "STUDENT", mustChangePassword: false,
+      studentStatus: "ACTIVE", isLongTerm: true,
+    } });
     const token = await createSessionToken({ userId: user.id, username: user.username, role: user.role, sessionVersion: user.sessionVersion });
     const payload = await verifySessionToken(token);
     expect(payload).not.toBeNull();
-    expect(await findSessionUser(payload!)).toMatchObject({ id: user.id, sessionVersion: 0 });
+    expect(await findSessionUser(payload!)).toMatchObject({ id: user.id, sessionVersion: 0, capability: "FULL_STUDENT" });
 
     await prisma.user.update({ where: { id: user.id }, data: { sessionVersion: { increment: 1 } } });
 
     expect(await findSessionUser(payload!)).toBeNull();
+  });
+
+  it("supports administrator sessions and trusts the current database role", async () => {
+    const administrator = await prisma.user.create({ data: {
+      username: "session-administrator", displayName: "Session Administrator", passwordHash: "test", role: "ADMIN", mustChangePassword: false,
+    } });
+    const token = await createSessionToken({ userId: administrator.id, username: administrator.username, role: "ADMIN", sessionVersion: administrator.sessionVersion });
+    const payload = await verifySessionToken(token);
+
+    expect(payload).toMatchObject({ role: "ADMIN" });
+    expect(await findSessionUser(payload!)).toMatchObject({ id: administrator.id, role: "ADMIN", capability: "FULL_ADMIN" });
+
+    await prisma.user.update({ where: { id: administrator.id }, data: { role: "TEACHER" } });
+
+    expect(await findSessionUser(payload!)).toMatchObject({ id: administrator.id, role: "TEACHER", capability: "FULL_TEACHER" });
+  });
+
+  it("re-evaluates student status, validity, and enabled state on every lookup", async () => {
+    const student = await prisma.user.create({ data: {
+      username: "session-student", displayName: "Session Student", passwordHash: "test", role: "STUDENT", mustChangePassword: false,
+      studentStatus: "ACTIVE", isLongTerm: false, validFrom: new Date("2000-01-01T00:00:00.000Z"), validUntil: new Date("2999-12-31T00:00:00.000Z"),
+    } });
+    const payload = (await verifySessionToken(await createSessionToken({
+      userId: student.id, username: student.username, role: student.role, sessionVersion: student.sessionVersion,
+    })))!;
+
+    expect(await findSessionUser(payload)).toMatchObject({ capability: "FULL_STUDENT", studentStatus: "ACTIVE", isLongTerm: false });
+
+    await prisma.user.update({ where: { id: student.id }, data: { studentStatus: "PENDING" } });
+    expect(await findSessionUser(payload)).toMatchObject({ capability: "REGISTRATION_ONLY", studentStatus: "PENDING" });
+
+    await prisma.user.update({ where: { id: student.id }, data: { studentStatus: "REJECTED" } });
+    expect(await findSessionUser(payload)).toMatchObject({ capability: "REGISTRATION_ONLY", studentStatus: "REJECTED" });
+
+    await prisma.user.update({ where: { id: student.id }, data: { studentStatus: "ACTIVE", validUntil: new Date("2000-12-31T00:00:00.000Z") } });
+    expect(await findSessionUser(payload)).toBeNull();
+
+    await prisma.user.update({ where: { id: student.id }, data: { isLongTerm: true } });
+    expect(await findSessionUser(payload)).toMatchObject({ capability: "FULL_STUDENT", isLongTerm: true });
+
+    await prisma.user.update({ where: { id: student.id }, data: { enabled: false } });
+    expect(await findSessionUser(payload)).toBeNull();
   });
 
   it("creates at most twenty wrong-question items and updates mastery", async () => {

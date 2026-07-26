@@ -4,14 +4,14 @@ import { prisma } from "@/lib/db";
 import { readJsonBody } from "@/lib/domain/request-body";
 import { assertSameOrigin } from "@/lib/server/http";
 import { writeAuditLog } from "@/lib/server/audit";
-import { ApiError, apiErrorResponse, requireRole } from "@/lib/server/api";
+import { ApiError, apiErrorResponse, requireTeachingUser } from "@/lib/server/api";
 
 const schema = z.object({ name: z.string().trim().min(1).max(200), sortOrder: z.number().int().min(0).max(100000), enabled: z.boolean() });
 
 export async function PUT(request: Request, context: { params: Promise<{ id: string }> }) {
   try {
     assertSameOrigin(request);
-    const user = await requireRole("TEACHER");
+    const user = await requireTeachingUser();
     const { id } = await context.params;
     const input = schema.parse(await readJsonBody(request));
     const point = await prisma.knowledgePoint.findUnique({ where: { id } });

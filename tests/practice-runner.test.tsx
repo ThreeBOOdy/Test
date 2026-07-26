@@ -7,6 +7,17 @@ import { practiceSessionFixture } from "@/tests/fixtures/practice-session";
 describe("PracticeRunner", () => {
   beforeEach(() => vi.stubGlobal("fetch", vi.fn()));
 
+  it("hides question type, level and knowledge metadata from students", () => {
+    render(<PracticeRunner session={practiceSessionFixture()} />);
+    expect(screen.queryByText("单选题", { exact: true })).not.toBeInTheDocument();
+    expect(screen.queryByText("A级", { exact: true })).not.toBeInTheDocument();
+    expect(screen.queryByText(/A级综合练习/)).not.toBeInTheDocument();
+    expect(screen.queryByText("1.1.1", { exact: true })).not.toBeInTheDocument();
+    expect(screen.queryByText("电波基础", { exact: true })).not.toBeInTheDocument();
+    expect(screen.queryByText(/一个或多个|最符合题意/)).not.toBeInTheDocument();
+    expect(screen.getByText("请选择你认为正确的答案。")).toBeInTheDocument();
+  });
+
   it("opens the first unanswered question when resuming", () => {
     const session = practiceSessionFixture({ initialResults: { "question-1": { isCorrect: true, correctOptionIds: ["A"], selectedOptionIds: ["A"], answeredCount: 1, correctCount: 1 } } });
     render(<PracticeRunner session={session} />);

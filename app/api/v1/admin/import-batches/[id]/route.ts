@@ -1,11 +1,11 @@
 import { NextResponse } from "next/server";
-import { apiErrorResponse, requireRole } from "@/lib/server/api";
+import { apiErrorResponse, requireTeachingUser } from "@/lib/server/api";
 import { getImportBatchReport } from "@/lib/server/import-service";
 import { normalizePagination } from "@/lib/server/pagination";
 
 export async function GET(request: Request, context: { params: Promise<{ id: string }> }) {
   try {
-    await requireRole("TEACHER");
+    await requireTeachingUser();
     const { id } = await context.params;
     const url = new URL(request.url);
     const { page, pageSize } = normalizePagination({ page: url.searchParams.get("page") ?? undefined, pageSize: url.searchParams.get("pageSize") ?? undefined });

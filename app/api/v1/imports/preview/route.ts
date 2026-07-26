@@ -7,7 +7,7 @@ import { validateImportRow } from "@/lib/domain/question-import";
 import { assertRequestBodySize } from "@/lib/domain/request-body";
 import type { ImportQuestionRow, ValidatedQuestionRow } from "@/lib/domain/types";
 import { assertSameOrigin } from "@/lib/server/http";
-import { ApiError, apiErrorResponse, requireRole } from "@/lib/server/api";
+import { ApiError, apiErrorResponse, requireTeachingUser } from "@/lib/server/api";
 
 const aliases: Record<string, string[]> = {
   levelCode: ["等级", "级别", "level"], sourceBankCode: ["题库编号", "题库", "bank"], categoryCode: ["分类号", "知识点编号", "category"], knowledgePointName: ["知识点名称", "知识点", "categoryName"], externalQuestionCode: ["题目编号", "编号", "questionCode"], stem: ["问题", "题干", "题目"], rawAnswer: ["答案", "正确答案"], declaredSelectionSpec: ["选项规格", "规格"], enabled: ["是否启用", "启用"],
@@ -16,7 +16,7 @@ const aliases: Record<string, string[]> = {
 export async function POST(request: Request) {
   try {
     assertSameOrigin(request);
-    const user = await requireRole("TEACHER");
+    const user = await requireTeachingUser();
     assertRequestBodySize(request, 21 * 1024 * 1024);
     const form = await request.formData();
     const file = form.get("file");

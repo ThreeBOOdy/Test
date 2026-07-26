@@ -10,6 +10,32 @@ datasource db {
 enum UserRole {
   STUDENT
   TEACHER
+  ADMIN
+}
+
+enum StudentAccountStatus {
+  PENDING
+  ACTIVE
+  REJECTED
+}
+
+enum StudentRegistrationSource {
+  SELF_REGISTRATION
+  EXCEL_IMPORT
+  LEGACY
+}
+
+enum StudentGender {
+  MALE
+  FEMALE
+}
+
+enum StudentReviewAction {
+  SUBMITTED
+  PROFILE_UPDATED
+  RESUBMITTED
+  APPROVED
+  REJECTED
 }
 
 enum QuestionType {
@@ -45,21 +71,86 @@ enum ImportStatus {
   FAILED
 }
 
+enum StudentImportStatus {
+  PREVIEW
+  COMMITTED
+  FAILED
+  EXPIRED
+}
+
 model User {
-  id                String            @id @default(cuid())
-  username          String            @unique
-  displayName       String
-  passwordHash      String
-  role              UserRole          @default(STUDENT)
-  enabled           Boolean           @default(true)
-  mustChangePassword Boolean          @default(true)
-  sessionVersion     Int              @default(0)
-  sessions          PracticeSession[]
-  wrongQuestions    WrongQuestion[]
-  imports           ImportBatch[]
-  auditLogs         AuditLog[]
-  createdAt         DateTime          @default(now())
-  updatedAt         DateTime          @updatedAt
+  id                    String                     @id @default(cuid())
+  username              String                     @unique
+  displayName           String
+  passwordHash          String
+  role                  UserRole                   @default(STUDENT)
+  enabled               Boolean                    @default(true)
+  mustChangePassword    Boolean                    @default(true)
+  sessionVersion        Int                        @default(0)
+  studentStatus         StudentAccountStatus?
+  registrationSource    StudentRegistrationSource?
+  nationalIdEncrypted   String?                    @db.Text
+  nationalIdHash        String?                    @unique
+  nationalIdLast4       String?                    @db.VarChar(4)
+  gender                StudentGender?
+  school                String?
+  gradeId               String?
+  grade                 Grade?                     @relation(fields: [gradeId], references: [id], onDelete: Restrict)
+  phoneEncrypted        String?                    @db.Text
+  phoneHash             String?                    @unique
+  phoneLast4            String?                    @db.VarChar(4)
+  submittedAt           DateTime?
+  reviewedAt            DateTime?
+  reviewedById          String?
+  reviewedBy            User?                      @relation("StudentReviewedBy", fields: [reviewedById], references: [id], onDelete: SetNull)
+  reviewedStudents      User[]                     @relation("StudentReviewedBy")
+  rejectionReason       String?                    @db.Text
+  validFrom             DateTime?                  @db.Date
+  validUntil            DateTime?                  @db.Date
+  isLongTerm            Boolean                    @default(false)
+  profileIncomplete     Boolean                    @default(false)
+  sessions              PracticeSession[]
+  wrongQuestions        WrongQuestion[]
+  imports               ImportBatch[]
+  studentImports        StudentImportBatch[]
+  auditLogs             AuditLog[]
+  studentReviewRecords  StudentReviewRecord[]      @relation("StudentReviewStudent")
+  authoredReviewRecords StudentReviewRecord[]      @relation("StudentReviewActor")
+  createdAt             DateTime                   @default(now())
+  updatedAt             DateTime                   @updatedAt
+
+  @@index([role, studentStatus, enabled])
+  @@index([gradeId, studentStatus])
+  @@index([reviewedById, reviewedAt])
+}
+
+model Grade {
+  id        String   @id @default(cuid())
+  code      String   @unique
+  name      String   @unique
+  sortOrder Int      @default(0)
+  enabled   Boolean  @default(true)
+  students  User[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model StudentReviewRecord {
+  id              String                @id @default(cuid())
+  studentId       String
+  student         User                  @relation("StudentReviewStudent", fields: [studentId], references: [id], onDelete: Cascade)
+  action          StudentReviewAction
+  actorUserId     String
+  actor           User                  @relation("StudentReviewActor", fields: [actorUserId], references: [id], onDelete: Restrict)
+  beforeStatus    StudentAccountStatus?
+  afterStatus     StudentAccountStatus?
+  rejectionReason String?               @db.Text
+  profileSnapshot Json
+  createdAt       DateTime              @default(now())
+
+  @@index([studentId, createdAt])
+  @@index([actorUserId, createdAt])
+  @@index([action, createdAt])
 }
 
 model Level {
@@ -90,21 +181,21 @@ model ExamRule {
 }
 
 model KnowledgePoint {
-  id             String                  @id @default(cuid())
-  code           String                  @unique
-  name           String
-  path           String                  @unique
-  depth          Int
-  sortOrder      Int                     @default(0)
-  enabled        Boolean                 @default(true)
-  parentId       String?
-  parent         KnowledgePoint?         @relation("KnowledgeTree", fields: [parentId], references: [id])
-  children       KnowledgePoint[]        @relation("KnowledgeTree")
-  questions      Question[]
-  practiceRules  KnowledgePracticeRule[]
-  sessions       PracticeSession[]
-  createdAt      DateTime                @default(now())
-  updatedAt      DateTime                @updatedAt
+  id            String                  @id @default(cuid())
+  code          String                  @unique
+  name          String
+  path          String                  @unique
+  depth         Int
+  sortOrder     Int                     @default(0)
+  enabled       Boolean                 @default(true)
+  parentId      String?
+  parent        KnowledgePoint?         @relation("KnowledgeTree", fields: [parentId], references: [id])
+  children      KnowledgePoint[]        @relation("KnowledgeTree")
+  questions     Question[]
+  practiceRules KnowledgePracticeRule[]
+  sessions      PracticeSession[]
+  createdAt     DateTime                @default(now())
+  updatedAt     DateTime                @updatedAt
 
   @@index([parentId, sortOrder])
   @@index([path])
@@ -136,56 +227,56 @@ model KnowledgePracticeRule {
 }
 
 model Question {
-  id                   String            @id @default(cuid())
+  id                   String                    @id @default(cuid())
   levelId              String
   knowledgePointId     String
-  level                Level             @relation(fields: [levelId], references: [id])
-  knowledgePoint       KnowledgePoint    @relation(fields: [knowledgePointId], references: [id])
+  level                Level                     @relation(fields: [levelId], references: [id])
+  knowledgePoint       KnowledgePoint            @relation(fields: [knowledgePointId], references: [id])
   sourceBankCode       String?
   externalQuestionCode String?
-  stem                 String            @db.Text
+  stem                 String                    @db.Text
   type                 QuestionType
   optionCount          Int
   correctOptionCount   Int
   selectionSpec        String
   options              Json
   correctOptionIds     Json
-  status               QuestionStatus    @default(ACTIVE)
+  status               QuestionStatus            @default(ACTIVE)
   importBatchId        String?
-  importBatch          ImportBatch?      @relation(fields: [importBatchId], references: [id])
+  importBatch          ImportBatch?              @relation(fields: [importBatchId], references: [id])
   sessionQuestions     PracticeSessionQuestion[]
   answers              PracticeAnswer[]
   wrongQuestions       WrongQuestion[]
-  createdAt            DateTime          @default(now())
-  updatedAt            DateTime          @updatedAt
+  createdAt            DateTime                  @default(now())
+  updatedAt            DateTime                  @updatedAt
 
+  @@unique([levelId, externalQuestionCode])
   @@index([levelId, type, status])
   @@index([knowledgePointId, levelId, type, status])
   @@index([externalQuestionCode])
-  @@unique([levelId, externalQuestionCode])
 }
 
 model PracticeSession {
-  id                   String                    @id @default(cuid())
-  userId               String
-  user                 User                      @relation(fields: [userId], references: [id])
-  mode                 PracticeMode
-  levelId              String?
-  level                Level?                    @relation(fields: [levelId], references: [id])
-  knowledgePointId     String?
-  knowledgePoint       KnowledgePoint?           @relation(fields: [knowledgePointId], references: [id])
-  status               PracticeStatus            @default(IN_PROGRESS)
-  singleCountSnapshot  Int
-  multipleCountSnapshot Int
-  currentIndex         Int                       @default(0)
-  correctCount         Int                       @default(0)
+  id                      String                    @id @default(cuid())
+  userId                  String
+  user                    User                      @relation(fields: [userId], references: [id])
+  mode                    PracticeMode
+  levelId                 String?
+  level                   Level?                    @relation(fields: [levelId], references: [id])
+  knowledgePointId        String?
+  knowledgePoint          KnowledgePoint?           @relation(fields: [knowledgePointId], references: [id])
+  status                  PracticeStatus            @default(IN_PROGRESS)
+  singleCountSnapshot     Int
+  multipleCountSnapshot   Int
+  currentIndex            Int                       @default(0)
+  correctCount            Int                       @default(0)
   durationMinutesSnapshot Int?
-  passingCountSnapshot Int?
-  expiresAt            DateTime?
-  startedAt            DateTime                  @default(now())
-  completedAt          DateTime?
-  questions            PracticeSessionQuestion[]
-  answers              PracticeAnswer[]
+  passingCountSnapshot    Int?
+  expiresAt               DateTime?
+  startedAt               DateTime                  @default(now())
+  completedAt             DateTime?
+  questions               PracticeSessionQuestion[]
+  answers                 PracticeAnswer[]
 
   @@index([userId, status, startedAt])
 }
@@ -218,39 +309,39 @@ model PracticeAnswer {
 }
 
 model WrongQuestion {
-  id           String   @id @default(cuid())
-  userId       String
-  questionId   String
-  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  question     Question @relation(fields: [questionId], references: [id])
-  wrongCount   Int      @default(1)
-  mastered     Boolean  @default(false)
-  lastWrongAt  DateTime @default(now())
-  masteredAt   DateTime?
+  id          String    @id @default(cuid())
+  userId      String
+  questionId  String
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  question    Question  @relation(fields: [questionId], references: [id])
+  wrongCount  Int       @default(1)
+  mastered    Boolean   @default(false)
+  lastWrongAt DateTime  @default(now())
+  masteredAt  DateTime?
 
   @@unique([userId, questionId])
   @@index([userId, mastered])
 }
 
 model ImportBatch {
-  id           String       @id @default(cuid())
-  fileName     String
-  status       ImportStatus @default(PREVIEW)
-  totalRows    Int          @default(0)
-  validRows    Int          @default(0)
-  warningRows  Int          @default(0)
-  errorRows    Int          @default(0)
-  insertedRows Int          @default(0)
-  duplicateRows Int         @default(0)
-  errorReport  Json?
-  importedById String
-  importedBy   User         @relation(fields: [importedById], references: [id])
-  questions    Question[]
-  rows         ImportBatchRow[]
-  createdAt    DateTime     @default(now())
-  expiresAt    DateTime?
-  committedAt  DateTime?
-  revertedAt   DateTime?
+  id            String           @id @default(cuid())
+  fileName      String
+  status        ImportStatus     @default(PREVIEW)
+  totalRows     Int              @default(0)
+  validRows     Int              @default(0)
+  warningRows   Int              @default(0)
+  errorRows     Int              @default(0)
+  insertedRows  Int              @default(0)
+  duplicateRows Int              @default(0)
+  errorReport   Json?
+  importedById  String
+  importedBy    User             @relation(fields: [importedById], references: [id])
+  questions     Question[]
+  rows          ImportBatchRow[]
+  createdAt     DateTime         @default(now())
+  expiresAt     DateTime?
+  committedAt   DateTime?
+  revertedAt    DateTime?
 
   @@index([importedById, status, createdAt])
 }
@@ -269,12 +360,49 @@ model ImportBatchRow {
   @@index([batchId, valid, rowNumber])
 }
 
+model StudentImportBatch {
+  id          String              @id @default(cuid())
+  fileName    String
+  status      StudentImportStatus @default(PREVIEW)
+  totalRows   Int                 @default(0)
+  validRows   Int                 @default(0)
+  errorRows   Int                 @default(0)
+  sheetNames  Json
+  createdById String
+  createdBy   User                @relation(fields: [createdById], references: [id], onDelete: Restrict)
+  expiresAt   DateTime
+  committedAt DateTime?
+  createdAt   DateTime            @default(now())
+  updatedAt   DateTime            @updatedAt
+  rows        StudentImportRow[]
+
+  @@index([createdById, status, createdAt])
+  @@index([status, expiresAt])
+}
+
+model StudentImportRow {
+  id                       String             @id @default(cuid())
+  batchId                  String
+  batch                    StudentImportBatch @relation(fields: [batchId], references: [id], onDelete: Cascade)
+  sheetName                String
+  sourceRowNumber          Int
+  payload                  Json
+  initialPasswordEncrypted String?            @db.Text
+  issues                   Json
+  valid                    Boolean
+  createdAt                DateTime           @default(now())
+  updatedAt                DateTime           @updatedAt
+
+  @@unique([batchId, sheetName, sourceRowNumber])
+  @@index([batchId, valid, sheetName, sourceRowNumber])
+}
+
 model LoginAttempt {
-  id             String   @id @default(cuid())
-  usernameHash   String
-  ipHash         String
-  success        Boolean
-  createdAt      DateTime @default(now())
+  id           String   @id @default(cuid())
+  usernameHash String
+  ipHash       String
+  success      Boolean
+  createdAt    DateTime @default(now())
 
   @@index([usernameHash, success, createdAt])
   @@index([ipHash, success, createdAt])

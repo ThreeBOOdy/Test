@@ -1,0 +1,2 @@
+import {NextResponse}from"next/server";import{apiErrorResponse,requireAdministrator}from"@/lib/server/api";import{getStudentImport}from"@/lib/server/student-import-service";
+export async function GET(_request:Request,context:{params:Promise<{id:string}>}){try{const admin=await requireAdministrator();const{id}=await context.params;return NextResponse.json(await getStudentImport(admin.id,id),{headers:{"Cache-Control":"no-store"}})}catch(error){return apiErrorResponse(error,"读取导入草稿失败")}}

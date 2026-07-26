@@ -1,0 +1,2 @@
+import{AppShell}from"@/components/app-shell";import{PageHeader}from"@/components/page-header";import{StudentImportPreview}from"@/components/student-import-preview";
+export default function StudentImportPage(){return <AppShell role="admin" currentPath="/admin/student-import"><PageHeader title="学生账号导入" description="上传 Excel 后可逐行编辑并重新校验；提交后账号直接生效，无需审核。"/><div className="mt-6"><StudentImportPreview/></div></AppShell>}

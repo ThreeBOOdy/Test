@@ -44,6 +44,29 @@ describe("repository release quality", () => {
     expect(read("app/layout.tsx")).toContain('data-scroll-behavior="smooth"');
   });
 
+  it("keeps the dashboard primary while routing practice choices through the launcher", () => {
+    const home = read("app/page.tsx");
+    const studentHome = read("app/student/page.tsx");
+    const launcher = read("app/student/practice/start/page.tsx");
+    const practice = read("app/student/practice/page.tsx");
+    const navigation = read("components/navigation-items.ts");
+
+    expect(home).toContain('getEntryHrefForRole("STUDENT"');
+    expect(home).toContain('href={studentHref as never}');
+    expect(navigation).toContain('{ href: "/student/practice/start", label: "开始练习"');
+    expect(studentHome).toContain('<AppShell role="student" currentPath="/student">');
+    expect(studentHome).toContain('href="/student/history"');
+    expect(studentHome).toContain('href="/student/wrong"');
+    expect(studentHome).not.toMatch(/["']\?{2,}["']/);
+    expect(studentHome).not.toMatch(/href=\{`\/student\/practice\?mode=/);
+    expect(studentHome).toContain("/student/practice/start?mode=order");
+    expect(studentHome).toContain("/student/practice/start?mode=random");
+    expect(studentHome).toContain("/student/practice/start?mode=exam");
+    expect(launcher).toContain('import { AppShell } from "@/components/app-shell"');
+    expect(launcher).toContain('<AppShell role="student" currentPath="/student/practice/start">');
+    expect(practice).not.toContain("AppShell");
+  });
+
   it("isolates integration and end-to-end MySQL databases in CI", () => {
     const workflow = read(".github/workflows/ci.yml");
     expect(workflow).toContain("practice_ci_integration");
@@ -62,5 +85,48 @@ describe("repository release quality", () => {
   it("pins the patched Next.js release", () => {
     const packageJson = JSON.parse(read("package.json")) as { dependencies: Record<string, string> };
     expect(packageJson.dependencies.next).toBe("16.2.11");
+  });
+
+  it("uses capability guards for teaching and student practice routes", () => {
+    const teachingRoutes = [
+      "app/api/v1/admin/knowledge-points/route.ts",
+      "app/api/v1/admin/knowledge-points/[id]/route.ts",
+      "app/api/v1/admin/practice-rules/route.ts",
+      "app/api/v1/admin/questions/route.ts",
+      "app/api/v1/admin/questions/[id]/route.ts",
+      "app/api/v1/admin/import-batches/route.ts",
+      "app/api/v1/admin/import-batches/[id]/route.ts",
+      "app/api/v1/admin/import-batches/[id]/revert/route.ts",
+      "app/api/v1/imports/preview/route.ts",
+      "app/api/v1/imports/commit/route.ts",
+    ];
+    const studentRoutes = [
+      "app/api/v1/practice-sessions/route.ts",
+      "app/api/v1/practice-sessions/[id]/answers/route.ts",
+      "app/api/v1/practice-sessions/[id]/submit/route.ts",
+    ];
+
+    for (const file of teachingRoutes) {
+      expect(read(file), `${file} should allow administrators to use teaching features`).toContain("requireTeachingUser");
+      expect(read(file), `${file} should not use the legacy teacher-only guard`).not.toContain('requireRole("TEACHER")');
+    }
+    for (const file of studentRoutes) {
+      expect(read(file), `${file} should enforce active-student access`).toContain("requireActiveStudent");
+      expect(read(file), `${file} should not use the legacy student-only guard`).not.toContain('requireRole("STUDENT")');
+    }
+  });
+
+  it("reserves student account management for administrators", () => {
+    const collection = read("app/api/v1/admin/students/route.ts");
+    const detail = read("app/api/v1/admin/students/[id]/route.ts");
+    const service = read("lib/server/student-account-service.ts");
+
+    expect(collection).toContain("requireAdministrator");
+    expect(detail).toContain("requireAdministrator");
+    expect(collection).not.toContain('requireRole("TEACHER")');
+    expect(detail).not.toContain('requireRole("TEACHER")');
+    expect(collection).not.toContain("prisma.user.create");
+    expect(detail).toContain("updateStudentAccount");
+    expect(service).toContain("sessionVersion: { increment: 1 }");
   });
 });

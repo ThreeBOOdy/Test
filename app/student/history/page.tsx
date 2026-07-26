@@ -13,6 +13,7 @@ import { getCurrentUser } from "@/lib/server/session";
 export default async function HistoryPage({ searchParams }: { searchParams: Promise<{ page?: string }> }) {
   const user = await getCurrentUser();
   if (!user) return null;
+  if (user.capability !== "FULL_STUDENT") return null;
   const params = await searchParams;
   const { page, pageSize, skip } = normalizePagination({ page: params.page });
   const [sessions, total, answered, correct, duration] = await Promise.all([

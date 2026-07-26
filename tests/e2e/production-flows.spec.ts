@@ -5,10 +5,21 @@ import ExcelJS from "exceljs";
 import { expect, test, type Page } from "@playwright/test";
 
 const runId = `${Date.now().toString(36)}-${process.pid}`;
+const numericRunId = `${Date.now()}${process.pid}`.slice(-8).padStart(8, "0");
 const studentUsername = `e2e-${runId}`;
+const studentNationalId = createNationalId(Number(numericRunId));
+const studentPhone = `138${numericRunId}`;
 const initialPassword = "InitialPass123!";
 const changedPassword = "ChangedPass456!";
-let temporaryPassword = "";
+
+function createNationalId(seed: number) {
+  const sequence = String(100 + (seed % 450) * 2).padStart(3, "0");
+  const body = `11010520080101${sequence}`;
+  const weights = [7, 9, 10, 5, 8, 4, 2, 1, 6, 3, 7, 9, 10, 5, 8, 4, 2];
+  const checks = ["1", "0", "X", "9", "8", "7", "6", "5", "4", "3", "2"];
+  const sum = body.split("").reduce((total, digit, index) => total + Number(digit) * weights[index], 0);
+  return `${body}${checks[sum % 11]}`;
+}
 
 async function login(page: Page, username: string, password: string, destination: string) {
   await page.goto("/login");
@@ -67,33 +78,38 @@ async function answerCorrect(page: Page) {
 }
 
 test.describe.serial("production business flows", () => {
-  test("teacher creates and resets a student who must change the first-login password", async ({ page }) => {
-    await login(page, "teacher", "ChangeMe123!", "/teacher");
-    await expect(page.getByText("教师控制台").first()).toBeVisible();
-    await page.goto("/teacher/students");
-    await page.getByRole("button", { name: "创建学生" }).click();
+  test("administrator imports an active student who must change the first-login password", async ({ page }) => {
+    await login(page, "teacher", "ChangeMe123!", "/admin");
+    await page.goto("/admin/student-import");
 
-    const createDialog = page.getByRole("dialog", { name: "创建学生" });
-    await createDialog.getByLabel("用户名").fill(studentUsername);
-    await createDialog.getByLabel("显示姓名").fill("端到端学生");
-    await createDialog.getByLabel("初始密码").fill(initialPassword);
-    await createDialog.getByRole("button", { name: "保存学生" }).click();
-    await expect(createDialog).toBeHidden();
-
-    const studentRow = page.getByRole("row").filter({ hasText: studentUsername });
-    await expect(studentRow).toContainText("待修改");
-    page.once("dialog", (dialog) => dialog.accept());
-    await studentRow.getByRole("button", { name: "重置密码" }).click();
-
-    const passwordDialog = page.getByRole("dialog", { name: "临时密码已生成" });
-    temporaryPassword = (await passwordDialog.locator("code").innerText()).trim();
-    expect(temporaryPassword).toMatch(/^[a-f0-9]{16}A1$/);
-    await passwordDialog.getByRole("button", { name: "我已保存" }).click();
+    const workbook = new ExcelJS.Workbook();
+    const sheet = workbook.addWorksheet("学生");
+    sheet.addRow(["用户名", "姓名", "身份证号", "学校", "年级", "手机号", "初始密码", "启用", "开始日期", "结束日期", "长期"]);
+    sheet.addRow([studentUsername, "端到端学生", studentNationalId, "端到端中学", "JUNIOR_1", studentPhone, initialPassword, "是", "", "", "否"]);
+    const filePath = path.join(os.tmpdir(), `student-accounts-${runId}.xlsx`);
+    await workbook.xlsx.writeFile(filePath);
+    try {
+      await page.getByLabel("学生账号 Excel").setInputFiles(filePath);
+      const studentRow = page.getByRole("row").filter({ hasText: studentUsername });
+      await expect(studentRow).toContainText("通过");
+      await studentRow.getByRole("button", { name: "编辑" }).click();
+      const editDialog = page.getByRole("dialog", { name: "编辑导入学生" });
+      await expect(editDialog.getByLabel("姓名")).toHaveValue("端到端学生");
+      await expect(editDialog.getByLabel("身份证号")).toHaveValue(studentNationalId);
+      await expect(editDialog.getByText("性别由身份证号自动推导：女")).toBeVisible();
+      await editDialog.getByLabel("学校").fill("端到端实验中学");
+      await editDialog.getByRole("button", { name: "保存并校验" }).click();
+      await expect(editDialog).toBeHidden();
+      await page.getByRole("button", { name: "确认导入" }).click();
+      await expect(page.getByText("成功导入 1 个学生账号，账号直接生效。")).toBeVisible();
+    } finally {
+      fs.rmSync(filePath, { force: true });
+    }
     await logout(page);
 
-    await login(page, studentUsername, temporaryPassword, "/change-password");
+    await login(page, studentUsername, initialPassword, "/change-password");
     await expect(page.getByText("管理员为你创建或重置了密码，请先完成修改。")).toBeVisible();
-    await page.getByLabel("当前密码").fill(temporaryPassword);
+    await page.getByLabel("当前密码").fill(initialPassword);
     await page.getByLabel("新密码", { exact: true }).fill(changedPassword);
     await page.getByLabel("确认新密码").fill(changedPassword);
     const changePasswordResponsePromise = page.waitForResponse((response) => response.url().endsWith("/api/v1/auth/change-password") && response.request().method() === "POST");
@@ -156,7 +172,7 @@ test.describe.serial("production business flows", () => {
   });
 
   test("Excel preview, issue report, commit, and revert work as one server-owned batch", async ({ page }) => {
-    await login(page, "teacher", "ChangeMe123!", "/teacher");
+    await login(page, "teacher", "ChangeMe123!", "/admin");
     await page.goto("/teacher/import");
     const workbook = new ExcelJS.Workbook();
     const sheet = workbook.addWorksheet("Questions");

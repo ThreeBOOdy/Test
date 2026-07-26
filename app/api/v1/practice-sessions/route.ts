@@ -3,7 +3,7 @@ import { z } from "zod";
 import { readJsonBody } from "@/lib/domain/request-body";
 import { createPracticeSession } from "@/lib/server/practice-service";
 import { assertSameOrigin } from "@/lib/server/http";
-import { apiErrorResponse, requireRole } from "@/lib/server/api";
+import { apiErrorResponse, requireActiveStudent } from "@/lib/server/api";
 
 const schema = z.discriminatedUnion("mode", [
   z.object({ mode: z.literal("level"), levelCode: z.string().min(1) }),
@@ -17,7 +17,7 @@ const schema = z.discriminatedUnion("mode", [
 export async function POST(request: Request) {
   try {
     assertSameOrigin(request);
-    const user = await requireRole("STUDENT");
+    const user = await requireActiveStudent();
     const input = schema.parse(await readJsonBody(request));
     return NextResponse.json(await createPracticeSession(user.id, input), { status: 201 });
   } catch (error) {

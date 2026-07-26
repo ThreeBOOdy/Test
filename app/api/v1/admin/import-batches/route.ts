@@ -1,11 +1,11 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { createPageResult, normalizePagination } from "@/lib/server/pagination";
-import { apiErrorResponse, requireRole } from "@/lib/server/api";
+import { apiErrorResponse, requireTeachingUser } from "@/lib/server/api";
 
 export async function GET(request: Request) {
   try {
-    await requireRole("TEACHER");
+    await requireTeachingUser();
     const url = new URL(request.url);
     const { page, pageSize, skip } = normalizePagination({ page: url.searchParams.get("page") ?? undefined, pageSize: url.searchParams.get("pageSize") ?? undefined });
     const status = url.searchParams.get("status");
