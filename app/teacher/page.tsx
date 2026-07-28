@@ -3,6 +3,7 @@ import { AlertCircle, ArrowRight, BookOpenCheck, CheckCircle2, Database, FileSpr
 import { AppShell } from "@/components/app-shell";
 import { StatCard } from "@/components/stat-card";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { CallsignLabel, FrequencyScale, SignalMeter } from "@/components/visual/radio-instruments";
 import { prisma } from "@/lib/db";
 import { getDaysAgo } from "@/lib/server/time";
 
@@ -29,11 +30,11 @@ export default async function TeacherPage() {
   return (
     <AppShell role="teacher" currentPath="/teacher">
       <div className="safe-bottom">
-        <section className="surface-grid relative overflow-hidden rounded-[30px] bg-[var(--ink)] p-6 text-white shadow-[0_30px_80px_rgba(4,25,42,.18)] sm:p-8">
+        <section className="receiver-panel instrument-grid relative overflow-hidden rounded-[30px] p-6 text-white sm:p-8">
           <div className="absolute -right-12 -top-16 size-72 rounded-full bg-cyan-400/10 blur-3xl" />
           <div className="absolute bottom-0 right-0 h-full w-1/2 bg-[radial-gradient(circle_at_70%_55%,rgba(18,196,204,.16),transparent_42%)]" />
           <div className="relative z-10 grid gap-8 xl:grid-cols-[1fr_auto] xl:items-center">
-            <div><div className="flex items-center gap-2 text-xs font-black tracking-[0.18em] text-cyan-200"><span className="size-1.5 rounded-full bg-emerald-400 signal-glow" />QUESTION BANK RADAR ONLINE</div><h1 className="mt-5 text-3xl font-black tracking-[-0.05em] sm:text-4xl">题库运行控制台</h1><p className="mt-3 max-w-2xl text-sm leading-7 text-slate-300 sm:text-base">实时观察等级库存、知识点覆盖与学生练习信号。所有配置变更都会影响新建练习，不干扰进行中的任务快照。</p><div className="mt-7 flex flex-wrap gap-3"><ActionLink href="/teacher/questions" icon={BookOpenCheck}>管理题库</ActionLink><ActionLink href="/teacher/import" icon={FileSpreadsheet} secondary>导入 Excel</ActionLink></div></div>
+            <div><div className="flex flex-wrap items-center gap-3"><CallsignLabel value="EDU-CONTROL / 14.270" /><div className="flex items-center gap-2 text-xs font-black tracking-[0.14em] text-cyan-200"><SignalMeter value={5} label="题库雷达在线" />QUESTION BANK RADAR ONLINE</div></div><h1 className="mt-5 text-3xl font-black tracking-[-0.05em] sm:text-4xl">题库运行控制台</h1><p className="mt-3 max-w-2xl text-sm leading-7 text-slate-300 sm:text-base">实时观察等级库存、知识点覆盖与学生练习信号。所有配置变更都会影响新建练习，不干扰进行中的任务快照。</p><div className="mt-7 flex flex-wrap gap-3"><ActionLink href="/teacher/questions" icon={BookOpenCheck}>管理题库</ActionLink><ActionLink href="/teacher/import" icon={FileSpreadsheet} secondary>导入 Excel</ActionLink></div><FrequencyScale active={5} className="mt-7 max-w-xl" /></div>
             <div className="glass-panel scan-line min-w-[280px] rounded-[24px] p-5"><div className="flex items-center justify-between"><div><div className="text-[10px] font-black tracking-[0.2em] text-cyan-100/50">ACTIVE DATABASE</div><div className="mt-1 text-lg font-black">题库信号总览</div></div><Database className="size-5 text-cyan-300" /></div><div className="mt-6 flex items-end gap-1.5">{[42,70,54,92,68,48,80,58,96,76,62,86].map((height, index) => <span key={index} className="w-full rounded-full bg-[linear-gradient(180deg,#62eee5,#118a98)]" style={{ height: `${height * .56}px` }} />)}</div><div className="mt-4 flex items-center justify-between text-sm"><span className="text-slate-400">启用题目</span><span className="stat-number text-2xl font-black">{activeQuestions.length}</span></div></div>
           </div>
         </section>

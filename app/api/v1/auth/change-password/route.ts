@@ -15,7 +15,7 @@ const messages = {
   failed: "\u4fee\u6539\u5bc6\u7801\u5931\u8d25",
 };
 
-const schema = z.object({ currentPassword: z.string().min(1).max(128), newPassword: z.string().min(10).max(128) }).superRefine((input, context) => {
+const schema = z.object({ currentPassword: z.string().min(1).max(128), newPassword: z.string().min(6).max(128) }).superRefine((input, context) => {
   const policyMessage = validatePasswordPolicy(input.newPassword);
   if (policyMessage) context.addIssue({ code: "custom", message: policyMessage, path: ["newPassword"] });
   if (input.currentPassword === input.newPassword) context.addIssue({ code: "custom", message: messages.same, path: ["newPassword"] });

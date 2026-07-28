@@ -12,6 +12,7 @@ export const studentNavigation: NavigationItem[] = [
 
 export const teacherNavigation: NavigationItem[] = [
   { href: "/teacher", label: "管理概览", icon: LayoutDashboard },
+  { href: "/teacher/registrations", label: "注册审核", icon: ClipboardCheck },
   { href: "/teacher/questions", label: "题库管理", icon: BookOpen },
   { href: "/teacher/knowledge", label: "知识点目录", icon: Target },
   { href: "/teacher/rules", label: "抽题规则", icon: Settings2 },

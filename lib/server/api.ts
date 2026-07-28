@@ -4,6 +4,7 @@ import { NextResponse } from "next/server";
 import { ZodError } from "zod";
 import { ApiError, mapPublicError } from "@/lib/domain/api-error";
 import type { AccessCapability } from "@/lib/domain/student-access";
+import { ServerConfigurationError } from "@/lib/server/env";
 import { getCurrentUser } from "@/lib/server/session";
 
 export { ApiError } from "@/lib/domain/api-error";
@@ -40,6 +41,7 @@ export function requireRegistrationStudent() {
 
 export function apiError(error: unknown, fallback: string) {
   if (error instanceof ApiError) return mapPublicError(error, fallback, process.env.NODE_ENV === "production");
+  if (error instanceof ServerConfigurationError) return { message: fallback, status: 500 };
   if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") return { message: "记录已存在，请勿重复提交", status: 409 };
   if (error instanceof Prisma.PrismaClientKnownRequestError || error instanceof Prisma.PrismaClientUnknownRequestError || error instanceof Prisma.PrismaClientValidationError || error instanceof Prisma.PrismaClientInitializationError) return { message: fallback, status: 500 };
   if (error instanceof ZodError) return { message: error.issues[0]?.message ?? fallback, status: 400 };

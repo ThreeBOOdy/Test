@@ -9,13 +9,6 @@ import {
 } from "@/lib/domain/student-identity";
 import { validatePasswordPolicy } from "@/lib/domain/security";
 
-const usernameSchema = z
-  .string()
-  .trim()
-  .min(3, "用户名至少需要 3 位")
-  .max(50, "用户名不能超过 50 位")
-  .regex(/^[A-Za-z0-9_.-]+$/, "用户名只能包含字母、数字、点、横线或下划线");
-
 const displayNameSchema = z.string().trim().min(1, "姓名不能为空").max(100, "姓名不能超过 100 位");
 const schoolSchema = z.string().trim().min(1, "学校不能为空").max(200, "学校不能超过 200 位");
 const gradeIdSchema = z.string().trim().min(1, "请选择启用的年级").max(191, "年级标识过长");
@@ -47,7 +40,6 @@ const isoDateSchema = z.string().refine(isStrictIsoDate, "日期必须是有效�
 
 export const publicRegistrationSchema = z
   .object({
-    username: usernameSchema,
     ...studentProfileFields,
     password: passwordSchema,
     confirmPassword: z.string(),
@@ -59,7 +51,7 @@ export const publicRegistrationSchema = z
       context.addIssue({ code: "custom", message: "两次输入的密码不一致", path: ["confirmPassword"] });
     }
   })
-  .transform((input) => ({ ...input, gender: deriveGenderFromNationalId(input.nationalId)! }));
+  .transform((input) => ({ ...input, username: input.displayName, gender: deriveGenderFromNationalId(input.nationalId)! }));
 
 export const registrationProfileUpdateSchema = z
   .object(studentProfileFields)

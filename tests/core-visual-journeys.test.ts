@@ -1,0 +1,26 @@
+import fs from "node:fs";
+import path from "node:path";
+import { describe, expect, it } from "vitest";
+
+const read = (relativePath: string) => fs.readFileSync(path.join(process.cwd(), relativePath), "utf8");
+
+describe("core visual journeys", () => {
+  it("uses the shared authentication console across account entry pages", () => {
+    for (const file of ["app/login/page.tsx", "app/register/page.tsx", "app/change-password/page.tsx"]) {
+      expect(read(file), file).toContain("AuthConsole");
+    }
+  });
+
+  it("uses the generated signal-station artwork on registration", () => {
+    expect(read("app/register/page.tsx")).toContain("/art/register-signal-station.webp");
+    expect(fs.existsSync(path.join(process.cwd(), "public/art/register-signal-station.webp"))).toBe(true);
+  });
+
+  it("gives the public, student, launcher, and teacher surfaces distinct radio instruments", () => {
+    expect(read("app/page.tsx")).toContain("BearingCompass");
+    expect(read("app/page.tsx")).toContain("MorseDivider");
+    expect(read("app/student/page.tsx")).toContain("CallsignLabel");
+    expect(read("app/student/practice/start/page.tsx")).toContain("FrequencyScale");
+    expect(read("app/teacher/page.tsx")).toContain("SignalMeter");
+  });
+});

@@ -52,6 +52,21 @@ describe("MySQL project configuration", () => {
     expect(migration).not.toMatch(/FOREIGN KEY \(`.*`\) REFERENCES `User`\(`id`\) ON DELETE CASCADE/);
   });
 
+  it("initializes the nine compulsory education grades", () => {
+    const migration = fs.readFileSync(path.resolve("prisma/migrations/20260727100000_default_grades/migration.sql"), "utf8");
+    const seed = fs.readFileSync(path.resolve("prisma/seed.ts"), "utf8");
+
+    for (const grade of ["一年级", "二年级", "三年级", "四年级", "五年级", "六年级", "七年级", "八年级", "九年级"]) {
+      expect(migration).toContain(grade);
+      expect(seed).toContain(grade);
+    }
+
+    expect(migration).toContain("ON DUPLICATE KEY UPDATE");
+    expect(seed).not.toContain('name: "高一"');
+    expect(seed).not.toContain('name: "高二"');
+    expect(seed).not.toContain('name: "高三"');
+  });
+
   it("uses MySQL-native aggregate and duration SQL", () => {
     const reportsPage = fs.readFileSync(path.resolve("app/teacher/reports/page.tsx"), "utf8");
     const studentsPage = fs.readFileSync(path.resolve("app/teacher/students/page.tsx"), "utf8");

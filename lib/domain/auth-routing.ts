@@ -24,6 +24,11 @@ export function canUseNextPath(path: string, role: AuthRole) {
   return targetRole === null || targetRole === role || (role === "ADMIN" && targetRole === "TEACHER");
 }
 
+export function canUseLoginNextPath(path: string, role: AuthRole) {
+  const targetRole = getRoleForPath(path);
+  return targetRole === null || targetRole === role;
+}
+
 export function getEntryHrefForRole(entry: AuthRole, currentRole: AuthRole | null) {
   const path = entry === "ADMIN" ? "/admin" : entry === "TEACHER" ? "/teacher" : "/student";
   if (currentRole && canUseNextPath(path, currentRole)) return path;

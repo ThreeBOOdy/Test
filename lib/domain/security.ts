@@ -1,7 +1,6 @@
 export function validatePasswordPolicy(password: string): string | null {
-  if (password.length < 10) return "密码至少需要 10 位";
+  if (password.length < 6) return "密码至少需要 6 位";
   if (password.length > 128) return "密码不能超过 128 位";
-  if (!/[A-Za-z]/.test(password) || !/\d/.test(password)) return "密码必须同时包含字母和数字";
   return null;
 }
 

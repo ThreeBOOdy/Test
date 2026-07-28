@@ -17,6 +17,8 @@ describe("student registration form", () => {
     expect(await screen.findByRole("option", { name: "七年级" })).toBeInTheDocument();
     await user.type(screen.getByLabelText("身份证号"), "11010519491231002X");
     expect(screen.getByText("女")).toBeInTheDocument();
+    expect(screen.queryByRole("textbox", { name: "用户名" })).not.toBeInTheDocument();
+    expect(screen.getByText("登录时直接使用此姓名")).toBeInTheDocument();
   });
 
   it("validates password confirmation before submission", async () => {
@@ -41,6 +43,9 @@ describe("student registration form", () => {
     await user.click(screen.getByRole("button", { name: "提交注册申请" }));
 
     await waitFor(() => expect(fetchMock).toHaveBeenLastCalledWith("/api/v1/auth/register", expect.objectContaining({ method: "POST" })));
+    const request = fetchMock.mock.calls.at(-1)?.[1];
+    expect(JSON.parse(String(request?.body))).toMatchObject({ displayName: "张三", password: "Student2026" });
+    expect(JSON.parse(String(request?.body))).not.toHaveProperty("username");
     expect(replace).toHaveBeenCalledWith("/registration/status");
   });
 
@@ -59,8 +64,7 @@ describe("student registration form", () => {
 });
 
 async function fillForm(user: ReturnType<typeof userEvent.setup>, overrides: { confirmPassword?: string } = {}) {
-  await user.type(screen.getByLabelText("用户名"), "student_2026");
-  await user.type(screen.getByLabelText("姓名"), "张三");
+  await user.type(screen.getByLabelText("学生姓名"), "张三");
   await user.type(screen.getByLabelText("身份证号"), "11010519491231002X");
   await user.type(screen.getByLabelText("学校"), "示例中学");
   await user.selectOptions(screen.getByLabelText("年级"), "g7");

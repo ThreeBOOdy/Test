@@ -23,11 +23,11 @@ describe("import batch expiry", () => {
 });
 
 describe("password policy", () => {
-  it("requires 10 to 128 characters with letters and numbers", () => {
-    expect(validatePasswordPolicy("short1")).toBe("密码至少需要 10 位");
-    expect(validatePasswordPolicy("abcdefghij")).toBe("密码必须同时包含字母和数字");
-    expect(validatePasswordPolicy("1234567890")).toBe("密码必须同时包含字母和数字");
-    expect(validatePasswordPolicy("securePass123")).toBeNull();
+  it("requires 6 to 128 characters without composition rules", () => {
+    expect(validatePasswordPolicy("12345")).toBe("密码至少需要 6 位");
+    expect(validatePasswordPolicy("abcdef")).toBeNull();
+    expect(validatePasswordPolicy("123456")).toBeNull();
+    expect(validatePasswordPolicy("中文密码!!")).toBeNull();
   });
 });
 

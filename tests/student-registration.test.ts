@@ -11,7 +11,6 @@ import {
 } from "@/lib/domain/student-registration";
 
 const validRegistration = {
-  username: "student_2026",
   displayName: " 张三 ",
   nationalId: "11010519491231002x",
   school: " 示例中学 ",
@@ -27,7 +26,7 @@ describe("student registration domain contracts", () => {
     const result = publicRegistrationSchema.parse(validRegistration);
 
     expect(result).toMatchObject({
-      username: "student_2026",
+      username: "张三",
       displayName: "张三",
       nationalId: "11010519491231002X",
       gender: "FEMALE",
@@ -40,22 +39,10 @@ describe("student registration domain contracts", () => {
     });
   });
 
-  it.each([
-    "ab",
-    "student name",
-    "学生账号",
-    "student@school",
-    "a".repeat(51),
-  ])("rejects invalid username %s", (username) => {
-    expect(publicRegistrationSchema.safeParse({ ...validRegistration, username }).success).toBe(false);
+  it("uses the trimmed student name as the username and rejects a separate username field", () => {
+    expect(publicRegistrationSchema.parse({ ...validRegistration, displayName: " 李四 " }).username).toBe("李四");
+    expect(publicRegistrationSchema.safeParse({ ...validRegistration, username: "separate-account" }).success).toBe(false);
   });
-
-  it.each(["student", "student.name", "student-name", "student_name", "Student2026"])(
-    "accepts supported username %s",
-    (username) => {
-      expect(publicRegistrationSchema.safeParse({ ...validRegistration, username }).success).toBe(true);
-    },
-  );
 
   it("requires non-empty trimmed name and school", () => {
     expect(publicRegistrationSchema.safeParse({ ...validRegistration, displayName: "   " }).success).toBe(false);
@@ -79,7 +66,8 @@ describe("student registration domain contracts", () => {
   });
 
   it("requires password policy compliance and matching confirmation", () => {
-    expect(publicRegistrationSchema.safeParse({ ...validRegistration, password: "short1", confirmPassword: "short1" }).success).toBe(false);
+    expect(publicRegistrationSchema.safeParse({ ...validRegistration, password: "12345", confirmPassword: "12345" }).success).toBe(false);
+    expect(publicRegistrationSchema.safeParse({ ...validRegistration, password: "123456", confirmPassword: "123456" }).success).toBe(true);
     expect(publicRegistrationSchema.safeParse({ ...validRegistration, confirmPassword: "different2026" }).success).toBe(false);
   });
 

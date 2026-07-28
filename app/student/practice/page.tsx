@@ -12,7 +12,7 @@ export default async function PracticePage({ searchParams }: { searchParams: Pro
   if (params.session) {
     const session = await getPracticeSession(user.id, params.session);
     if (!session) redirect("/student");
-    return <main className="surface-grid min-h-screen bg-[linear-gradient(180deg,#f8fbfc,#eaf0f4)] px-4 py-6 sm:px-8"><PracticeRunner session={session} /></main>;
+    return <main className="practice-workbench min-h-screen px-4 py-6 sm:px-8"><PracticeRunner session={session} /></main>;
   }
   const launch = normalizePracticeLaunch(params);
   const session = await createPracticeSession(user.id,

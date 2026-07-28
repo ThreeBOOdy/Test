@@ -17,7 +17,6 @@ if (!connectionString) throw new Error("DATABASE_URL is required for integration
 const prisma = new PrismaClient({ adapter: new PrismaMariaDb(connectionString) });
 
 const profile = {
-  username: "new-student",
   displayName: "张三",
   nationalId: "11010519491231002X",
   school: "示例中学",
@@ -73,7 +72,7 @@ describe("student account workflows", () => {
   it("rejects duplicate identity and phone values without identifying the conflicting field", async () => {
     const { grade } = await setup();
     await registerStudent({ ...profile, gradeId: grade.id });
-    await expect(registerStudent({ ...profile, username: "another", gradeId: grade.id })).rejects.toMatchObject({ message: "REGISTRATION_CONFLICT", status: 409 });
+    await expect(registerStudent({ ...profile, displayName: "李四", gradeId: grade.id })).rejects.toMatchObject({ message: "REGISTRATION_CONFLICT", status: 409 });
   });
 
   it("returns an explicit administrator detail DTO without stored secrets", async () => {
@@ -83,7 +82,7 @@ describe("student account workflows", () => {
 
     expect(detail).toMatchObject({
       id: student.id,
-      username: profile.username,
+      username: profile.displayName,
       nationalId: profile.nationalId,
       phone: profile.phone,
       grade: { id: grade.id, code: "GRADE_7", name: "七年级" },
@@ -102,6 +101,7 @@ describe("student account workflows", () => {
     const rejected = await prisma.user.findUniqueOrThrow({ where: { id: student.id } });
     await updateRegistrationProfile(student.id, { displayName: "张同学", nationalId: profile.nationalId, school: "新学校", gradeId: grade.id, phone: profile.phone });
     const edited = await prisma.user.findUniqueOrThrow({ where: { id: student.id } });
+    expect(edited.username).toBe("张同学");
     expect(edited.sessionVersion).toBe(rejected.sessionVersion);
     expect((await getRegistrationStatus(student.id)).studentStatus).toBe("REJECTED");
     await resubmitRegistration(student.id);

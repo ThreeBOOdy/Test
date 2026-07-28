@@ -154,10 +154,11 @@ export async function updateRegistrationProfile(studentId: string, rawInput: unk
   try {
     return await prisma.$transaction(async (tx) => {
       await requireEnabledGrade(tx, input.gradeId);
-      await assertUniqueStudentIdentity(tx, { nationalIdHash, phoneHash, excludeId: studentId });
       const current = await tx.user.findFirst({ where: { id: studentId, role: "STUDENT", studentStatus: { in: ["PENDING", "REJECTED"] } } });
       if (!current || !current.studentStatus) throw new ApiError("申请状态不允许修改", 409);
+      await assertUniqueStudentIdentity(tx, { username: current.registrationSource === "SELF_REGISTRATION" ? input.displayName : undefined, nationalIdHash, phoneHash, excludeId: studentId });
       const updated = await tx.user.update({ where: { id: studentId }, data: {
+        ...(current.registrationSource === "SELF_REGISTRATION" ? { username: input.displayName } : {}),
         displayName: input.displayName,
         nationalIdEncrypted: encryptSensitiveValue(input.nationalId),
         nationalIdHash,
@@ -275,8 +276,9 @@ export async function updateStudentAccount(administratorId: string, studentId: s
     if (input.gradeId) await requireEnabledGrade(tx, input.gradeId);
     const nationalIdHash = input.nationalId ? hashSensitiveValue(input.nationalId) : current.nationalIdHash;
     const phoneHash = input.phone ? hashSensitiveValue(input.phone) : current.phoneHash;
-    if (nationalIdHash && phoneHash) await assertUniqueStudentIdentity(tx, { nationalIdHash, phoneHash, excludeId: studentId });
+    if (nationalIdHash && phoneHash) await assertUniqueStudentIdentity(tx, { username: current.registrationSource === "SELF_REGISTRATION" && input.displayName !== undefined ? input.displayName : undefined, nationalIdHash, phoneHash, excludeId: studentId });
     const updated = await tx.user.update({ where: { id: studentId }, data: {
+      ...(current.registrationSource === "SELF_REGISTRATION" && input.displayName !== undefined ? { username: input.displayName } : {}),
       ...(input.displayName !== undefined ? { displayName: input.displayName } : {}),
       ...(input.nationalId !== undefined ? { nationalIdEncrypted: encryptSensitiveValue(input.nationalId), nationalIdHash, nationalIdLast4: input.nationalId.slice(-4), gender: "gender" in input ? input.gender : undefined } : {}),
       ...(input.school !== undefined ? { school: input.school } : {}),

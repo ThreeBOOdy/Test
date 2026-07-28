@@ -35,8 +35,14 @@ describe("application shell", () => {
     render(<MobileNavigation role="teacher" currentPath="/teacher" />);
     await user.click(screen.getByRole("button", { name: "打开更多导航" }));
     const dialog = screen.getByRole("dialog", { name: "教师功能导航" });
-    for (const label of ["管理概览", "题库管理", "知识点目录", "抽题规则", "Excel 导入", "教学统计"]) expect(within(dialog).getByRole("link", { name: label })).toBeInTheDocument();
-    for (const label of ["注册审核", "学生账号", "学生导入", "年级配置", "学生管理"]) expect(within(dialog).queryByRole("link", { name: label })).not.toBeInTheDocument();
+    for (const label of ["管理概览", "注册审核", "题库管理", "知识点目录", "抽题规则", "Excel 导入", "教学统计"]) expect(within(dialog).getByRole("link", { name: label })).toBeInTheDocument();
+    for (const label of ["学生账号", "学生导入", "年级配置", "学生管理"]) expect(within(dialog).queryByRole("link", { name: label })).not.toBeInTheDocument();
+  });
+
+  it("shows the registration review entry in the teacher desktop navigation", () => {
+    render(<AppShellView role="teacher" currentPath="/teacher/registrations" user={{ username: "instructor", displayName: "李老师" }}><div>审核内容</div></AppShellView>);
+
+    expect(screen.getAllByRole("link", { name: "注册审核" }).length).toBeGreaterThan(0);
   });
 
   it("shows administrator account tools and teaching console entry", () => {

@@ -6,8 +6,8 @@ import { deriveGenderFromNationalId, normalizeNationalId, validateMainlandNation
 import { Button } from "@/components/ui/button";
 
 type Grade = { id: string; name: string };
-type FormState = { username: string; displayName: string; nationalId: string; school: string; gradeId: string; phone: string; password: string; confirmPassword: string; truthAndPrivacyAccepted: boolean };
-const empty: FormState = { username: "", displayName: "", nationalId: "", school: "", gradeId: "", phone: "", password: "", confirmPassword: "", truthAndPrivacyAccepted: false };
+type FormState = { displayName: string; nationalId: string; school: string; gradeId: string; phone: string; password: string; confirmPassword: string; truthAndPrivacyAccepted: boolean };
+const empty: FormState = { displayName: "", nationalId: "", school: "", gradeId: "", phone: "", password: "", confirmPassword: "", truthAndPrivacyAccepted: false };
 
 export function StudentRegistrationForm() {
   const router = useRouter();
@@ -35,21 +35,19 @@ export function StudentRegistrationForm() {
 
   const update = <K extends keyof FormState>(key: K, value: FormState[K]) => setForm((current) => ({ ...current, [key]: value }));
   return <form onSubmit={submit} className="mt-7 grid gap-4 sm:grid-cols-2">
-    <Field label="用户名"><input aria-label="用户名" value={form.username} onChange={(event) => update("username", event.target.value)} className={inputClass} autoComplete="username" required /></Field>
-    <Field label="姓名"><input aria-label="姓名" value={form.displayName} onChange={(event) => update("displayName", event.target.value)} className={inputClass} required /></Field>
+    <div className="sm:col-span-2"><Field label="学生姓名" hint="登录时直接使用此姓名"><input aria-label="学生姓名" value={form.displayName} onChange={(event) => update("displayName", event.target.value)} className={inputClass} autoComplete="name" required /></Field></div>
     <Field label="身份证号"><input aria-label="身份证号" value={form.nationalId} onChange={(event) => update("nationalId", event.target.value)} className={inputClass} required /></Field>
     <Field label="性别"><div className={`${inputClass} flex items-center`}>{gender === "MALE" ? "男" : gender === "FEMALE" ? "女" : "填写身份证后自动识别"}</div></Field>
     <Field label="学校"><input aria-label="学校" value={form.school} onChange={(event) => update("school", event.target.value)} className={inputClass} required /></Field>
     <Field label="年级"><select aria-label="年级" value={form.gradeId} onChange={(event) => update("gradeId", event.target.value)} className={inputClass} required><option value="">请选择年级</option>{grades.map((grade) => <option key={grade.id} value={grade.id}>{grade.name}</option>)}</select></Field>
-    <Field label="手机号"><input aria-label="手机号" value={form.phone} onChange={(event) => update("phone", event.target.value)} className={inputClass} inputMode="tel" required /></Field>
-    <div />
-    <Field label="密码"><input aria-label="密码" type="password" value={form.password} onChange={(event) => update("password", event.target.value)} className={inputClass} autoComplete="new-password" required /></Field>
-    <Field label="确认密码"><input aria-label="确认密码" type="password" value={form.confirmPassword} onChange={(event) => update("confirmPassword", event.target.value)} className={inputClass} autoComplete="new-password" required /></Field>
+    <div className="sm:col-span-2"><Field label="手机号"><input aria-label="手机号" value={form.phone} onChange={(event) => update("phone", event.target.value)} className={inputClass} inputMode="tel" required /></Field></div>
+    <Field label="密码" hint="至少 6 位，不限制字符组合"><input aria-label="密码" type="password" value={form.password} onChange={(event) => update("password", event.target.value)} className={inputClass} autoComplete="new-password" minLength={6} maxLength={128} required /></Field>
+    <Field label="确认密码"><input aria-label="确认密码" type="password" value={form.confirmPassword} onChange={(event) => update("confirmPassword", event.target.value)} className={inputClass} autoComplete="new-password" minLength={6} maxLength={128} required /></Field>
     <label className="sm:col-span-2 flex items-start gap-3 rounded-xl border border-[var(--border)] bg-[var(--surface-soft)] p-4 text-sm"><input type="checkbox" checked={form.truthAndPrivacyAccepted} onChange={(event) => update("truthAndPrivacyAccepted", event.target.checked)} className="mt-1" /><span>我确认以上信息真实，并同意系统为账号审核与学习服务处理这些资料。</span></label>
     {error ? <div role="alert" className="sm:col-span-2 rounded-xl bg-rose-500/10 px-4 py-3 text-sm font-semibold text-rose-300">{error}</div> : null}
     <div className="sm:col-span-2"><Button type="submit" size="lg" className="w-full" disabled={pending}>{pending ? "正在提交…" : "提交注册申请"}</Button></div>
   </form>;
 }
 
-function Field({ label, children }: { label: string; children: React.ReactNode }) { return <label><span className="mb-2 block text-sm font-bold">{label}</span>{children}</label>; }
+function Field({ label, hint, children }: { label: string; hint?: string; children: React.ReactNode }) { return <label><span className="mb-2 flex items-baseline justify-between gap-3"><span className="text-sm font-bold">{label}</span>{hint ? <span className="text-[11px] text-[var(--muted-foreground)]">{hint}</span> : null}</span>{children}</label>; }
 const inputClass = "h-12 w-full rounded-xl border border-[var(--border)] bg-[var(--surface-soft)] px-4 outline-none focus:border-[var(--border-strong)]";

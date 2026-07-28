@@ -18,9 +18,6 @@ const grades = [
   { id: "grade-junior-1", code: "JUNIOR_1", name: "七年级", sortOrder: 7 },
   { id: "grade-junior-2", code: "JUNIOR_2", name: "八年级", sortOrder: 8 },
   { id: "grade-junior-3", code: "JUNIOR_3", name: "九年级", sortOrder: 9 },
-  { id: "grade-senior-1", code: "SENIOR_1", name: "高一", sortOrder: 10 },
-  { id: "grade-senior-2", code: "SENIOR_2", name: "高二", sortOrder: 11 },
-  { id: "grade-senior-3", code: "SENIOR_3", name: "高三", sortOrder: 12 },
 ] as const;
 
 

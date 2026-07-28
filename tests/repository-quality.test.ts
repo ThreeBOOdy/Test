@@ -11,10 +11,10 @@ function read(relativePath: string) {
 describe("repository release quality", () => {
   it("uses the dedicated WebP artwork for every visual scene", () => {
     const expectedReferences = new Map([
-      ["app/page.tsx", "/art/home-orbital-network.webp"],
-      ["app/login/page.tsx", "/art/login-antenna-array.webp"],
-      ["app/change-password/page.tsx", "/art/login-antenna-array.webp"],
-      ["app/student/page.tsx", "/art/student-spectrum-cabin.webp"],
+      ["app/page.tsx", "/art/home-signal-laboratory-new.webp"],
+      ["app/login/page.tsx", "/art/auth-telegraph-console-new-v2.webp"],
+      ["app/change-password/page.tsx", "/art/auth-telegraph-console-new-v2.webp"],
+      ["app/student/page.tsx", "/art/student-direction-cabin-new.webp"],
       ["components/visual/empty-signal-state.tsx", "/art/empty-no-signal.webp"],
       ["components/training/practice-summary.tsx", "/art/training-complete.webp"],
     ]);
@@ -59,9 +59,9 @@ describe("repository release quality", () => {
     expect(studentHome).toContain('href="/student/wrong"');
     expect(studentHome).not.toMatch(/["']\?{2,}["']/);
     expect(studentHome).not.toMatch(/href=\{`\/student\/practice\?mode=/);
-    expect(studentHome).toContain("/student/practice/start?mode=order");
-    expect(studentHome).toContain("/student/practice/start?mode=random");
-    expect(studentHome).toContain("/student/practice/start?mode=exam");
+    expect(studentHome).not.toContain("/student/practice/start?mode=order");
+    expect(studentHome).not.toContain("/student/practice/start?mode=random");
+    expect(studentHome).not.toContain("/student/practice/start?mode=exam");
     expect(launcher).toContain('import { AppShell } from "@/components/app-shell"');
     expect(launcher).toContain('<AppShell role="student" currentPath="/student/practice/start">');
     expect(practice).not.toContain("AppShell");
