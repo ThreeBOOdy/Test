@@ -13,8 +13,8 @@ describe("role entry routing", () => {
     expect(getRoleForPath("/login")).toBeNull();
   });
 
-  it("allows administrators to teach without granting teachers administrator access", () => {
-    expect(canUseNextPath("/teacher/questions", "ADMIN")).toBe(true);
+  it("keeps administrator and teacher destinations separate", () => {
+    expect(canUseNextPath("/teacher/questions", "ADMIN")).toBe(false);
     expect(canUseNextPath("/admin/students", "ADMIN")).toBe(true);
     expect(canUseNextPath("/admin/students", "TEACHER")).toBe(false);
     expect(getLoginRedirectForRole("ADMIN")).toBe("/login?next=%2Fadmin&error=role-mismatch");
@@ -31,6 +31,6 @@ describe("role entry routing", () => {
     expect(getEntryHrefForRole("STUDENT", "STUDENT")).toBe("/student");
     expect(getEntryHrefForRole("STUDENT", null)).toBe("/login?next=%2Fstudent");
     expect(getEntryHrefForRole("STUDENT", "TEACHER")).toBe("/login?next=%2Fstudent&error=role-mismatch");
-    expect(getEntryHrefForRole("TEACHER", "ADMIN")).toBe("/teacher");
+    expect(getEntryHrefForRole("TEACHER", "ADMIN")).toBe("/login?next=%2Fteacher&error=role-mismatch");
   });
 });

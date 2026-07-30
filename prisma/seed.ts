@@ -32,8 +32,9 @@ async function main() {
   const levelIds = new Map<string, string>();
   const knowledgePointIds = new Map<string, string>();
   const passwordHash = hashPassword(seedPassword);
-  await prisma.user.upsert({ where: { username: "teacher" }, update: { displayName: "陈老师", role: "ADMIN", mustChangePassword: false }, create: { username: "teacher", displayName: "陈老师", role: "ADMIN", passwordHash, mustChangePassword: false } });
-  await prisma.user.upsert({ where: { username: "instructor" }, update: { displayName: "李老师", role: "TEACHER", mustChangePassword: false }, create: { username: "instructor", displayName: "李老师", role: "TEACHER", passwordHash, mustChangePassword: false } });
+  await prisma.user.upsert({ where: { username: "admin" }, update: { displayName: "系统管理员", role: "ADMIN", mustChangePassword: false }, create: { username: "admin", displayName: "系统管理员", role: "ADMIN", passwordHash, mustChangePassword: false } });
+  await prisma.user.upsert({ where: { username: "teacher" }, update: { displayName: "陈老师", role: "TEACHER", mustChangePassword: false }, create: { username: "teacher", displayName: "陈老师", role: "TEACHER", passwordHash, mustChangePassword: false } });
+  await prisma.user.updateMany({ where: { username: "instructor" }, data: { enabled: false, sessionVersion: { increment: 1 } } });
   await prisma.user.upsert({
     where: { username: "student" },
     update: { displayName: "林小知", role: "STUDENT", studentStatus: "ACTIVE", registrationSource: "LEGACY", isLongTerm: true, profileIncomplete: true, mustChangePassword: false },

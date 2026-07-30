@@ -3,40 +3,32 @@ import { Prisma } from "@/generated/prisma/client";
 import { NextResponse } from "next/server";
 import { ZodError } from "zod";
 import { ApiError, mapPublicError } from "@/lib/domain/api-error";
-import type { AccessCapability } from "@/lib/domain/student-access";
 import { ServerConfigurationError } from "@/lib/server/env";
 import { getCurrentUser } from "@/lib/server/session";
 
 export { ApiError } from "@/lib/domain/api-error";
 
-export async function requireRole(role: "STUDENT" | "TEACHER") {
+async function requireExactAccess(role: "ADMIN" | "TEACHER" | "STUDENT", capability: "FULL_ADMIN" | "FULL_TEACHER" | "FULL_STUDENT" | "REGISTRATION_ONLY") {
   const user = await getCurrentUser();
   if (!user) throw new ApiError("请先登录", 401);
-  if (user.role !== role) throw new ApiError("权限不足", 403);
-  return user;
-}
-
-async function requireCapability(capabilities: AccessCapability[]) {
-  const user = await getCurrentUser();
-  if (!user) throw new ApiError("请先登录", 401);
-  if (!user.capability || !capabilities.includes(user.capability)) throw new ApiError("权限不足", 403);
+  if (user.role !== role || user.capability !== capability) throw new ApiError("权限不足", 403);
   return user;
 }
 
 export function requireAdministrator() {
-  return requireCapability(["FULL_ADMIN"]);
+  return requireExactAccess("ADMIN", "FULL_ADMIN");
 }
 
-export function requireTeachingUser() {
-  return requireCapability(["FULL_ADMIN", "FULL_TEACHER"]);
+export function requireTeacher() {
+  return requireExactAccess("TEACHER", "FULL_TEACHER");
 }
 
 export function requireActiveStudent() {
-  return requireCapability(["FULL_STUDENT"]);
+  return requireExactAccess("STUDENT", "FULL_STUDENT");
 }
 
 export function requireRegistrationStudent() {
-  return requireCapability(["REGISTRATION_ONLY"]);
+  return requireExactAccess("STUDENT", "REGISTRATION_ONLY");
 }
 
 export function apiError(error: unknown, fallback: string) {

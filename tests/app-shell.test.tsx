@@ -35,19 +35,20 @@ describe("application shell", () => {
     render(<MobileNavigation role="teacher" currentPath="/teacher" />);
     await user.click(screen.getByRole("button", { name: "打开更多导航" }));
     const dialog = screen.getByRole("dialog", { name: "教师功能导航" });
-    for (const label of ["管理概览", "注册审核", "题库管理", "知识点目录", "抽题规则", "Excel 导入", "教学统计"]) expect(within(dialog).getByRole("link", { name: label })).toBeInTheDocument();
-    for (const label of ["学生账号", "学生导入", "年级配置", "学生管理"]) expect(within(dialog).queryByRole("link", { name: label })).not.toBeInTheDocument();
+    for (const label of ["管理概览", "题库管理", "知识点目录", "抽题规则", "Excel 导入", "教学统计"]) expect(within(dialog).getByRole("link", { name: label })).toBeInTheDocument();
+    for (const label of ["注册审核", "学生账号", "学生导入", "年级配置", "学生管理"]) expect(within(dialog).queryByRole("link", { name: label })).not.toBeInTheDocument();
   });
 
-  it("shows the registration review entry in the teacher desktop navigation", () => {
-    render(<AppShellView role="teacher" currentPath="/teacher/registrations" user={{ username: "instructor", displayName: "李老师" }}><div>审核内容</div></AppShellView>);
+  it("does not show registration review in the teacher desktop navigation", () => {
+    render(<AppShellView role="teacher" currentPath="/teacher" user={{ username: "teacher", displayName: "李老师" }}><div>教学内容</div></AppShellView>);
 
-    expect(screen.getAllByRole("link", { name: "注册审核" }).length).toBeGreaterThan(0);
+    expect(screen.queryByRole("link", { name: "注册审核" })).not.toBeInTheDocument();
   });
 
-  it("shows administrator account tools and teaching console entry", () => {
-    render(<AppShellView role="admin" currentPath="/admin" user={{ username: "teacher", displayName: "系统管理员" }}><div>管理内容</div></AppShellView>);
-    for (const label of ["注册审核", "学生账号", "学生导入", "年级配置", "教学控制台"]) expect(screen.getAllByRole("link", { name: label }).length).toBeGreaterThan(0);
+  it("shows only administrator account tools in the administrator console", () => {
+    render(<AppShellView role="admin" currentPath="/admin" user={{ username: "admin", displayName: "系统管理员" }}><div>管理内容</div></AppShellView>);
+    for (const label of ["注册审核", "学生账号", "学生导入", "年级配置"]) expect(screen.getAllByRole("link", { name: label }).length).toBeGreaterThan(0);
+    expect(screen.queryByRole("link", { name: "教学控制台" })).not.toBeInTheDocument();
   });
 
   it("makes every administrator section reachable on mobile", async () => {
@@ -55,7 +56,8 @@ describe("application shell", () => {
     render(<MobileNavigation role="admin" currentPath="/admin" />);
     await user.click(screen.getByRole("button", { name: "打开更多导航" }));
     const dialog = screen.getByRole("dialog", { name: "管理员功能导航" });
-    for (const label of ["注册审核", "学生账号", "学生导入", "年级配置", "教学控制台"]) expect(within(dialog).getByRole("link", { name: label })).toBeInTheDocument();
+    for (const label of ["注册审核", "学生账号", "学生导入", "年级配置"]) expect(within(dialog).getByRole("link", { name: label })).toBeInTheDocument();
+    expect(within(dialog).queryByRole("link", { name: "教学控制台" })).not.toBeInTheDocument();
   });
 
   it("allows only full administrators into the administrator layout", async () => {
@@ -75,9 +77,12 @@ describe("application shell", () => {
     expect(redirect).toHaveBeenCalledWith("/login?next=%2Fadmin&error=role-mismatch");
   });
 
-  it.each(["FULL_ADMIN", "FULL_TEACHER"])("allows %s into the teaching console", async (capability) => {
-    getCurrentUser.mockResolvedValue({ capability, mustChangePassword: false });
+  it("allows only full teachers into the teaching console", async () => {
+    getCurrentUser.mockResolvedValue({ capability: "FULL_TEACHER", mustChangePassword: false });
     await expect(TeacherLayout({ children: <div>教师页面</div> })).resolves.toBeTruthy();
     expect(redirect).not.toHaveBeenCalled();
+
+    getCurrentUser.mockResolvedValue({ capability: "FULL_ADMIN", mustChangePassword: false });
+    await expect(TeacherLayout({ children: <div>教师页面</div> })).rejects.toThrow("redirect:/login?next=%2Fteacher&error=role-mismatch");
   });
 });

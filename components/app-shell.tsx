@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { ChevronRight, GraduationCap, ShieldCheck } from "lucide-react";
+import { ChevronRight, GraduationCap } from "lucide-react";
 import { Logo } from "@/components/logo";
 import { LogoutButton } from "@/components/logout-button";
 import { MobileNavigation } from "@/components/mobile-navigation";
@@ -19,10 +19,10 @@ export async function AppShell({ role, currentPath, children }: { role: ShellRol
 
 export function AppShellView({ role, currentPath, user, children }: { role: ShellRole; currentPath: string; user: ShellUser; children: React.ReactNode }) {
   const accountRole = user.role ?? (role === "student" ? "STUDENT" : role === "teacher" ? "TEACHER" : "ADMIN");
-  const nav = role === "student" ? studentNavigation : role === "teacher" ? accountRole === "ADMIN" ? [...teacherNavigation, { href: "/admin", label: "管理员控制台", icon: ShieldCheck }] : teacherNavigation : administratorNavigation;
+  const nav = role === "student" ? studentNavigation : role === "teacher" ? teacherNavigation : administratorNavigation;
   const label = role === "student" ? "学生训练空间" : role === "teacher" ? "教师控制台" : "管理员控制台";
   const channelCode = role === "student" ? "CH-STU / 7.050" : role === "teacher" ? "CH-EDU / 14.270" : "CH-ADM / 21.320";
-  const accountDescription = accountRole === "ADMIN" ? role === "teacher" ? "管理员账号 · 当前教学频道" : "管理员账号 · 学生账号管理权限" : accountRole === "TEACHER" ? "教师账号 · 教学管理权限" : "学生账号 · 训练数据已同步";
+  const accountDescription = accountRole === "ADMIN" ? "管理员账号 · 学生账号管理权限" : accountRole === "TEACHER" ? "教师账号 · 教学管理权限" : "学生账号 · 训练数据已同步";
   const displayName = user.displayName.trim() || user.username;
   const avatar = Array.from(displayName)[0] ?? "知";
 

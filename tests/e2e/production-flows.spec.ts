@@ -25,7 +25,7 @@ async function login(page: Page, username: string, password: string, destination
   await page.goto("/login");
   await page.getByLabel("用户名").fill(username);
   await page.getByLabel("密码").fill(password);
-  await page.getByRole("button", { name: "进入学习频道" }).click();
+  await page.getByRole("button", { name: "进入系统", exact: true }).click();
   await expect(page).toHaveURL(new RegExp(`${destination.replaceAll("/", "\\/")}$`), { timeout: 20_000 });
 }
 
@@ -79,7 +79,7 @@ async function answerCorrect(page: Page) {
 
 test.describe.serial("production business flows", () => {
   test("administrator imports an active student who must change the first-login password", async ({ page }) => {
-    await login(page, "teacher", "ChangeMe123!", "/admin");
+    await login(page, "admin", "ChangeMe123!", "/admin");
     await page.goto("/admin/student-import");
 
     const workbook = new ExcelJS.Workbook();
@@ -100,8 +100,13 @@ test.describe.serial("production business flows", () => {
       await editDialog.getByLabel("学校").fill("端到端实验中学");
       await editDialog.getByRole("button", { name: "保存并校验" }).click();
       await expect(editDialog).toBeHidden();
+      await expect(page.getByRole("status")).toHaveText("导入行已保存并重新校验");
+      const commitResponsePromise = page.waitForResponse((response) => response.url().endsWith("/commit") && response.request().method() === "POST");
       await page.getByRole("button", { name: "确认导入" }).click();
-      await expect(page.getByText("成功导入 1 个学生账号，账号直接生效。")).toBeVisible();
+      const commitResponse = await commitResponsePromise;
+      const commitBody = await commitResponse.text();
+      expect(commitResponse.ok(), `student-import commit ${commitResponse.status()}: ${commitBody}`).toBe(true);
+      await expect(page.getByText("成功导入 1 个学生账号，账号直接生效。")).toBeVisible({ timeout: 20_000 });
     } finally {
       fs.rmSync(filePath, { force: true });
     }
@@ -172,8 +177,7 @@ test.describe.serial("production business flows", () => {
   });
 
   test("Excel preview, issue report, commit, and revert work as one server-owned batch", async ({ page }) => {
-    await login(page, "teacher", "ChangeMe123!", "/admin");
-    await page.goto("/teacher/import");
+    await login(page, "teacher", "ChangeMe123!", "/teacher/import");
     const workbook = new ExcelJS.Workbook();
     const sheet = workbook.addWorksheet("Questions");
     sheet.addRow(["等级", "题库编号", "分类号", "知识点名称", "题目编号", "问题", "答案", "选项规格", "A", "B", "C", "D", "是否启用"]);

@@ -89,7 +89,7 @@ export function LoginForm() {
     </label>
     {error ? <div role="alert" className="rounded-xl border border-rose-100 bg-rose-50 px-4 py-3 text-sm font-bold leading-6 text-rose-700">{error}</div> : null}
     <Button type="submit" size="lg" className="mt-1 w-full" disabled={pending}><LogIn className="size-4" />{pending ? "正在验证登录状态…" : "进入系统"}</Button>
-    <div className="rounded-xl border border-cyan-300/20 bg-cyan-300/[.07] p-3 text-xs leading-6 text-cyan-100"><span className="font-black text-[var(--primary)]">演示账号</span><br />学生：student / ChangeMe123!<br />管理员：teacher / ChangeMe123!</div>
+    <div className="rounded-xl border border-cyan-300/20 bg-cyan-300/[.07] p-3 text-xs leading-6 text-cyan-100"><span className="font-black text-[var(--primary)]">演示账号</span><br />学生：student / ChangeMe123!<br />教师：teacher / ChangeMe123!<br />管理员：admin / ChangeMe123!</div>
   </form>;
 }
 

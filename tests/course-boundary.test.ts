@@ -5,7 +5,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { RADIO_COURSE_ID } from "../lib/domain/course";
 
 const mocks = vi.hoisted(() => ({
-  requireTeachingUser: vi.fn(),
+  requireTeacher: vi.fn(),
   writeAuditLog: vi.fn(),
   levelFindFirst: vi.fn(),
   knowledgePointFindFirst: vi.fn(),
@@ -22,7 +22,7 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock("@/lib/server/api", async () => {
   const actual = await vi.importActual<typeof import("@/lib/server/api")>("@/lib/server/api");
-  return { ...actual, requireTeachingUser: mocks.requireTeachingUser };
+  return { ...actual, requireTeacher: mocks.requireTeacher };
 });
 vi.mock("@/lib/server/audit", () => ({ writeAuditLog: mocks.writeAuditLog }));
 vi.mock("@/lib/db", () => {
@@ -50,7 +50,7 @@ import { POST as previewImport } from "@/app/api/v1/imports/preview/route";
 describe("radio course boundary", () => {
   beforeEach(() => {
     for (const mock of Object.values(mocks)) mock.mockReset();
-    mocks.requireTeachingUser.mockResolvedValue({ id: "teacher-1" });
+    mocks.requireTeacher.mockResolvedValue({ id: "teacher-1" });
     mocks.levelFindFirst.mockResolvedValue({ id: "level-radio", enabled: true });
     mocks.knowledgePointFindFirst.mockResolvedValue({ id: "point-radio", enabled: true, _count: { children: 0 } });
     mocks.questionFindFirst.mockResolvedValue(null);

@@ -113,7 +113,7 @@ describe("MySQL project configuration", () => {
 
     expect(reportsPage).toMatch(/CAST\(COUNT\(DISTINCT \\`userId\\`\) AS SIGNED\)/);
     expect(reportsPage).toContain("SUM(CASE WHEN");
-    expect(studentsPage).toContain('redirect("/admin/students"');
+    expect(studentsPage).toContain('redirect("/teacher"');
     expect(studentsPage).not.toContain("$queryRaw");
     expect(historyPage).toContain("TIMESTAMPDIFF(SECOND");
     expect(historyPage).toContain("CAST(COALESCE");

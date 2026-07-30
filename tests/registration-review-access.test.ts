@@ -6,13 +6,12 @@ function read(relativePath: string) {
   return fs.readFileSync(path.resolve(relativePath), "utf8");
 }
 
-describe("teacher registration review access", () => {
-  it("provides a teacher console registration review page", () => {
+describe("administrator registration review access", () => {
+  it("redirects the legacy teacher registration path to the teacher console", () => {
     const page = read("app/teacher/registrations/page.tsx");
 
-    expect(page).toContain('role="teacher"');
-    expect(page).toContain('currentPath="/teacher/registrations"');
-    expect(page).toContain("RegistrationReviewManager");
+    expect(page).toContain('redirect("/teacher")');
+    expect(page).not.toContain("RegistrationReviewManager");
   });
 
   it.each([
@@ -20,10 +19,10 @@ describe("teacher registration review access", () => {
     "app/api/v1/admin/registrations/[id]/approve/route.ts",
     "app/api/v1/admin/registrations/[id]/reject/route.ts",
     "app/api/v1/admin/registrations/bulk-approve/route.ts",
-  ])("allows teaching users through %s", (routePath) => {
+  ])("allows only administrators through %s", (routePath) => {
     const route = read(routePath);
 
-    expect(route).toContain("requireTeachingUser");
-    expect(route).not.toContain("requireAdministrator");
+    expect(route).toContain("requireAdministrator");
+    expect(route).not.toContain("requireTeachingUser");
   });
 });

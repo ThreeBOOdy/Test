@@ -8,7 +8,7 @@ import {
   requireActiveStudent,
   requireAdministrator,
   requireRegistrationStudent,
-  requireTeachingUser,
+  requireTeacher,
 } from "@/lib/server/api";
 
 const baseUser = {
@@ -30,25 +30,25 @@ describe("session capability guards", () => {
     getCurrentUser.mockResolvedValue(null);
 
     await expect(requireAdministrator()).rejects.toMatchObject({ status: 401 });
-    await expect(requireTeachingUser()).rejects.toMatchObject({ status: 401 });
+    await expect(requireTeacher()).rejects.toMatchObject({ status: 401 });
     await expect(requireActiveStudent()).rejects.toMatchObject({ status: 401 });
     await expect(requireRegistrationStudent()).rejects.toMatchObject({ status: 401 });
   });
 
-  it("allows administrators to administer and teach", async () => {
+  it("allows administrators only through the administrator guard", async () => {
     const administrator = { ...baseUser, role: "ADMIN", capability: "FULL_ADMIN" };
     getCurrentUser.mockResolvedValue(administrator);
 
     await expect(requireAdministrator()).resolves.toBe(administrator);
-    await expect(requireTeachingUser()).resolves.toBe(administrator);
+    await expect(requireTeacher()).rejects.toMatchObject({ status: 403 });
     await expect(requireActiveStudent()).rejects.toMatchObject({ status: 403 });
   });
 
-  it("allows teachers only through the teaching guard", async () => {
+  it("allows teachers only through the teacher guard", async () => {
     const teacher = { ...baseUser, role: "TEACHER", capability: "FULL_TEACHER" };
     getCurrentUser.mockResolvedValue(teacher);
 
-    await expect(requireTeachingUser()).resolves.toBe(teacher);
+    await expect(requireTeacher()).resolves.toBe(teacher);
     await expect(requireAdministrator()).rejects.toMatchObject({ status: 403 });
     await expect(requireActiveStudent()).rejects.toMatchObject({ status: 403 });
   });

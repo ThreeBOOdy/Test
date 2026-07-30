@@ -6,7 +6,7 @@ import { normalizeQuestionEditorInput } from "@/lib/domain/question-editor";
 import { readJsonBody } from "@/lib/domain/request-body";
 import { assertSameOrigin } from "@/lib/server/http";
 import { writeAuditLog } from "@/lib/server/audit";
-import { ApiError, apiErrorResponse, requireTeachingUser } from "@/lib/server/api";
+import { ApiError, apiErrorResponse, requireTeacher } from "@/lib/server/api";
 import { RADIO_COURSE_ID } from "@/lib/domain/course";
 
 const schema = z.object({
@@ -23,7 +23,7 @@ const schema = z.object({
 export async function PUT(request: Request, context: { params: Promise<{ id: string }> }) {
   try {
     assertSameOrigin(request);
-    const user = await requireTeachingUser();
+    const user = await requireTeacher();
     const { id } = await context.params;
     const input = schema.parse(await readJsonBody(request));
     const normalized = normalizeQuestionEditorInput(input);

@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { ClipboardCheck, FileSpreadsheet, GraduationCap, School, UsersRound } from "lucide-react";
+import { ClipboardCheck, FileSpreadsheet, School, UsersRound } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
 import { PageHeader } from "@/components/page-header";
 
@@ -8,7 +8,6 @@ const administratorActions = [
   { href: "/admin/students", label: "学生账号", description: "维护账号状态、有效期和长期设置", icon: UsersRound },
   { href: "/admin/student-import", label: "学生导入", description: "通过 Excel 批量创建并直接启用账号", icon: FileSpreadsheet },
   { href: "/admin/grades", label: "年级配置", description: "维护学生注册和导入可选年级", icon: School },
-  { href: "/teacher", label: "教学控制台", description: "进入题库、抽题规则与教学统计", icon: GraduationCap },
 ];
 
 export default function AdminPage() {

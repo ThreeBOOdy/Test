@@ -87,7 +87,7 @@ describe("repository release quality", () => {
     expect(packageJson.dependencies.next).toBe("16.2.11");
   });
 
-  it("uses capability guards for teaching and student practice routes", () => {
+  it("uses single-role guards for teaching and student practice routes", () => {
     const teachingRoutes = [
       "app/api/v1/admin/knowledge-points/route.ts",
       "app/api/v1/admin/knowledge-points/[id]/route.ts",
@@ -100,6 +100,15 @@ describe("repository release quality", () => {
       "app/api/v1/imports/preview/route.ts",
       "app/api/v1/imports/commit/route.ts",
     ];
+    const administratorRoutes = [
+      "app/api/v1/admin/registrations/route.ts",
+      "app/api/v1/admin/registrations/[id]/approve/route.ts",
+      "app/api/v1/admin/registrations/[id]/reject/route.ts",
+      "app/api/v1/admin/registrations/bulk-approve/route.ts",
+      "app/api/v1/admin/students/route.ts",
+      "app/api/v1/admin/students/[id]/route.ts",
+      "app/api/v1/admin/student-imports/preview/route.ts",
+    ];
     const studentRoutes = [
       "app/api/v1/practice-sessions/route.ts",
       "app/api/v1/practice-sessions/[id]/answers/route.ts",
@@ -107,8 +116,12 @@ describe("repository release quality", () => {
     ];
 
     for (const file of teachingRoutes) {
-      expect(read(file), `${file} should allow administrators to use teaching features`).toContain("requireTeachingUser");
-      expect(read(file), `${file} should not use the legacy teacher-only guard`).not.toContain('requireRole("TEACHER")');
+      expect(read(file), `${file} should allow only teachers to use teaching features`).toContain("requireTeacher");
+      expect(read(file), `${file} should not use a cross-role teaching guard`).not.toContain("requireTeachingUser");
+    }
+    for (const file of administratorRoutes) {
+      expect(read(file), `${file} should allow only administrators to use account management features`).toContain("requireAdministrator");
+      expect(read(file), `${file} should not use a cross-role teaching guard`).not.toContain("requireTeachingUser");
     }
     for (const file of studentRoutes) {
       expect(read(file), `${file} should enforce active-student access`).toContain("requireActiveStudent");

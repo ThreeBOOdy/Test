@@ -1,0 +1,183 @@
+import { beforeEach, describe, expect, it, vi } from "vitest";
+
+const mocks = vi.hoisted(() => ({
+  getCurrentUser: vi.fn(),
+  listStudents: vi.fn(),
+  importBatchFindMany: vi.fn(),
+  importBatchCount: vi.fn(),
+  createPracticeSession: vi.fn(),
+  commitImportBatch: vi.fn(),
+  approveRegistration: vi.fn(),
+  writeAuditLog: vi.fn(),
+  ensureKnowledgePoint: vi.fn(),
+  levelFindFirst: vi.fn(),
+  knowledgePointFindFirst: vi.fn(),
+  knowledgePointFindUnique: vi.fn(),
+  questionFindFirst: vi.fn(),
+  questionCreate: vi.fn(),
+}));
+
+vi.mock("@/lib/server/session", () => ({ getCurrentUser: mocks.getCurrentUser }));
+vi.mock("@/lib/server/student-account-service", () => ({
+  listStudents: mocks.listStudents,
+  approveRegistration: mocks.approveRegistration,
+}));
+vi.mock("@/lib/server/practice-service", () => ({ createPracticeSession: mocks.createPracticeSession }));
+vi.mock("@/lib/server/import-service", () => ({ commitImportBatch: mocks.commitImportBatch }));
+vi.mock("@/lib/server/audit", () => ({ writeAuditLog: mocks.writeAuditLog }));
+vi.mock("@/lib/server/knowledge-service", () => ({ ensureKnowledgePoint: mocks.ensureKnowledgePoint }));
+vi.mock("@/lib/db", () => ({
+  prisma: {
+    importBatch: { findMany: mocks.importBatchFindMany, count: mocks.importBatchCount },
+    level: { findFirst: mocks.levelFindFirst },
+    knowledgePoint: { findFirst: mocks.knowledgePointFindFirst, findUnique: mocks.knowledgePointFindUnique },
+    question: { findFirst: mocks.questionFindFirst, create: mocks.questionCreate, count: vi.fn() },
+    $transaction: vi.fn((callback: (transaction: object) => unknown) => callback({})),
+  },
+}));
+
+import { GET as listRegistrations } from "@/app/api/v1/admin/registrations/route";
+import { POST as approveRegistration } from "@/app/api/v1/admin/registrations/[id]/approve/route";
+import { GET as listStudents } from "@/app/api/v1/admin/students/route";
+import { GET as listImportBatches } from "@/app/api/v1/admin/import-batches/route";
+import { POST as commitImportBatch } from "@/app/api/v1/imports/commit/route";
+import { POST as createQuestion } from "@/app/api/v1/admin/questions/route";
+import { POST as createKnowledgePoint } from "@/app/api/v1/admin/knowledge-points/route";
+import { PUT as savePracticeRules } from "@/app/api/v1/admin/practice-rules/route";
+import { POST as createPracticeSession } from "@/app/api/v1/practice-sessions/route";
+
+const baseUser = {
+  id: "user-1",
+  username: "account",
+  displayName: "Account",
+  enabled: true,
+  mustChangePassword: false,
+  sessionVersion: 0,
+  studentStatus: null,
+  isLongTerm: false,
+  validFrom: null,
+  validUntil: null,
+  accessErrorCode: null,
+};
+
+const administrator = { ...baseUser, role: "ADMIN" as const, capability: "FULL_ADMIN" as const };
+const teacher = { ...baseUser, role: "TEACHER" as const, capability: "FULL_TEACHER" as const };
+const student = { ...baseUser, role: "STUDENT" as const, capability: "FULL_STUDENT" as const, studentStatus: "ACTIVE" as const };
+
+describe("single-role API access", () => {
+  beforeEach(() => {
+    for (const mock of Object.values(mocks)) mock.mockReset();
+    mocks.listStudents.mockResolvedValue([]);
+    mocks.importBatchFindMany.mockResolvedValue([]);
+    mocks.importBatchCount.mockResolvedValue(0);
+    mocks.createPracticeSession.mockResolvedValue({ id: "session-1" });
+    mocks.commitImportBatch.mockResolvedValue({ inserted: 1, skipped: 0 });
+    mocks.approveRegistration.mockResolvedValue({ id: "student-1", studentStatus: "ACTIVE" });
+    mocks.levelFindFirst.mockResolvedValue({ id: "level-1", enabled: true });
+    mocks.knowledgePointFindFirst.mockResolvedValue({ id: "point-1", enabled: true, _count: { children: 0 } });
+    mocks.knowledgePointFindUnique.mockResolvedValue(null);
+    mocks.questionFindFirst.mockResolvedValue(null);
+    mocks.questionCreate.mockResolvedValue({ id: "question-1" });
+    mocks.ensureKnowledgePoint.mockResolvedValue({ id: "point-1" });
+  });
+
+  it("allows only administrators to review registrations", async () => {
+    mocks.getCurrentUser.mockResolvedValue(administrator);
+    expect((await listRegistrations(new Request("http://localhost/api/v1/admin/registrations"))).status).toBe(200);
+
+    for (const user of [teacher, student]) {
+      mocks.getCurrentUser.mockResolvedValue(user);
+      expect((await listRegistrations(new Request("http://localhost/api/v1/admin/registrations"))).status).toBe(403);
+    }
+  });
+
+  it("allows only administrators to read student accounts and approve registrations", async () => {
+    const approvalRequest = () => new Request("http://localhost/api/v1/admin/registrations/student-1/approve", {
+      method: "POST",
+      headers: { "content-type": "application/json", origin: "http://localhost", host: "localhost" },
+      body: JSON.stringify({}),
+    });
+
+    mocks.getCurrentUser.mockResolvedValue(administrator);
+    expect((await listStudents(new Request("http://localhost/api/v1/admin/students"))).status).toBe(200);
+    expect((await approveRegistration(approvalRequest(), { params: Promise.resolve({ id: "student-1" }) })).status).toBe(200);
+
+    for (const user of [teacher, student]) {
+      mocks.getCurrentUser.mockResolvedValue(user);
+      expect((await listStudents(new Request("http://localhost/api/v1/admin/students"))).status).toBe(403);
+      expect((await approveRegistration(approvalRequest(), { params: Promise.resolve({ id: "student-1" }) })).status).toBe(403);
+    }
+  });
+
+  it("allows only teachers to access teaching import batches", async () => {
+    mocks.getCurrentUser.mockResolvedValue(teacher);
+    expect((await listImportBatches(new Request("http://localhost/api/v1/admin/import-batches"))).status).toBe(200);
+
+    for (const user of [administrator, student]) {
+      mocks.getCurrentUser.mockResolvedValue(user);
+      expect((await listImportBatches(new Request("http://localhost/api/v1/admin/import-batches"))).status).toBe(403);
+    }
+  });
+
+  it("allows only teachers to commit question imports", async () => {
+    const request = () => new Request("http://localhost/api/v1/imports/commit", {
+      method: "POST",
+      headers: { "content-type": "application/json", origin: "http://localhost", host: "localhost" },
+      body: JSON.stringify({ batchId: "batch-1" }),
+    });
+
+    mocks.getCurrentUser.mockResolvedValue(teacher);
+    expect((await commitImportBatch(request())).status).toBe(201);
+
+    for (const user of [administrator, student]) {
+      mocks.getCurrentUser.mockResolvedValue(user);
+      expect((await commitImportBatch(request())).status).toBe(403);
+    }
+  });
+
+  it("allows only teachers to create questions, knowledge points, and practice rules", async () => {
+    const questionRequest = () => new Request("http://localhost/api/v1/admin/questions", {
+      method: "POST",
+      headers: { "content-type": "application/json", origin: "http://localhost", host: "localhost" },
+      body: JSON.stringify({ levelId: "level-1", knowledgePointId: "point-1", stem: "题目", options: [{ id: "A", text: "正确" }, { id: "B", text: "错误" }], correctOptionIds: ["A"] }),
+    });
+    const knowledgeRequest = () => new Request("http://localhost/api/v1/admin/knowledge-points", {
+      method: "POST",
+      headers: { "content-type": "application/json", origin: "http://localhost", host: "localhost" },
+      body: JSON.stringify({ code: "9.1", name: "测试知识点", sortOrder: 0 }),
+    });
+    const rulesRequest = () => new Request("http://localhost/api/v1/admin/practice-rules", {
+      method: "PUT",
+      headers: { "content-type": "application/json", origin: "http://localhost", host: "localhost" },
+      body: JSON.stringify({ levelRules: [], knowledgeRules: [], examRules: [] }),
+    });
+
+    mocks.getCurrentUser.mockResolvedValue(teacher);
+    expect((await createQuestion(questionRequest())).status).toBe(201);
+    expect((await createKnowledgePoint(knowledgeRequest())).status).toBe(201);
+    expect((await savePracticeRules(rulesRequest())).status).toBe(200);
+
+    for (const user of [administrator, student]) {
+      mocks.getCurrentUser.mockResolvedValue(user);
+      expect((await createQuestion(questionRequest())).status).toBe(403);
+      expect((await createKnowledgePoint(knowledgeRequest())).status).toBe(403);
+      expect((await savePracticeRules(rulesRequest())).status).toBe(403);
+    }
+  });
+
+  it("allows only active students to create practice sessions", async () => {
+    const request = () => new Request("http://localhost/api/v1/practice-sessions", {
+      method: "POST",
+      headers: { "content-type": "application/json", origin: "http://localhost", host: "localhost" },
+      body: JSON.stringify({ mode: "level", levelCode: "A" }),
+    });
+
+    mocks.getCurrentUser.mockResolvedValue(student);
+    expect((await createPracticeSession(request())).status).toBe(201);
+
+    for (const user of [administrator, teacher]) {
+      mocks.getCurrentUser.mockResolvedValue(user);
+      expect((await createPracticeSession(request())).status).toBe(403);
+    }
+  });
+});

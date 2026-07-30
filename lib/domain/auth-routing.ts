@@ -21,7 +21,7 @@ export function getLoginRedirectForPath(path: string) {
 
 export function canUseNextPath(path: string, role: AuthRole) {
   const targetRole = getRoleForPath(path);
-  return targetRole === null || targetRole === role || (role === "ADMIN" && targetRole === "TEACHER");
+  return targetRole === null || targetRole === role;
 }
 
 export function canUseLoginNextPath(path: string, role: AuthRole) {
