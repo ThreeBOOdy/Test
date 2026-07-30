@@ -1,5 +1,12 @@
-export function validatePasswordPolicy(password: string): string | null {
-  if (password.length < 6) return "密码至少需要 6 位";
+import type { AppRole } from "@/lib/domain/student-access";
+
+export function getPasswordMinimumLength(role: AppRole) {
+  return role === "STUDENT" ? 8 : 12;
+}
+
+export function validatePasswordPolicy(password: string, role: AppRole): string | null {
+  const minimumLength = getPasswordMinimumLength(role);
+  if (password.length < minimumLength) return `${role === "STUDENT" ? "学生" : "教师和管理员"}密码至少需要 ${minimumLength} 位`;
   if (password.length > 128) return "密码不能超过 128 位";
   return null;
 }

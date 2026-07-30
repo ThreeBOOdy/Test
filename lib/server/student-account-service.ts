@@ -14,6 +14,7 @@ import {
   rejectRegistrationSchema,
 } from "@/lib/domain/student-registration";
 import { hashPassword } from "@/lib/server/password";
+import { revokeUserSessions } from "@/lib/server/session";
 import {
   decryptSensitiveValue,
   encryptSensitiveValue,
@@ -290,6 +291,7 @@ export async function updateStudentAccount(administratorId: string, studentId: s
       ...(input.isLongTerm !== undefined ? { isLongTerm: input.isLongTerm } : {}),
       sessionVersion: { increment: 1 },
     } });
+    await revokeUserSessions(studentId, tx);
     await tx.auditLog.create({ data: { actorUserId: administratorId, action: "STUDENT_ACCOUNT_UPDATE", targetType: "User", targetId: studentId, metadata: snapshot(updated) } });
     return { saved: true };
   });
@@ -297,8 +299,11 @@ export async function updateStudentAccount(administratorId: string, studentId: s
 
 export async function resetStudentPassword(administratorId: string, studentId: string) {
   const temporaryPassword = `${randomBytes(8).toString("base64url")}A1`;
-  const result = await prisma.user.updateMany({ where: { id: studentId, role: "STUDENT" }, data: { passwordHash: hashPassword(temporaryPassword), mustChangePassword: true, sessionVersion: { increment: 1 } } });
-  if (result.count !== 1) throw new ApiError("学生账号不存在", 404);
-  await prisma.auditLog.create({ data: { actorUserId: administratorId, action: "STUDENT_PASSWORD_RESET", targetType: "User", targetId: studentId } });
+  await prisma.$transaction(async (tx) => {
+    const result = await tx.user.updateMany({ where: { id: studentId, role: "STUDENT" }, data: { passwordHash: hashPassword(temporaryPassword), mustChangePassword: true, sessionVersion: { increment: 1 } } });
+    if (result.count !== 1) throw new ApiError("学生账号不存在", 404);
+    await revokeUserSessions(studentId, tx);
+    await tx.auditLog.create({ data: { actorUserId: administratorId, action: "STUDENT_PASSWORD_RESET", targetType: "User", targetId: studentId } });
+  });
   return { temporaryPassword };
 }

@@ -25,10 +25,10 @@ describe("import batch expiry", () => {
 
 describe("password policy", () => {
   it("requires 6 to 128 characters without composition rules", () => {
-    expect(validatePasswordPolicy("12345")).toBe("密码至少需要 6 位");
-    expect(validatePasswordPolicy("abcdef")).toBeNull();
-    expect(validatePasswordPolicy("123456")).toBeNull();
-    expect(validatePasswordPolicy("中文密码!!")).toBeNull();
+    expect(validatePasswordPolicy("1234567", "STUDENT")).toBe("学生密码至少需要 8 位");
+    expect(validatePasswordPolicy("12345678", "STUDENT")).toBeNull();
+    expect(validatePasswordPolicy("12345678901", "TEACHER")).toBe("教师和管理员密码至少需要 12 位");
+    expect(validatePasswordPolicy("中文密码12345678", "ADMIN")).toBeNull();
   });
 });
 

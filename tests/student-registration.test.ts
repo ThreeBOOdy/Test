@@ -67,7 +67,8 @@ describe("student registration domain contracts", () => {
 
   it("requires password policy compliance and matching confirmation", () => {
     expect(publicRegistrationSchema.safeParse({ ...validRegistration, password: "12345", confirmPassword: "12345" }).success).toBe(false);
-    expect(publicRegistrationSchema.safeParse({ ...validRegistration, password: "123456", confirmPassword: "123456" }).success).toBe(true);
+    expect(publicRegistrationSchema.safeParse({ ...validRegistration, password: "1234567", confirmPassword: "1234567" }).success).toBe(false);
+    expect(publicRegistrationSchema.safeParse({ ...validRegistration, password: "12345678", confirmPassword: "12345678" }).success).toBe(true);
     expect(publicRegistrationSchema.safeParse({ ...validRegistration, confirmPassword: "different2026" }).success).toBe(false);
   });
 

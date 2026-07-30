@@ -5,7 +5,7 @@ import { readJsonBody } from "@/lib/domain/request-body";
 import { validatePasswordPolicy } from "@/lib/domain/security";
 import { hashPassword, verifyPassword } from "@/lib/server/password";
 import { assertSameOrigin } from "@/lib/server/http";
-import { createSessionToken, getCurrentUser, SESSION_COOKIE } from "@/lib/server/session";
+import { createSession, getCurrentUser, revokeUserSessions, setSessionCookie } from "@/lib/server/session";
 import { apiErrorResponse } from "@/lib/server/api";
 
 const messages = {
@@ -15,9 +15,7 @@ const messages = {
   failed: "\u4fee\u6539\u5bc6\u7801\u5931\u8d25",
 };
 
-const schema = z.object({ currentPassword: z.string().min(1).max(128), newPassword: z.string().min(6).max(128) }).superRefine((input, context) => {
-  const policyMessage = validatePasswordPolicy(input.newPassword);
-  if (policyMessage) context.addIssue({ code: "custom", message: policyMessage, path: ["newPassword"] });
+const schema = z.object({ currentPassword: z.string().min(1).max(128), newPassword: z.string().max(128) }).superRefine((input, context) => {
   if (input.currentPassword === input.newPassword) context.addIssue({ code: "custom", message: messages.same, path: ["newPassword"] });
 });
 
@@ -29,10 +27,16 @@ export async function POST(request: Request) {
     const input = schema.parse(await readJsonBody(request));
     const user = await prisma.user.findUnique({ where: { id: currentUser.id } });
     if (!user || !verifyPassword(input.currentPassword, user.passwordHash)) return NextResponse.json({ message: messages.current }, { status: 400 });
-    const updated = await prisma.user.update({ where: { id: user.id }, data: { passwordHash: hashPassword(input.newPassword), mustChangePassword: false, sessionVersion: { increment: 1 } } });
-    const token = await createSessionToken({ userId: updated.id, username: updated.username, role: updated.role, sessionVersion: updated.sessionVersion });
+    const policyMessage = validatePasswordPolicy(input.newPassword, user.role);
+    if (policyMessage) return NextResponse.json({ message: policyMessage }, { status: 400 });
+    const updated = await prisma.$transaction(async (tx) => {
+      const changed = await tx.user.update({ where: { id: user.id }, data: { passwordHash: hashPassword(input.newPassword), mustChangePassword: false, sessionVersion: { increment: 1 } } });
+      await revokeUserSessions(user.id, tx);
+      return changed;
+    });
+    const token = await createSession(updated);
     const response = NextResponse.json({ saved: true, role: updated.role });
-    response.cookies.set(SESSION_COOKIE, token, { httpOnly: true, sameSite: "lax", secure: process.env.COOKIE_SECURE === "true", path: "/", maxAge: 60 * 60 * 24 * 7 });
+    setSessionCookie(response, token);
     return response;
   } catch (error) {
     return apiErrorResponse(error, messages.failed);

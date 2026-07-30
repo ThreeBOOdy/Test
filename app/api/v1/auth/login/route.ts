@@ -4,7 +4,7 @@ import { prisma } from "@/lib/db";
 import { readJsonBody } from "@/lib/domain/request-body";
 import { evaluateAccountAccess } from "@/lib/domain/student-access";
 import { verifyPassword } from "@/lib/server/password";
-import { createSessionToken, SESSION_COOKIE } from "@/lib/server/session";
+import { createSession, setSessionCookie } from "@/lib/server/session";
 import { checkLoginRateLimit, getClientIp, recordLoginAttempt } from "@/lib/server/auth-security";
 import { assertSameOrigin } from "@/lib/server/http";
 import { apiErrorResponse } from "@/lib/server/api";
@@ -42,9 +42,9 @@ export async function POST(request: Request) {
       } as const;
       return NextResponse.json({ message: messages[access.errorCode] }, { status: 403 });
     }
-    const token = await createSessionToken({ userId: user.id, username: user.username, role: user.role, sessionVersion: user.sessionVersion });
+    const token = await createSession(user);
     const response = NextResponse.json({ user: { id: user.id, username: user.username, displayName: user.displayName, role: user.role, mustChangePassword: user.mustChangePassword, capability: access.capability } });
-    response.cookies.set(SESSION_COOKIE, token, { httpOnly: true, sameSite: "lax", secure: process.env.COOKIE_SECURE === "true", path: "/", maxAge: 60 * 60 * 24 * 7 });
+    setSessionCookie(response, token);
     return response;
   } catch (error) {
     return apiErrorResponse(error, "登录失败");

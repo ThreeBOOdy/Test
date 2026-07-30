@@ -2,7 +2,8 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
   checkLoginRateLimit: vi.fn(),
-  createSessionToken: vi.fn(),
+  createSession: vi.fn(),
+  setSessionCookie: vi.fn(),
   findUnique: vi.fn(),
   recordLoginAttempt: vi.fn(),
   verifyPassword: vi.fn(),
@@ -10,7 +11,7 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock("@/lib/db", () => ({ prisma: { user: { findUnique: mocks.findUnique } } }));
 vi.mock("@/lib/server/password", () => ({ verifyPassword: mocks.verifyPassword }));
-vi.mock("@/lib/server/session", () => ({ createSessionToken: mocks.createSessionToken, SESSION_COOKIE: "zhilian_session" }));
+vi.mock("@/lib/server/session", () => ({ createSession: mocks.createSession, setSessionCookie: mocks.setSessionCookie }));
 vi.mock("@/lib/server/auth-security", () => ({
   checkLoginRateLimit: mocks.checkLoginRateLimit,
   getClientIp: () => "127.0.0.1",
@@ -47,7 +48,8 @@ function request() {
 describe("login account access", () => {
   beforeEach(() => {
     mocks.checkLoginRateLimit.mockResolvedValue(false);
-    mocks.createSessionToken.mockResolvedValue("signed-token");
+    mocks.createSession.mockResolvedValue("opaque-token");
+    mocks.setSessionCookie.mockImplementation((response, token) => response.cookies.set("zhilian_session", token, { httpOnly: true }));
     mocks.findUnique.mockResolvedValue(baseUser);
     mocks.recordLoginAttempt.mockResolvedValue(undefined);
     mocks.verifyPassword.mockReturnValue(true);
@@ -61,7 +63,7 @@ describe("login account access", () => {
 
     expect(response.status).toBe(200);
     expect(body.user).toMatchObject({ role: "STUDENT", capability: "REGISTRATION_ONLY" });
-    expect(response.headers.get("set-cookie")).toContain("zhilian_session=signed-token");
+    expect(response.headers.get("set-cookie")).toContain("zhilian_session=opaque-token");
   });
 
   it.each([
@@ -86,7 +88,7 @@ describe("login account access", () => {
 
     expect(response.status).toBe(200);
     expect(body.user).toMatchObject({ mustChangePassword: true, capability: null });
-    expect(response.headers.get("set-cookie")).toContain("zhilian_session=signed-token");
+    expect(response.headers.get("set-cookie")).toContain("zhilian_session=opaque-token");
   });
 
   it("does not reveal disabled state before password verification succeeds", async () => {

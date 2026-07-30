@@ -1,15 +1,13 @@
 import "server-only";
+
+import { createHash, randomBytes } from "node:crypto";
 import { cookies } from "next/headers";
-import { SignJWT, jwtVerify } from "jose";
 import { prisma } from "@/lib/db";
+import { getNextIdleExpiry, getSessionExpiry, isSessionExpired } from "@/lib/domain/session-policy";
 import { evaluateAccountAccess, type AccessCapability, type AccessErrorCode, type AppRole, type StudentStatus } from "@/lib/domain/student-access";
-import { assertProductionAuthEnvironment } from "@/lib/server/env";
 import { getBusinessDate } from "@/lib/server/time";
 
 export const SESSION_COOKIE = "zhilian_session";
-const encoder = new TextEncoder();
-
-export type SessionPayload = { userId: string; role: AppRole; username: string; sessionVersion: number };
 
 export type SessionUser = {
   id: string;
@@ -27,33 +25,26 @@ export type SessionUser = {
   accessErrorCode: AccessErrorCode | null;
 };
 
-function secret() {
-  return encoder.encode(assertProductionAuthEnvironment());
+type SessionClient = Pick<typeof prisma, "authSession">;
+
+export function hashSessionToken(token: string) {
+  return createHash("sha256").update(token).digest("hex");
 }
 
-export async function createSessionToken(payload: SessionPayload) {
-  return new SignJWT(payload)
-    .setProtectedHeader({ alg: "HS256" })
-    .setIssuer("zhilian-practice")
-    .setAudience("zhilian-web")
-    .setIssuedAt()
-    .setExpirationTime("7d")
-    .sign(secret());
+export async function createSession(user: Pick<SessionUser, "id" | "role">, now = new Date()) {
+  const token = randomBytes(32).toString("base64url");
+  const { idleExpiresAt, absoluteExpiresAt } = getSessionExpiry(user.role, now);
+  await prisma.authSession.create({ data: { tokenHash: hashSessionToken(token), userId: user.id, lastSeenAt: now, idleExpiresAt, absoluteExpiresAt } });
+  return token;
 }
 
-export async function verifySessionToken(token: string): Promise<SessionPayload | null> {
-  try {
-    const result = await jwtVerify(token, secret(), { issuer: "zhilian-practice", audience: "zhilian-web" });
-    const payload = result.payload as Partial<SessionPayload>;
-    if (!payload.userId || !payload.username || typeof payload.sessionVersion !== "number" || !isAppRole(payload.role)) return null;
-    return payload as SessionPayload;
-  } catch {
-    return null;
-  }
+export async function revokeSession(token: string | undefined) {
+  if (!token) return;
+  await prisma.authSession.updateMany({ where: { tokenHash: hashSessionToken(token), revokedAt: null }, data: { revokedAt: new Date() } });
 }
 
-function isAppRole(role: unknown): role is AppRole {
-  return role === "ADMIN" || role === "TEACHER" || role === "STUDENT";
+export async function revokeUserSessions(userId: string, client: SessionClient = prisma) {
+  await client.authSession.updateMany({ where: { userId, revokedAt: null }, data: { revokedAt: new Date() } });
 }
 
 function toIsoDate(value: Date | null) {
@@ -61,25 +52,7 @@ function toIsoDate(value: Date | null) {
   return `${value.getUTCFullYear().toString().padStart(4, "0")}-${(value.getUTCMonth() + 1).toString().padStart(2, "0")}-${value.getUTCDate().toString().padStart(2, "0")}`;
 }
 
-export async function findSessionUser(session: SessionPayload): Promise<SessionUser | null> {
-  const user = await prisma.user.findFirst({
-    where: { id: session.userId, sessionVersion: session.sessionVersion },
-    select: {
-      id: true,
-      username: true,
-      displayName: true,
-      role: true,
-      enabled: true,
-      mustChangePassword: true,
-      sessionVersion: true,
-      studentStatus: true,
-      isLongTerm: true,
-      validFrom: true,
-      validUntil: true,
-    },
-  });
-  if (!user) return null;
-
+function toSessionUser(user: Omit<SessionUser, "capability" | "accessErrorCode">): SessionUser | null {
   const decision = evaluateAccountAccess({
     role: user.role,
     enabled: user.enabled,
@@ -90,15 +63,63 @@ export async function findSessionUser(session: SessionPayload): Promise<SessionU
     validUntil: toIsoDate(user.validUntil),
   }, getBusinessDate());
   if (!decision.capability && decision.errorCode !== "PASSWORD_CHANGE_REQUIRED") return null;
-
   return { ...user, capability: decision.capability, accessErrorCode: decision.errorCode };
+}
+
+export async function findSessionUser(token: string, now = new Date()): Promise<SessionUser | null> {
+  const session = await prisma.authSession.findUnique({
+    where: { tokenHash: hashSessionToken(token) },
+    include: {
+      user: {
+        select: {
+          id: true,
+          username: true,
+          displayName: true,
+          role: true,
+          enabled: true,
+          mustChangePassword: true,
+          sessionVersion: true,
+          studentStatus: true,
+          isLongTerm: true,
+          validFrom: true,
+          validUntil: true,
+        },
+      },
+    },
+  });
+  if (!session || isSessionExpired(session, now)) return null;
+
+  const updated = await prisma.authSession.updateMany({
+    where: { id: session.id, revokedAt: null, idleExpiresAt: { gt: now }, absoluteExpiresAt: { gt: now } },
+    data: { lastSeenAt: now, idleExpiresAt: getNextIdleExpiry(session.user.role, session.absoluteExpiresAt, now) },
+  });
+  if (updated.count !== 1) return null;
+
+  return toSessionUser(session.user);
 }
 
 export async function getCurrentUser() {
   const store = await cookies();
   const token = store.get(SESSION_COOKIE)?.value;
   if (!token) return null;
-  const session = await verifySessionToken(token);
-  if (!session) return null;
-  return findSessionUser(session);
+  return findSessionUser(token);
+}
+
+export function setSessionCookie(response: { cookies: { set: (name: string, value: string, options: Record<string, unknown>) => void } }, token: string) {
+  response.cookies.set(SESSION_COOKIE, token, {
+    httpOnly: true,
+    sameSite: "lax",
+    secure: process.env.COOKIE_SECURE === "true",
+    path: "/",
+  });
+}
+
+export function clearSessionCookie(response: { cookies: { set: (name: string, value: string, options: Record<string, unknown>) => void } }) {
+  response.cookies.set(SESSION_COOKIE, "", {
+    httpOnly: true,
+    sameSite: "lax",
+    secure: process.env.COOKIE_SECURE === "true",
+    path: "/",
+    maxAge: 0,
+  });
 }

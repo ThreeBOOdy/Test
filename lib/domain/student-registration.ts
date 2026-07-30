@@ -24,7 +24,7 @@ const phoneSchema = z
   .refine(validateMainlandPhone, "请输入有效的中国大陆手机号");
 
 const passwordSchema = z.string().superRefine((password, context) => {
-  const message = validatePasswordPolicy(password);
+  const message = validatePasswordPolicy(password, "STUDENT");
   if (message) context.addIssue({ code: "custom", message });
 });
 

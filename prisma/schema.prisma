@@ -109,6 +109,7 @@ model User {
   validUntil            DateTime?                  @db.Date
   isLongTerm            Boolean                    @default(false)
   profileIncomplete     Boolean                    @default(false)
+  authSessions          AuthSession[]
   sessions              PracticeSession[]
   wrongQuestions        WrongQuestion[]
   imports               ImportBatch[]
@@ -122,6 +123,22 @@ model User {
   @@index([role, studentStatus, enabled])
   @@index([gradeId, studentStatus])
   @@index([reviewedById, reviewedAt])
+}
+
+model AuthSession {
+  id                String   @id @default(cuid())
+  tokenHash         String   @unique
+  userId            String
+  user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt         DateTime @default(now())
+  lastSeenAt        DateTime
+  idleExpiresAt     DateTime
+  absoluteExpiresAt DateTime
+  revokedAt         DateTime?
+
+  @@index([userId, revokedAt])
+  @@index([idleExpiresAt])
+  @@index([absoluteExpiresAt])
 }
 
 model Grade {
