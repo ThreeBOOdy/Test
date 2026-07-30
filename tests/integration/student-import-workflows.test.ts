@@ -4,7 +4,7 @@ import { PrismaMariaDb } from "@prisma/adapter-mariadb";
 import { PrismaClient } from "../../generated/prisma/client";
 import { assertDatabaseName } from "../../lib/domain/database-url";
 import { addCalendarYear } from "../../lib/domain/student-access";
-import { commitStudentImport, previewStudentImport, updateStudentImportRow } from "../../lib/server/student-import-service";
+import { commitStudentImport, getStudentImport, previewStudentImport, updateStudentImportRow } from "../../lib/server/student-import-service";
 import { getBusinessDate } from "../../lib/server/time";
 
 const connectionString = process.env.DATABASE_URL;
@@ -66,7 +66,10 @@ describe("student Excel import workflows", () => {
     const preview = await previewStudentImport(administrator.id, "students.xlsx", await workbookBuffer());
     expect(preview).toMatchObject({ totalRows: 2, validRows: 2, errorRows: 0 });
     expect(JSON.stringify(preview)).not.toContain("Student2026");
-    expect(await prisma.studentImportRow.count({ where: { batchId: preview.id, initialPasswordEncrypted: { not: null } } })).toBe(2);
+    const draftedRows = await prisma.studentImportRow.findMany({ where: { batchId: preview.id }, select: { initialPasswordHash: true } });
+    expect(draftedRows).toHaveLength(2);
+    expect(draftedRows.every((row) => row.initialPasswordHash?.startsWith("scrypt$"))).toBe(true);
+    expect(JSON.stringify(draftedRows)).not.toContain("Student2026");
 
     const firstRow = preview.rows[0];
     const edited = await updateStudentImportRow(administrator.id, preview.id, firstRow.id, { ...(firstRow.payload as Record<string, unknown>), username: "excel-a-edited", initialPassword: "" } as never);
@@ -80,9 +83,41 @@ describe("student Excel import workflows", () => {
     expect(students[1]).toMatchObject({ username: "excel-b", studentStatus: "ACTIVE", mustChangePassword: true, enabled: false, isLongTerm: true });
     expect(students[0].validFrom?.toISOString().slice(0, 10)).toBe(businessDate);
     expect(students[0].validUntil?.toISOString().slice(0, 10)).toBe(addCalendarYear(businessDate));
-    expect(await prisma.studentImportRow.count({ where: { batchId: preview.id, initialPasswordEncrypted: { not: null } } })).toBe(0);
+    expect(await prisma.studentImportRow.count({ where: { batchId: preview.id, initialPasswordHash: { not: null } } })).toBe(0);
   });
 
+  it("limits workbooks to ten sheets and two hundred populated rows", async () => {
+    const administrator = await prisma.user.create({ data: { username: "administrator", displayName: "管理员", passwordHash: "test", role: "ADMIN", mustChangePassword: false } });
+
+    const tooManySheets = new ExcelJS.Workbook();
+    for (let index = 1; index <= 11; index += 1) tooManySheets.addWorksheet(`工作表${index}`);
+    await expect(previewStudentImport(administrator.id, "too-many-sheets.xlsx", await tooManySheets.xlsx.writeBuffer())).rejects.toMatchObject({ status: 400 });
+    expect(await prisma.studentImportBatch.count()).toBe(0);
+
+    const tooManyRows = new ExcelJS.Workbook();
+    const sheet = tooManyRows.addWorksheet("学生");
+    sheet.addRow(["用户名", "姓名", "身份证号", "学校", "年级", "手机号", "初始密码"]);
+    for (let index = 1; index <= 201; index += 1) sheet.addRow([`student-${index}`, "测试学生", "invalid", "示例中学", "GRADE_7", "13800138000", "Student2026"]);
+    await expect(previewStudentImport(administrator.id, "too-many-rows.xlsx", await tooManyRows.xlsx.writeBuffer())).rejects.toMatchObject({ status: 400 });
+    expect(await prisma.studentImportBatch.count()).toBe(0);
+  });
+
+  it("pages preflight rows on the server with a default size of twenty", async () => {
+    const administrator = await prisma.user.create({ data: { username: "administrator", displayName: "管理员", passwordHash: "test", role: "ADMIN", mustChangePassword: false } });
+    const workbook = new ExcelJS.Workbook();
+    const sheet = workbook.addWorksheet("学生");
+    sheet.addRow(["用户名", "姓名", "身份证号", "学校", "年级", "手机号", "初始密码"]);
+    for (let index = 1; index <= 25; index += 1) sheet.addRow([`student-${index}`, "测试学生", "invalid", "示例中学", "GRADE_7", "13800138000", "Student2026"]);
+
+    const preview = await previewStudentImport(administrator.id, "paged.xlsx", await workbook.xlsx.writeBuffer());
+    expect(preview).toMatchObject({ totalRows: 25, page: 1, pageSize: 20, totalPages: 2 });
+    expect(preview.rows).toHaveLength(20);
+
+    const secondPage = await getStudentImport(administrator.id, preview.id, { page: 2 });
+    expect(secondPage).toMatchObject({ page: 2, pageSize: 20, totalPages: 2 });
+    expect(secondPage.rows).toHaveLength(5);
+    await expect(getStudentImport(administrator.id, preview.id, { pageSize: 101 })).rejects.toMatchObject({ status: 400 });
+  });
   it("refuses commit while any row is invalid and creates no partial users", async () => {
     await prisma.grade.create({ data: { code: "GRADE_7", name: "七年级" } });
     const administrator = await prisma.user.create({ data: { username: "administrator", displayName: "管理员", passwordHash: "test", role: "ADMIN", mustChangePassword: false } });

@@ -9,6 +9,9 @@ const batch = {
   totalRows: 1,
   validRows: 1,
   errorRows: 0,
+  page: 1,
+  pageSize: 20,
+  totalPages: 1,
   rows: [
     {
       id: "row-1",

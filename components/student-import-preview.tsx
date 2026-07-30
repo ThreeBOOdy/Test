@@ -20,6 +20,9 @@ type Batch = {
   totalRows: number;
   validRows: number;
   errorRows: number;
+  page: number;
+  pageSize: number;
+  totalPages: number;
   rows: ImportRow[];
 };
 
@@ -108,6 +111,22 @@ export function StudentImportPreview() {
     }
   }
 
+  async function loadPage(page: number) {
+    if (!batch) return;
+
+    setPending(true);
+    setMessage("");
+    try {
+      const response = await fetch(`/api/v1/admin/student-imports/${batch.id}?page=${page}&pageSize=${batch.pageSize}`);
+      const result = await response.json();
+      if (response.ok) setBatch(result);
+      else setMessage(result.message);
+    } catch {
+      setMessage("读取预检结果失败，请稍后重试");
+    } finally {
+      setPending(false);
+    }
+  }
   async function validateAll() {
     if (!batch) return;
     const response = await fetch(
@@ -215,6 +234,15 @@ export function StudentImportPreview() {
               </Button>
             </div>
 
+            {batch.totalPages > 1 ? (
+              <div className="mt-5 flex items-center justify-between gap-3 text-sm">
+                <span>第 {batch.page} / {batch.totalPages} 页（每页 {batch.pageSize} 条）</span>
+                <div className="flex gap-2">
+                  <Button type="button" variant="outline" disabled={pending || batch.page === 1} onClick={() => loadPage(batch.page - 1)}>上一页</Button>
+                  <Button type="button" variant="outline" disabled={pending || batch.page === batch.totalPages} onClick={() => loadPage(batch.page + 1)}>下一页</Button>
+                </div>
+              </div>
+            ) : null}
             <div className="mt-4 overflow-auto">
               <table className="w-full min-w-[1100px] text-left text-sm">
                 <thead>
@@ -280,7 +308,7 @@ export function StudentImportPreview() {
               <label className="text-sm font-semibold">学校<input aria-label="学校" value={editing.draft.school} onChange={(event) => updateDraft("school", event.target.value)} className={inputClassName} /></label>
               <label className="text-sm font-semibold">年级<input aria-label="年级" value={editing.draft.grade} onChange={(event) => updateDraft("grade", event.target.value)} className={inputClassName} /></label>
               <label className="text-sm font-semibold">手机号<input aria-label="手机号" value={editing.draft.phone} onChange={(event) => updateDraft("phone", event.target.value)} className={inputClassName} /></label>
-              <label className="text-sm font-semibold">初始密码<input aria-label="初始密码" type="password" value={editing.draft.initialPassword} onChange={(event) => updateDraft("initialPassword", event.target.value)} placeholder="留空则保留原密码" className={inputClassName} /></label>
+              <label className="text-sm font-semibold">初始密码<input aria-label="初始密码" type="password" value={editing.draft.initialPassword} onChange={(event) => updateDraft("initialPassword", event.target.value)} placeholder="留空则保留已校验密码" className={inputClassName} /></label>
               <label className="text-sm font-semibold">有效期开始<input aria-label="有效期开始" type="date" value={editing.draft.validFrom} onChange={(event) => updateDraft("validFrom", event.target.value)} className={inputClassName} /></label>
               <label className="text-sm font-semibold">有效期结束<input aria-label="有效期结束" type="date" value={editing.draft.validUntil} onChange={(event) => updateDraft("validUntil", event.target.value)} className={inputClassName} /></label>
             </div>

@@ -123,6 +123,7 @@ model User {
   imports               ImportBatch[]
   studentImports        StudentImportBatch[]
   auditLogs             AuditLog[]
+  questionRevisions QuestionRevision[]
   studentReviewRecords  StudentReviewRecord[]      @relation("StudentReviewStudent")
   authoredReviewRecords StudentReviewRecord[]      @relation("StudentReviewActor")
   createdAt             DateTime                   @default(now())
@@ -249,6 +250,7 @@ model ExamRule {
   durationMinutes Int
   passingCount    Int
   enabled         Boolean  @default(true)
+  version         Int      @default(1)
   updatedAt       DateTime @updatedAt
 
   @@unique([courseId, levelId])
@@ -264,6 +266,7 @@ model KnowledgePoint {
   depth         Int
   sortOrder     Int                     @default(0)
   enabled       Boolean                 @default(true)
+  version       Int                     @default(1)
   parentId      String?
   parent        KnowledgePoint?         @relation("KnowledgeTree", fields: [courseId, parentId], references: [courseId, id], onDelete: Restrict)
   children      KnowledgePoint[]        @relation("KnowledgeTree")
@@ -288,6 +291,7 @@ model LevelPracticeRule {
   singleCount   Int      @default(0)
   multipleCount Int      @default(0)
   enabled       Boolean  @default(true)
+  version       Int      @default(1)
   updatedAt     DateTime @updatedAt
 
   @@unique([courseId, levelId])
@@ -304,6 +308,7 @@ model KnowledgePracticeRule {
   singleCount      Int            @default(0)
   multipleCount    Int            @default(0)
   enabled          Boolean        @default(true)
+  version          Int            @default(1)
   updatedAt        DateTime       @updatedAt
 
   @@unique([courseId, knowledgePointId, levelId])
@@ -328,11 +333,13 @@ model Question {
   options              Json
   correctOptionIds     Json
   status               QuestionStatus            @default(ACTIVE)
+  version              Int                       @default(1)
   importBatchId        String?
   importBatch          ImportBatch?              @relation(fields: [courseId, importBatchId], references: [courseId, id], onDelete: Restrict)
   sessionQuestions     PracticeSessionQuestion[]
   answers              PracticeAnswer[]
   wrongQuestions       WrongQuestion[]
+  revisions            QuestionRevision[]
   createdAt            DateTime                  @default(now())
   updatedAt            DateTime                  @updatedAt
 
@@ -341,6 +348,23 @@ model Question {
   @@index([courseId, levelId, type, status])
   @@index([courseId, knowledgePointId, levelId, type, status])
   @@index([courseId, externalQuestionCode])
+}
+
+model QuestionRevision {
+  id            String   @id @default(cuid())
+  courseId      String   @default("course-radio")
+  questionId    String
+  question      Question @relation(fields: [courseId, questionId], references: [courseId, id], onDelete: Cascade)
+  revision      Int
+  snapshot      Json
+  changeSource  String
+  actorUserId   String?
+  actor         User?    @relation(fields: [actorUserId], references: [id], onDelete: SetNull)
+  createdAt     DateTime @default(now())
+
+  @@unique([courseId, questionId, revision])
+  @@index([courseId, questionId, createdAt])
+  @@index([actorUserId, createdAt])
 }
 
 model PracticeSession {
@@ -487,7 +511,7 @@ model StudentImportRow {
   sheetName                String
   sourceRowNumber          Int
   payload                  Json
-  initialPasswordEncrypted String?            @db.Text
+  initialPasswordHash      String?            @db.Text
   issues                   Json
   valid                    Boolean
   createdAt                DateTime           @default(now())

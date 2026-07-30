@@ -47,6 +47,9 @@ describe("MySQL project configuration", () => {
     expect(migration).toContain("CREATE TABLE `StudentImportRow`");
     expect(migration).toContain("ENUM('PREVIEW', 'COMMITTED', 'FAILED', 'EXPIRED')");
     expect(migration).toContain("`initialPasswordEncrypted` TEXT NULL");
+    const hardeningMigration = fs.readFileSync(path.resolve("prisma/migrations/20260730120000_student_import_preflight_hardening/migration.sql"), "utf8");
+    expect(hardeningMigration).toContain("DROP COLUMN `initialPasswordEncrypted`");
+    expect(hardeningMigration).toContain("ADD COLUMN `initialPasswordHash` TEXT NULL");
     expect(migration).toContain("UNIQUE INDEX `StudentImportRow_batchId_sheetName_sourceRowNumber_key`");
     expect(migration).toContain("ON DELETE CASCADE");
     expect(migration).not.toMatch(/FOREIGN KEY \(`.*`\) REFERENCES `User`\(`id`\) ON DELETE CASCADE/);
@@ -115,6 +118,16 @@ describe("MySQL project configuration", () => {
     expect(migration).toContain("'radio-person-120', 'radio-120'");
     expect(migration).toContain("ADD COLUMN `realName`");
     expect(migration).toContain("ADD COLUMN `radioPersonId`");
+  });
+  it("adds versioned question revisions without discarding existing questions", () => {
+    const migration = fs.readFileSync(path.resolve("prisma/migrations/20260730180000_question_revisions_and_concurrency/migration.sql"), "utf8");
+
+    expect(migration).toContain("CREATE TABLE `QuestionRevision`");
+    expect(migration).toContain("ADD COLUMN `version` INTEGER NOT NULL DEFAULT 1");
+    expect(migration).toContain("QuestionRevision_courseId_questionId_revision_key");
+    expect(migration).toContain("MIGRATION_BACKFILL");
+    expect(migration).toContain("FOREIGN KEY (`courseId`, `questionId`) REFERENCES `Question`");
+    expect(migration).not.toMatch(/DELETE FROM `Question`|DROP TABLE `Question`/);
   });
   it("uses MySQL-native aggregate and duration SQL", () => {
     const reportsPage = fs.readFileSync(path.resolve("app/teacher/reports/page.tsx"), "utf8");
