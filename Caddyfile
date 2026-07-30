@@ -1,12 +1,25 @@
-{$APP_DOMAIN} {
-  encode zstd gzip
-  reverse_proxy app:3000
-  header {
-    Strict-Transport-Security "max-age=31536000; includeSubDomains"
-    -Server
-  }
-  log {
-    output stdout
-    format json
-  }
+http://{$APP_BIND_IP} {
+	@unauthorized not remote_ip {$APP_ALLOWED_CIDRS}
+	route {
+		respond @unauthorized "Forbidden" 403
+		redir https://{$APP_BIND_IP}{uri} permanent
+	}
+}
+
+https://{$APP_BIND_IP} {
+	tls internal
+	@unauthorized not remote_ip {$APP_ALLOWED_CIDRS}
+	encode zstd gzip
+	route {
+		respond @unauthorized "Forbidden" 403
+		reverse_proxy app:3000
+	}
+	header {
+		Strict-Transport-Security "max-age=31536000"
+		-Server
+	}
+	log {
+		output stdout
+		format json
+	}
 }

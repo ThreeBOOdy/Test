@@ -10,11 +10,24 @@ services:
       MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
     volumes:
       - practice-mysql:/var/lib/mysql
+    networks:
+      - backend
     healthcheck:
       test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -u root -p$$MYSQL_ROOT_PASSWORD --silent"]
       interval: 5s
       timeout: 5s
       retries: 30
+
+  lan-config:
+    build:
+      context: .
+      target: builder
+    environment:
+      APP_BIND_IP: ${APP_BIND_IP:?APP_BIND_IP must be set}
+      APP_ALLOWED_CIDRS: ${APP_ALLOWED_CIDRS:?APP_ALLOWED_CIDRS must be set}
+    command: ["npx", "tsx", "scripts/validate-lan-config.ts"]
+    network_mode: none
+    restart: "no"
 
   migrate:
     build:
@@ -26,6 +39,10 @@ services:
     depends_on:
       db:
         condition: service_healthy
+      lan-config:
+        condition: service_completed_successfully
+    networks:
+      - backend
     restart: "no"
 
   app:
@@ -43,6 +60,9 @@ services:
     depends_on:
       migrate:
         condition: service_completed_successfully
+    networks:
+      - frontend
+      - backend
     healthcheck:
       test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/api/health/ready').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"]
       interval: 15s
@@ -53,10 +73,11 @@ services:
     image: public.ecr.aws/docker/library/caddy:2-alpine
     restart: unless-stopped
     environment:
-      APP_DOMAIN: ${APP_DOMAIN}
+      APP_BIND_IP: ${APP_BIND_IP:?APP_BIND_IP must be set}
+      APP_ALLOWED_CIDRS: ${APP_ALLOWED_CIDRS:?APP_ALLOWED_CIDRS must be set}
     ports:
-      - "80:80"
-      - "443:443"
+      - "${APP_BIND_IP:?APP_BIND_IP must be set}:80:80"
+      - "${APP_BIND_IP:?APP_BIND_IP must be set}:443:443"
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy-data:/data
@@ -64,8 +85,17 @@ services:
     depends_on:
       app:
         condition: service_healthy
+    networks:
+      - frontend
 
 volumes:
   practice-mysql:
   caddy-data:
   caddy-config:
+
+networks:
+  frontend:
+    driver: bridge
+  backend:
+    driver: bridge
+    internal: true

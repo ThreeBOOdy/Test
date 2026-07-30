@@ -283,7 +283,8 @@ Copy-Item .env.example .env
 | `COOKIE_SECURE` | `false` | 本地 HTTP 为 `false`，正式 HTTPS 为 `true` |
 | `MYSQL_PASSWORD` | 高熵随机密码 | 生产 MySQL 应用账号密码；保持原始值，不做 URL 编码 |
 | `MYSQL_ROOT_PASSWORD` | 独立高熵随机密码 | 生产 MySQL root 密码，仅用于容器初始化与健康检查 |
-| `APP_DOMAIN` | `practice.example.com` | Caddy 申请 HTTPS 证书使用的公网域名 |
+| `APP_BIND_IP` | `192.168.50.10` | 生产服务器固定教室内网 IPv4；缺少或不是 RFC1918 地址时拒绝启动 |
+| `APP_ALLOWED_CIDRS` | `192.168.50.0/24` | 允许访问应用的私有教室网段；多个 CIDR 使用空格分隔 |
 
 PowerShell 生成随机 `AUTH_SECRET`：
 
@@ -385,7 +386,8 @@ DATABASE_URL="mysql://practice:URL编码后的MYSQL_PASSWORD@db:3306/practice"
 MYSQL_PASSWORD="数据库应用账号原始密码"
 MYSQL_ROOT_PASSWORD="独立的MySQL管理员密码"
 AUTH_SECRET="至少32字符的随机字符串"
-APP_DOMAIN="practice.example.com"
+APP_BIND_IP="192.168.50.10"
+APP_ALLOWED_CIDRS="192.168.50.0/24"
 ```
 
 注意生产 `DATABASE_URL` 的主机名必须为 `db`，其中的密码需要 URL 编码；`MYSQL_PASSWORD` 保持原始值。真实 `.env` 不得提交到 GitHub。
@@ -396,7 +398,7 @@ APP_DOMAIN="practice.example.com"
 docker compose -f docker-compose.prod.yml up -d --build
 ```
 
-Compose 会自动启动 MySQL 8.0.46、执行 Prisma `migrate deploy`、启动 Next.js 和 Caddy，并通过 Caddy 为 `APP_DOMAIN` 申请和续期 HTTPS 证书。MySQL 不暴露宿主机端口，正式数据保存在 `practice-mysql` Docker Volume 中。
+Compose 会自动启动 MySQL 8.0.46、执行 Prisma `migrate deploy`、启动 Next.js 和 Caddy。Caddy 只绑定 `APP_BIND_IP`，使用内部 CA 为该 IP 提供 HTTPS，并拒绝 `APP_ALLOWED_CIDRS` 之外的来源。MySQL 不发布宿主机端口，且位于代理无法加入的内部 Docker 网络。完整部署、证书、防火墙与验收流程见 `docs/operations/lan-https-deployment.md`。
 
 查看状态和日志：
 
@@ -676,14 +678,14 @@ GitHub Actions 使用 MySQL 8.0.46 服务容器，并为集成测试和端到端
 
 ## 生产部署
 
-生产环境使用独立 Compose 文件，并通过 Caddy 自动申请和续期 HTTPS 证书：
+生产环境使用独立 Compose 文件，只允许通过固定教室内网 IPv4 和 Caddy 内部 CA HTTPS 访问：
 
 ```powershell
 Copy-Item .env.example .env
 docker compose -f docker-compose.prod.yml up -d --build
 ```
 
-生产环境必须设置完整且密码已 URL 编码的 `DATABASE_URL`、随机的 `MYSQL_PASSWORD` 与 `MYSQL_ROOT_PASSWORD`、至少 32 字符的 `AUTH_SECRET`、真实 `APP_DOMAIN`，以及两个不同的学生敏感数据密钥。`APP_TIME_ZONE` 未设置时默认使用 `Asia/Taipei`。数据库不暴露宿主机端口，应用会在迁移任务成功后启动。
+生产环境必须设置完整且密码已 URL 编码的 `DATABASE_URL`、随机的 `MYSQL_PASSWORD` 与 `MYSQL_ROOT_PASSWORD`、至少 32 字符的 `AUTH_SECRET`、固定的 `APP_BIND_IP`、批准的 `APP_ALLOWED_CIDRS`，以及两个不同的学生敏感数据密钥。`APP_TIME_ZONE` 未设置时默认使用 `Asia/Taipei`。数据库不暴露宿主机端口，应用会在网络配置校验和迁移任务成功后启动。详细步骤见 `docs/operations/lan-https-deployment.md`。
 
 `STUDENT_DATA_ENCRYPTION_KEY` 与 `STUDENT_DATA_HASH_KEY` 都必须是精确 32 个随机字节的 Base64 编码，并分别生成。可在 PowerShell 中运行以下函数两次，将两次输出分别写入 `.env`；不要将密钥打印到应用日志或提交到版本库：
 

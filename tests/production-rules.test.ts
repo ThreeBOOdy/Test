@@ -7,6 +7,7 @@ import { ApiError, mapPublicError } from "../lib/domain/api-error";
 import { assertRequestBodySize, readJsonBody } from "../lib/domain/request-body";
 import { normalizePagination } from "../lib/server/pagination";
 import { register } from "../instrumentation";
+import { validateLanDeploymentConfig } from "../lib/domain/lan-deployment";
 
 const root = path.resolve(__dirname, "..");
 
@@ -119,5 +120,92 @@ describe("production startup", () => {
 
     expect(compose).toContain("STUDENT_DATA_ENCRYPTION_KEY: ${STUDENT_DATA_ENCRYPTION_KEY}");
     expect(compose).toContain("STUDENT_DATA_HASH_KEY: ${STUDENT_DATA_HASH_KEY}");
+  });
+});
+
+describe("LAN HTTPS deployment boundary", () => {
+  it("accepts only explicit private IPv4 deployment boundaries", () => {
+    expect(validateLanDeploymentConfig("192.168.50.10", "192.168.50.0/24")).toEqual({ bindIp: "192.168.50.10", allowedCidrs: ["192.168.50.0/24"] });
+    expect(validateLanDeploymentConfig("10.20.30.40", "10.20.0.0/16 10.30.0.0/16")).toEqual({ bindIp: "10.20.30.40", allowedCidrs: ["10.20.0.0/16", "10.30.0.0/16"] });
+
+    expect(() => validateLanDeploymentConfig("0.0.0.0", "0.0.0.0/0")).toThrow("APP_BIND_IP must be a private IPv4 address");
+    expect(() => validateLanDeploymentConfig("127.0.0.1", "127.0.0.0/8")).toThrow("APP_BIND_IP must be a private IPv4 address");
+    expect(() => validateLanDeploymentConfig("203.0.113.10", "203.0.113.0/24")).toThrow("APP_BIND_IP must be a private IPv4 address");
+    expect(() => validateLanDeploymentConfig("192.168.50.10", "0.0.0.0/0")).toThrow("APP_ALLOWED_CIDRS must contain only private IPv4 CIDRs");
+    expect(() => validateLanDeploymentConfig("192.168.50.10", "10.0.0.0/8")).toThrow("APP_BIND_IP must belong to APP_ALLOWED_CIDRS");
+  });
+
+  it("requires an explicit LAN IP and only publishes Caddy on that address", () => {
+    const compose = fs.readFileSync(path.join(root, "docker-compose.prod.yml"), "utf8");
+    const envExample = fs.readFileSync(path.join(root, ".env.example"), "utf8");
+
+    expect(envExample).toContain('APP_BIND_IP="192.168.50.10"');
+    expect(envExample).toContain('APP_ALLOWED_CIDRS="192.168.50.0/24"');
+    expect(envExample).not.toContain("APP_DOMAIN=");
+    expect(compose).toContain('${APP_BIND_IP:?APP_BIND_IP must be set}:80:80');
+    expect(compose).toContain('${APP_BIND_IP:?APP_BIND_IP must be set}:443:443');
+    expect(compose).not.toMatch(/^\s+-\s+"?(80|443):\1"?\s*$/m);
+    expect(compose).toContain('command: ["npx", "tsx", "scripts/validate-lan-config.ts"]');
+    expect(compose).toMatch(/migrate:[\s\S]*?lan-config:\s*\r?\n\s+condition: service_completed_successfully/);
+  });
+
+  it("uses Caddy internal CA and rejects clients outside approved CIDRs", () => {
+    const caddyfile = fs.readFileSync(path.join(root, "Caddyfile"), "utf8");
+
+    expect(caddyfile).toContain("http://{$APP_BIND_IP}");
+    expect(caddyfile).toContain("redir https://{$APP_BIND_IP}{uri} permanent");
+    expect(caddyfile).toContain("https://{$APP_BIND_IP}");
+    expect(caddyfile).toContain("tls internal");
+    expect(caddyfile).toContain("not remote_ip {$APP_ALLOWED_CIDRS}");
+    expect(caddyfile).toContain('respond @unauthorized "Forbidden" 403');
+  });
+
+  it("keeps MySQL private and separates proxy and database networks", () => {
+    const compose = fs.readFileSync(path.join(root, "docker-compose.prod.yml"), "utf8");
+    const databaseService = compose.slice(compose.indexOf("  db:"), compose.indexOf("\n  migrate:"));
+    const proxyService = compose.slice(compose.indexOf("  proxy:"), compose.indexOf("\nvolumes:"));
+
+    expect(databaseService).not.toContain("ports:");
+    expect(compose).toMatch(/backend:\r?\n\s+driver: bridge\r?\n\s+internal: true/);
+    expect(proxyService).toMatch(/networks:\s*\r?\n\s*- frontend/);
+    expect(proxyService).not.toContain("- backend");
+  });
+
+  it("ships certificate, firewall, and acceptance automation", () => {
+    for (const script of ["export-internal-ca.ps1", "install-internal-ca.ps1", "configure-lan-firewall.ps1", "new-public-boundary-record.ps1", "test-lan-deployment.ps1"]) {
+      expect(fs.existsSync(path.join(root, "scripts", script)), `${script} should exist`).toBe(true);
+    }
+
+    const firewallScript = fs.readFileSync(path.join(root, "scripts", "configure-lan-firewall.ps1"), "utf8");
+    const installScript = fs.readFileSync(path.join(root, "scripts", "install-internal-ca.ps1"), "utf8");
+    const exportScript = fs.readFileSync(path.join(root, "scripts", "export-internal-ca.ps1"), "utf8");
+    const publicBoundaryScript = fs.readFileSync(path.join(root, "scripts", "new-public-boundary-record.ps1"), "utf8");
+    const acceptanceScript = fs.readFileSync(path.join(root, "scripts", "test-lan-deployment.ps1"), "utf8");
+    expect(firewallScript).toContain("AllowedRemoteAddress must contain only private IPv4 CIDRs");
+    expect(firewallScript).toContain("Every Windows Firewall profile must be enabled");
+    expect(firewallScript).toContain("ValidateOnly");
+    expect(firewallScript).toContain("Test-IPv4InCidr");
+    expect(firewallScript).toContain("The HTTPS firewall rule does not match the approved LAN boundary");
+    expect(firewallScript).toContain("firewall-audit.json");
+    expect(installScript).toContain("ExpectedSha256Fingerprint");
+    expect(installScript).toContain("The CA certificate SHA-256 fingerprint does not match the trusted value");
+    expect(installScript).toContain("Remove the verified previous Caddy internal CA certificate");
+    expect(exportScript).toContain("SHA-256 fingerprint");
+    expect(publicBoundaryScript).toContain("globally routable public IPv4 address");
+    expect(publicBoundaryScript).toContain("Public boundary record SHA-256");
+    expect(acceptanceScript).toContain('ParameterSetName = "Public"');
+    expect(acceptanceScript).toContain("Test-GloballyRoutablePublicIPv4");
+    expect(acceptanceScript).toMatch(/if \(-not \(Test-GloballyRoutablePublicIPv4 \$PublicTarget\)\)[\s\S]*?Test-PublicBoundaryRecord/);
+    expect(acceptanceScript).toContain("Public TCP $port is unreachable");
+    expect(acceptanceScript).toContain("FirewallEvidencePath");
+    expect(acceptanceScript).toContain("ExpectedFirewallEvidenceSha256");
+    expect(acceptanceScript).toContain("Test-FirewallEvidence");
+    expect(acceptanceScript).toContain("PublicBoundaryRecordPath");
+    expect(acceptanceScript).toContain("ConnectivityControlHost");
+
+    const acceptance = fs.readFileSync(path.join(root, "docs", "operations", "lan-https-acceptance.md"), "utf8");
+    expect(acceptance).toContain("受管设备无证书警告");
+    expect(acceptance).toContain("未授权网段");
+    expect(acceptance).toContain("3306");
   });
 });
