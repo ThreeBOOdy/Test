@@ -38,14 +38,14 @@ describe("teacher account service", () => {
     for (const mock of Object.values(mocks)) mock.mockReset();
     mocks.transaction.mockImplementation((callback) => callback(tx));
     mocks.userFindUnique.mockResolvedValue(null);
-    mocks.userCreate.mockResolvedValue({ id: "teacher-1", username: "radio.teacher", displayName: "张老师", enabled: true });
+    mocks.userCreate.mockResolvedValue({ id: "teacher-1", username: "radio.teacher", displayName: "张老师", enabled: true, mustChangePassword: true, createdAt: new Date("2026-07-30T00:00:00.000Z") });
     mocks.userUpdateMany.mockResolvedValue({ count: 1 });
   });
 
   it("creates an immutable teacher username with a one-time staff-grade password", async () => {
     const result = await createTeacherAccount("admin-1", { username: "radio.teacher", displayName: " 张老师 " });
 
-    expect(result.teacher).toEqual({ id: "teacher-1", username: "radio.teacher", displayName: "张老师", enabled: true });
+    expect(result.teacher).toEqual({ id: "teacher-1", username: "radio.teacher", displayName: "张老师", enabled: true, mustChangePassword: true, createdAt: new Date("2026-07-30T00:00:00.000Z") });
     expect(result.temporaryPassword).toHaveLength(24);
     expect(mocks.hashPassword).toHaveBeenCalledWith(result.temporaryPassword);
     expect(mocks.userCreate).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ username: "radio.teacher", displayName: "张老师", role: "TEACHER", mustChangePassword: true, passwordHash: `hash:${result.temporaryPassword}` }) }));

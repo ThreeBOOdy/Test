@@ -30,7 +30,7 @@ export async function createTeacherAccount(administratorId: string, rawInput: un
     if (existing) throw new ApiError("用户名已存在", 409);
     const created = await tx.user.create({
       data: { username: input.username, displayName: input.displayName, passwordHash: hashPassword(temporaryPassword), role: "TEACHER", mustChangePassword: true },
-      select: { id: true, username: true, displayName: true, enabled: true },
+      select: { id: true, username: true, displayName: true, enabled: true, mustChangePassword: true, createdAt: true },
     });
     await tx.auditLog.create({ data: { actorUserId: administratorId, action: "TEACHER_ACCOUNT_CREATE", targetType: "User", targetId: created.id, metadata: { username: created.username, displayName: created.displayName } } });
     return created;
