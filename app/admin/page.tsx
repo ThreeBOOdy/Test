@@ -9,6 +9,7 @@ const administratorActions = [
   { href: "/admin/teachers", label: "教师账号", description: "创建、停用与重置教师账号", icon: UserRoundCog },
   { href: "/admin/student-import", label: "学生导入", description: "通过 Excel 批量创建并直接启用账号", icon: FileSpreadsheet },
   { href: "/admin/grades", label: "年级配置", description: "维护学生注册和导入可选年级", icon: School },
+  { href: "/admin/radio-people", label: "人物身份目录", description: "维护学生可选的无线电人物身份", icon: UsersRound },
 ];
 
 export default function AdminPage() {

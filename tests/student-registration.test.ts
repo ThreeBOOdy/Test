@@ -11,11 +11,12 @@ import {
 } from "@/lib/domain/student-registration";
 
 const validRegistration = {
-  displayName: " 张三 ",
+  realName: " 张三 ",
   nationalId: "11010519491231002x",
   school: " 示例中学 ",
   gradeId: "grade-7",
   phone: " 138 0013 8000 ",
+  radioPersonId: "radio-person-001",
   password: "student2026",
   confirmPassword: "student2026",
   truthAndPrivacyAccepted: true,
@@ -26,8 +27,7 @@ describe("student registration domain contracts", () => {
     const result = publicRegistrationSchema.parse(validRegistration);
 
     expect(result).toMatchObject({
-      username: "张三",
-      displayName: "张三",
+      realName: "张三",
       nationalId: "11010519491231002X",
       gender: "FEMALE",
       school: "示例中学",
@@ -39,20 +39,21 @@ describe("student registration domain contracts", () => {
     });
   });
 
-  it("uses the trimmed student name as the username and rejects a separate username field", () => {
-    expect(publicRegistrationSchema.parse({ ...validRegistration, displayName: " 李四 " }).username).toBe("李四");
+  it("requires a catalog identity and rejects caller-supplied usernames", () => {
+    expect(publicRegistrationSchema.parse({ ...validRegistration, realName: " 李四 " }).realName).toBe("李四");
+    expect(publicRegistrationSchema.safeParse({ ...validRegistration, radioPersonId: "" }).success).toBe(false);
     expect(publicRegistrationSchema.safeParse({ ...validRegistration, username: "separate-account" }).success).toBe(false);
   });
 
   it("requires non-empty trimmed name and school", () => {
-    expect(publicRegistrationSchema.safeParse({ ...validRegistration, displayName: "   " }).success).toBe(false);
+    expect(publicRegistrationSchema.safeParse({ ...validRegistration, realName: "   " }).success).toBe(false);
     expect(publicRegistrationSchema.safeParse({ ...validRegistration, school: "   " }).success).toBe(false);
   });
 
   it("requires gradeId for an enabled grade selected by the caller", () => {
     expect(publicRegistrationSchema.safeParse({ ...validRegistration, gradeId: "" }).success).toBe(false);
     expect(registrationProfileUpdateSchema.safeParse({
-      displayName: "张三",
+      realName: "张三",
       nationalId: "11010519491231002X",
       school: "示例中学",
       gradeId: "   ",

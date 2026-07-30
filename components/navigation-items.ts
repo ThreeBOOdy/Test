@@ -26,4 +26,5 @@ export const administratorNavigation: NavigationItem[] = [
   { href: "/admin/teachers", label: "教师账号", icon: UserRoundCog },
   { href: "/admin/student-import", label: "学生导入", icon: FileSpreadsheet },
   { href: "/admin/grades", label: "年级配置", icon: School },
+  { href: "/admin/radio-people", label: "人物身份目录", icon: UsersRound },
 ];

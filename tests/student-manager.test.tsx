@@ -7,6 +7,7 @@ const student = {
   id: "student-1",
   username: "student-one",
   displayName: "原姓名",
+  realName: "原姓名",
   gender: "MALE",
   school: "原学校",
   grade: { name: "七年级" },
@@ -36,8 +37,8 @@ describe("student account manager", () => {
 
     await user.click(screen.getByRole("button", { name: "编辑" }));
     expect(await screen.findByRole("heading", { name: "编辑学生账号" })).toBeInTheDocument();
-    await user.clear(screen.getByLabelText("姓名"));
-    await user.type(screen.getByLabelText("姓名"), "新姓名");
+    await user.clear(screen.getByLabelText("真实姓名"));
+    await user.type(screen.getByLabelText("真实姓名"), "新姓名");
     await user.clear(screen.getByLabelText("学校"));
     await user.type(screen.getByLabelText("学校"), "新学校");
     await user.selectOptions(screen.getByLabelText("年级"), "grade-junior-2");

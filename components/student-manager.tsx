@@ -8,6 +8,7 @@ type Row = {
   id: string;
   username: string;
   displayName: string;
+  realName: string;
   gender: string | null;
   school: string | null;
   grade: { name: string } | null;
@@ -42,7 +43,7 @@ export function StudentManager({ students }: { students: Row[] }) {
   const [form, setForm] = useState<EditForm | null>(null);
   const [grades, setGrades] = useState<Grade[]>([]);
   const [saving, setSaving] = useState(false);
-  const filtered = useMemo(() => rows.filter((row) => `${row.username} ${row.displayName} ${row.school ?? ""}`.toLowerCase().includes(search.toLowerCase())), [rows, search]);
+  const filtered = useMemo(() => rows.filter((row) => `${row.username} ${row.realName} ${row.school ?? ""}`.toLowerCase().includes(search.toLowerCase())), [rows, search]);
 
   async function edit(row: Row) {
     setMessage("");
@@ -88,6 +89,7 @@ export function StudentManager({ students }: { students: Row[] }) {
       const grade = grades.find((item) => item.id === form.gradeId) ?? null;
       setRows((current) => current.map((item) => item.id === editing.id ? {
         ...item,
+        realName: form.displayName,
         displayName: form.displayName,
         school: form.school,
         grade: grade ? { name: grade.name } : null,
@@ -118,9 +120,9 @@ export function StudentManager({ students }: { students: Row[] }) {
     <div className="flex flex-wrap gap-3"><input aria-label="搜索学生" value={search} onChange={(event) => setSearch(event.target.value)} className={inputClass} placeholder="用户名、姓名或学校" /></div>
     {message ? <div className="mt-4 rounded-xl bg-[var(--surface-soft)] p-3 text-sm">{message}</div> : null}
     {editing && form ? <Card className="mt-5"><CardContent><form onSubmit={save}>
-      <div className="flex items-center justify-between gap-4"><div><h2 className="text-lg font-extrabold">编辑学生账号</h2><p className="mt-1 text-sm text-[var(--muted-foreground)]">账号：{editing.username}</p></div><Button type="button" variant="outline" onClick={() => { setEditing(null); setForm(null); }}>取消</Button></div>
+      <div className="flex items-center justify-between gap-4"><div><h2 className="text-lg font-extrabold">编辑学生账号</h2><p className="mt-1 text-sm text-[var(--muted-foreground)]">人物用户名（不可修改）：{editing.username}</p></div><Button type="button" variant="outline" onClick={() => { setEditing(null); setForm(null); }}>取消</Button></div>
       <div className="mt-5 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-        <Field label="姓名"><input aria-label="姓名" value={form.displayName} onChange={(event) => update("displayName", event.target.value)} className={inputClass} required /></Field>
+        <Field label="真实姓名"><input aria-label="真实姓名" value={form.displayName} onChange={(event) => update("displayName", event.target.value)} className={inputClass} required /></Field>
         <Field label="身份证号"><input aria-label="身份证号" value={form.nationalId} onChange={(event) => update("nationalId", event.target.value)} className={inputClass} required /></Field>
         <Field label="手机号"><input aria-label="手机号" value={form.phone} onChange={(event) => update("phone", event.target.value)} className={inputClass} required /></Field>
         <Field label="学校"><input aria-label="学校" value={form.school} onChange={(event) => update("school", event.target.value)} className={inputClass} required /></Field>
@@ -132,7 +134,7 @@ export function StudentManager({ students }: { students: Row[] }) {
       </div>
       <div className="mt-5 flex justify-end"><Button type="submit" disabled={saving}>{saving ? "正在保存…" : "保存账号"}</Button></div>
     </form></CardContent></Card> : null}
-    <Card className="mt-5"><CardContent className="overflow-auto"><table className="responsive-data-table min-w-[1150px] w-full text-left text-sm"><thead><tr>{["用户名", "姓名", "性别", "学校/年级", "身份证", "手机号", "来源", "状态", "有效期", "操作"].map((item) => <th key={item} className="px-3 py-3 text-xs">{item}</th>)}</tr></thead><tbody>{filtered.map((row) => <tr key={row.id} className="border-t border-[var(--border)]"><StudentCell label="用户名">{row.username}</StudentCell><StudentCell label="姓名">{row.displayName}</StudentCell><StudentCell label="性别">{row.gender === "MALE" ? "男" : row.gender === "FEMALE" ? "女" : "—"}</StudentCell><StudentCell label="学校/年级">{row.school} · {row.grade?.name}</StudentCell><StudentCell label="身份证">{row.nationalIdMasked}</StudentCell><StudentCell label="手机号">{row.phoneMasked}</StudentCell><StudentCell label="来源">{row.registrationSource}</StudentCell><StudentCell label="状态">{row.enabled ? row.studentStatus : "已停用"}</StudentCell><StudentCell label="有效期">{row.isLongTerm ? "长期" : `${row.validFrom ?? "—"} 至 ${row.validUntil ?? "—"}`}</StudentCell><StudentCell label="操作" actions><div className="flex flex-wrap gap-2"><Button size="sm" onClick={() => edit(row)}>编辑</Button><Button size="sm" variant="outline" onClick={() => reset(row)}>重置密码</Button></div></StudentCell></tr>)}</tbody></table></CardContent></Card>
+    <Card className="mt-5"><CardContent className="overflow-auto"><table className="responsive-data-table min-w-[1150px] w-full text-left text-sm"><thead><tr>{["人物用户名", "真实姓名", "性别", "学校/年级", "身份证", "手机号", "来源", "状态", "有效期", "操作"].map((item) => <th key={item} className="px-3 py-3 text-xs">{item}</th>)}</tr></thead><tbody>{filtered.map((row) => <tr key={row.id} className="border-t border-[var(--border)]"><StudentCell label="人物用户名">{row.username}</StudentCell><StudentCell label="真实姓名">{row.realName}</StudentCell><StudentCell label="性别">{row.gender === "MALE" ? "男" : row.gender === "FEMALE" ? "女" : "—"}</StudentCell><StudentCell label="学校/年级">{row.school} · {row.grade?.name}</StudentCell><StudentCell label="身份证">{row.nationalIdMasked}</StudentCell><StudentCell label="手机号">{row.phoneMasked}</StudentCell><StudentCell label="来源">{row.registrationSource}</StudentCell><StudentCell label="状态">{row.enabled ? row.studentStatus : "已停用"}</StudentCell><StudentCell label="有效期">{row.isLongTerm ? "长期" : `${row.validFrom ?? "—"} 至 ${row.validUntil ?? "—"}`}</StudentCell><StudentCell label="操作" actions><div className="flex flex-wrap gap-2"><Button size="sm" onClick={() => edit(row)}>编辑</Button><Button size="sm" variant="outline" onClick={() => reset(row)}>重置密码</Button></div></StudentCell></tr>)}</tbody></table></CardContent></Card>
   </>;
 }
 

@@ -5,6 +5,7 @@ import { RegistrationStatus, type RegistrationStatusData } from "@/components/re
 
 const pending: RegistrationStatusData = {
   username: "student-7",
+  realName: "周同学",
   displayName: "周同学",
   nationalIdMasked: "110***********1234",
   gender: "MALE",
@@ -35,7 +36,8 @@ describe("registration status", () => {
     const user = userEvent.setup();
     vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(JSON.stringify({
       username: "student-7",
-      displayName: "周同学",
+      realName: "周同学",
+  displayName: "周同学",
       nationalId: "11010519491231002X",
       gender: "FEMALE",
       school: "第一中学",

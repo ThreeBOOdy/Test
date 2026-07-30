@@ -40,7 +40,12 @@ const isoDateSchema = z.string().refine(isStrictIsoDate, "日期必须是有效�
 
 export const publicRegistrationSchema = z
   .object({
-    ...studentProfileFields,
+    realName: displayNameSchema,
+    nationalId: nationalIdSchema,
+    school: schoolSchema,
+    gradeId: gradeIdSchema,
+    phone: phoneSchema,
+    radioPersonId: z.string().trim().min(1, "请选择人物身份").max(191, "人物标识过长"),
     password: passwordSchema,
     confirmPassword: z.string(),
     truthAndPrivacyAccepted: z.literal(true, { error: "请确认信息真实性与隐私条款" }),
@@ -51,7 +56,7 @@ export const publicRegistrationSchema = z
       context.addIssue({ code: "custom", message: "两次输入的密码不一致", path: ["confirmPassword"] });
     }
   })
-  .transform((input) => ({ ...input, username: input.displayName, gender: deriveGenderFromNationalId(input.nationalId)! }));
+  .transform((input) => ({ ...input, displayName: input.realName, gender: deriveGenderFromNationalId(input.nationalId)! }));
 
 export const registrationProfileUpdateSchema = z
   .object(studentProfileFields)
@@ -91,6 +96,22 @@ export const adminStudentUpdateSchema = z
     return { ...input, gender: deriveGenderFromNationalId(input.nationalId)! };
   });
 
+const radioPersonIdentitySchema = z.object({
+  id: z.string().trim().min(1, "人物标识不能为空").max(191, "人物标识过长").regex(/^[A-Za-z0-9_.-]+$/, "人物标识只能包含字母、数字、点、下划线和连字符"),
+  username: z.string().trim().min(3, "人物用户名至少需要 3 个字符").max(50, "人物用户名不能超过 50 个字符").regex(/^[A-Za-z0-9_.-]+$/, "人物用户名只能包含字母、数字、点、下划线和连字符"),
+  name: z.string().trim().min(1, "人物名称不能为空").max(100, "人物名称不能超过 100 位"),
+  profile: z.string().trim().min(1, "人物资料不能为空").max(5000, "人物资料不能超过 5000 位"),
+});
+
+export const radioPersonCreateSchema = radioPersonIdentitySchema.extend({
+  resourceStatus: z.enum(["AVAILABLE", "UNAVAILABLE"]).default("AVAILABLE"),
+  statusNote: z.string().trim().max(500, "状态说明不能超过 500 位").nullable().optional(),
+}).strict();
+
+export const radioPersonUpdateSchema = radioPersonIdentitySchema.omit({ id: true }).extend({
+  resourceStatus: z.enum(["AVAILABLE", "UNAVAILABLE"]),
+  statusNote: z.string().trim().max(500, "状态说明不能超过 500 位").nullable().optional(),
+}).strict();
 export const gradeMutationSchema = z
   .object({
     code: z.string().trim().min(1, "年级代码不能为空").max(50, "年级代码不能超过 50 位"),

@@ -36,18 +36,18 @@ describe("application shell", () => {
     await user.click(screen.getByRole("button", { name: "打开更多导航" }));
     const dialog = screen.getByRole("dialog", { name: "教师功能导航" });
     for (const label of ["管理概览", "题库管理", "知识点目录", "抽题规则", "Excel 导入", "教学统计"]) expect(within(dialog).getByRole("link", { name: label })).toBeInTheDocument();
-    for (const label of ["注册审核", "学生账号", "学生导入", "年级配置", "学生管理"]) expect(within(dialog).queryByRole("link", { name: label })).not.toBeInTheDocument();
+    for (const label of ["注册审核", "学生账号", "学生导入", "年级配置", "人物身份目录", "学生管理"]) expect(within(dialog).queryByRole("link", { name: label })).not.toBeInTheDocument();
   });
 
   it("keeps administrator account tools out of the teacher desktop navigation", () => {
     render(<AppShellView role="teacher" currentPath="/teacher" user={{ username: "teacher", displayName: "李老师" }}><div>教学内容</div></AppShellView>);
 
-    for (const label of ["注册审核", "学生账号", "学生导入", "年级配置", "学生管理"]) expect(screen.queryByRole("link", { name: label })).not.toBeInTheDocument();
+    for (const label of ["注册审核", "学生账号", "学生导入", "年级配置", "人物身份目录", "学生管理"]) expect(screen.queryByRole("link", { name: label })).not.toBeInTheDocument();
   });
 
   it("shows only administrator account tools in the administrator console", () => {
     render(<AppShellView role="admin" currentPath="/admin" user={{ username: "admin", displayName: "系统管理员" }}><div>管理内容</div></AppShellView>);
-    for (const label of ["注册审核", "学生账号", "学生导入", "年级配置"]) expect(screen.getAllByRole("link", { name: label }).length).toBeGreaterThan(0);
+    for (const label of ["注册审核", "学生账号", "学生导入", "年级配置", "人物身份目录"]) expect(screen.getAllByRole("link", { name: label }).length).toBeGreaterThan(0);
     for (const label of ["教学控制台", "题库管理", "知识点目录", "抽题规则", "Excel 导入", "教学统计"]) expect(screen.queryByRole("link", { name: label })).not.toBeInTheDocument();
   });
 
@@ -56,7 +56,7 @@ describe("application shell", () => {
     render(<MobileNavigation role="admin" currentPath="/admin" />);
     await user.click(screen.getByRole("button", { name: "打开更多导航" }));
     const dialog = screen.getByRole("dialog", { name: "管理员功能导航" });
-    for (const label of ["注册审核", "学生账号", "学生导入", "年级配置"]) expect(within(dialog).getByRole("link", { name: label })).toBeInTheDocument();
+    for (const label of ["注册审核", "学生账号", "学生导入", "年级配置", "人物身份目录"]) expect(within(dialog).getByRole("link", { name: label })).toBeInTheDocument();
     expect(within(dialog).queryByRole("link", { name: "教学控制台" })).not.toBeInTheDocument();
   });
 

@@ -6,6 +6,7 @@ const mocks = vi.hoisted(() => ({
   userCreate: vi.fn(),
   userUpdateMany: vi.fn(),
   userFindFirst: vi.fn(),
+  radioPersonFindUnique: vi.fn(),
   auditCreate: vi.fn(),
   revokeUserSessions: vi.fn(),
   hashPassword: vi.fn((password: string) => `hash:${password}`),
@@ -15,6 +16,7 @@ const mocks = vi.hoisted(() => ({
 vi.mock("@/lib/db", () => ({
   prisma: {
     user: { findMany: mocks.userFindMany },
+    radioPerson: { findUnique: mocks.radioPersonFindUnique },
     $transaction: mocks.transaction,
   },
 }));
@@ -30,6 +32,7 @@ const tx = {
     updateMany: mocks.userUpdateMany,
     findFirst: mocks.userFindFirst,
   },
+  radioPerson: { findUnique: mocks.radioPersonFindUnique },
   auditLog: { create: mocks.auditCreate },
 };
 
@@ -38,6 +41,7 @@ describe("teacher account service", () => {
     for (const mock of Object.values(mocks)) mock.mockReset();
     mocks.transaction.mockImplementation((callback) => callback(tx));
     mocks.userFindUnique.mockResolvedValue(null);
+    mocks.radioPersonFindUnique.mockResolvedValue(null);
     mocks.userCreate.mockResolvedValue({ id: "teacher-1", username: "radio.teacher", displayName: "张老师", enabled: true, mustChangePassword: true, createdAt: new Date("2026-07-30T00:00:00.000Z") });
     mocks.userUpdateMany.mockResolvedValue({ count: 1 });
   });
@@ -52,6 +56,12 @@ describe("teacher account service", () => {
     expect(mocks.auditCreate).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ actorUserId: "admin-1", action: "TEACHER_ACCOUNT_CREATE", targetId: "teacher-1" }) }));
   });
 
+  it("reserves catalog usernames for future student identities", async () => {
+    mocks.radioPersonFindUnique.mockResolvedValue({ id: "radio-person-001" });
+
+    await expect(createTeacherAccount("admin-1", { username: "radio-001", displayName: "张老师" })).rejects.toMatchObject({ message: "用户名已保留为学生人物身份", status: 409 });
+    expect(mocks.userCreate).not.toHaveBeenCalled();
+  });
   it("rejects invalid usernames before opening a transaction", async () => {
     await expect(createTeacherAccount("admin-1", { username: "含空格", displayName: "张老师" })).rejects.toThrow("用户名只能包含");
     expect(mocks.transaction).not.toHaveBeenCalled();

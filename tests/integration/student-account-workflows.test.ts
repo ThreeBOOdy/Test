@@ -10,6 +10,7 @@ import {
   rejectRegistration,
   resubmitRegistration,
   updateRegistrationProfile,
+  updateStudentAccount,
 } from "../../lib/server/student-account-service";
 
 const connectionString = process.env.DATABASE_URL;
@@ -17,11 +18,12 @@ if (!connectionString) throw new Error("DATABASE_URL is required for integration
 const prisma = new PrismaClient({ adapter: new PrismaMariaDb(connectionString) });
 
 const profile = {
-  displayName: "张三",
+  realName: "张三",
   nationalId: "11010519491231002X",
   school: "示例中学",
   gradeId: "",
   phone: "13800138000",
+  radioPersonId: "radio-person-001",
   password: "Student2026",
   confirmPassword: "Student2026",
   truthAndPrivacyAccepted: true as const,
@@ -47,6 +49,7 @@ beforeEach(async () => {
   await deleteKnowledgePoints();
   await prisma.level.deleteMany();
   await prisma.user.deleteMany();
+  await prisma.radioPerson.deleteMany();
   await prisma.grade.deleteMany();
 });
 
@@ -60,6 +63,7 @@ async function deleteKnowledgePoints() {
 async function setup() {
   const grade = await prisma.grade.create({ data: { code: "GRADE_7", name: "七年级", sortOrder: 7 } });
   const administrator = await prisma.user.create({ data: { username: "administrator", displayName: "管理员", passwordHash: "test", role: "ADMIN", mustChangePassword: false } });
+  await prisma.radioPerson.createMany({ data: [{ id: "radio-person-001", username: "radio-001", name: "贡献者一", profile: "测试人物" }, { id: "radio-person-002", username: "radio-002", name: "贡献者二", profile: "测试人物" }] });
   return { grade, administrator };
 }
 
@@ -69,7 +73,7 @@ describe("student account workflows", () => {
     const result = await registerStudent({ ...profile, gradeId: grade.id });
     const stored = await prisma.user.findUniqueOrThrow({ where: { id: result.id } });
 
-    expect(stored).toMatchObject({ role: "STUDENT", studentStatus: "PENDING", registrationSource: "SELF_REGISTRATION", mustChangePassword: false, gradeId: grade.id });
+    expect(stored).toMatchObject({ username: "radio-001", realName: profile.realName, role: "STUDENT", studentStatus: "PENDING", registrationSource: "SELF_REGISTRATION", mustChangePassword: false, gradeId: grade.id, radioPersonId: profile.radioPersonId });
     expect(stored.nationalIdEncrypted).not.toContain(profile.nationalId);
     expect(stored.phoneEncrypted).not.toContain(profile.phone);
     expect(await getRegistrationStatus(result.id)).toMatchObject({ nationalIdMasked: expect.stringContaining("002X"), phoneMasked: "138****8000" });
@@ -79,7 +83,7 @@ describe("student account workflows", () => {
   it("rejects duplicate identity and phone values without identifying the conflicting field", async () => {
     const { grade } = await setup();
     await registerStudent({ ...profile, gradeId: grade.id });
-    await expect(registerStudent({ ...profile, displayName: "李四", gradeId: grade.id })).rejects.toMatchObject({ message: "REGISTRATION_CONFLICT", status: 409 });
+    await expect(registerStudent({ ...profile, realName: "李四", gradeId: grade.id })).rejects.toMatchObject({ message: "REGISTRATION_CONFLICT", status: 409 });
   });
 
   it("returns an explicit administrator detail DTO without stored secrets", async () => {
@@ -89,7 +93,8 @@ describe("student account workflows", () => {
 
     expect(detail).toMatchObject({
       id: student.id,
-      username: profile.displayName,
+      username: "radio-001",
+      realName: profile.realName,
       nationalId: profile.nationalId,
       phone: profile.phone,
       grade: { id: grade.id, code: "GRADE_7", name: "七年级" },
@@ -108,7 +113,8 @@ describe("student account workflows", () => {
     const rejected = await prisma.user.findUniqueOrThrow({ where: { id: student.id } });
     await updateRegistrationProfile(student.id, { displayName: "张同学", nationalId: profile.nationalId, school: "新学校", gradeId: grade.id, phone: profile.phone });
     const edited = await prisma.user.findUniqueOrThrow({ where: { id: student.id } });
-    expect(edited.username).toBe("张同学");
+    expect(edited.username).toBe("radio-001");
+    expect(edited.realName).toBe("张同学");
     expect(edited.sessionVersion).toBe(rejected.sessionVersion);
     expect((await getRegistrationStatus(student.id)).studentStatus).toBe("REJECTED");
     await resubmitRegistration(student.id);
@@ -129,5 +135,31 @@ describe("student account workflows", () => {
     expect(after.validFrom?.toISOString().slice(0, 10)).toBe("2026-07-26");
     expect(after.validUntil?.toISOString().slice(0, 10)).toBe("2027-07-26");
     await expect(approveRegistration(administrator.id, student.id, {}, "2026-07-26")).rejects.toMatchObject({ message: "STALE_ACCOUNT_STATE", status: 409 });
+  });
+  it("allows only one concurrent registration to reserve a person", async () => {
+    const { grade } = await setup();
+    const attempts = await Promise.allSettled([
+      registerStudent({ ...profile, gradeId: grade.id }),
+      registerStudent({ ...profile, realName: "李四", nationalId: "110105194912310038", phone: "13900139000", gradeId: grade.id }),
+    ]);
+
+    expect(attempts.filter((attempt) => attempt.status === "fulfilled")).toHaveLength(1);
+    const rejected = attempts.find((attempt): attempt is PromiseRejectedResult => attempt.status === "rejected");
+    expect(rejected?.reason).toMatchObject({ message: "RADIO_PERSON_UNAVAILABLE", status: 409 });
+    expect(await prisma.user.count({ where: { radioPersonId: profile.radioPersonId } })).toBe(1);
+  });
+
+  it("keeps the confirmed person bound through rejection, deactivation, expiry, and administrator updates", async () => {
+    const { grade, administrator } = await setup();
+    const student = await registerStudent({ ...profile, gradeId: grade.id });
+    await rejectRegistration(administrator.id, student.id, { reason: "需要补充资料" });
+    await updateStudentAccount(administrator.id, student.id, { enabled: false });
+    await updateStudentAccount(administrator.id, student.id, { enabled: true, validFrom: "2026-07-30", validUntil: "2026-07-31", isLongTerm: false });
+
+    const stored = await prisma.user.findUniqueOrThrow({ where: { id: student.id } });
+    expect(stored).toMatchObject({ username: "radio-001", radioPersonId: "radio-person-001", studentStatus: "REJECTED" });
+    await expect(registerStudent({ ...profile, realName: "王五", nationalId: "110105194912310046", phone: "13700137000", gradeId: grade.id })).rejects.toMatchObject({ message: "RADIO_PERSON_UNAVAILABLE", status: 409 });
+    await expect(updateStudentAccount(administrator.id, student.id, { radioPersonId: "radio-person-002" })).rejects.toMatchObject({ status: 400 });
+    await expect(updateStudentAccount(administrator.id, student.id, { username: "radio-002" })).rejects.toMatchObject({ status: 400 });
   });
 });

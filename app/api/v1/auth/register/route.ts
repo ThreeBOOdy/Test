@@ -17,6 +17,7 @@ export async function POST(request: Request) {
     return response;
   } catch (error) {
     if (error instanceof ApiError && error.message === "REGISTRATION_CONFLICT") return NextResponse.json({ message: "注册信息已存在，请核对后重试" }, { status: 409 });
+    if (error instanceof ApiError && error.message === "RADIO_PERSON_UNAVAILABLE") return NextResponse.json({ message: "该人物身份刚被其他同学确认，请重新选择" }, { status: 409 });
     return apiErrorResponse(error, "注册失败");
   }
 }

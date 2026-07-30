@@ -106,6 +106,16 @@ describe("MySQL project configuration", () => {
     expect(migration).toContain("`activeSlot` = 1");
   });
 
+  it("initializes the radio person catalog during migration without relying on demo seed", () => {
+    const migration = fs.readFileSync(path.resolve("prisma/migrations/20260730170000_radio_person_identity_registration/migration.sql"), "utf8");
+
+    expect(migration).toContain("CREATE TABLE `RadioPerson`");
+    expect(migration).toContain("INSERT INTO `RadioPerson`");
+    expect(migration).toContain("'radio-person-001', 'radio-001'");
+    expect(migration).toContain("'radio-person-120', 'radio-120'");
+    expect(migration).toContain("ADD COLUMN `realName`");
+    expect(migration).toContain("ADD COLUMN `radioPersonId`");
+  });
   it("uses MySQL-native aggregate and duration SQL", () => {
     const reportsPage = fs.readFileSync(path.resolve("app/teacher/reports/page.tsx"), "utf8");
     const studentsPage = fs.readFileSync(path.resolve("app/teacher/students/page.tsx"), "utf8");

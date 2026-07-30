@@ -28,6 +28,8 @@ export async function createTeacherAccount(administratorId: string, rawInput: un
   const teacher = await prisma.$transaction(async (tx) => {
     const existing = await tx.user.findUnique({ where: { username: input.username }, select: { id: true } });
     if (existing) throw new ApiError("用户名已存在", 409);
+    const reservedPerson = await tx.radioPerson.findUnique({ where: { username: input.username }, select: { id: true } });
+    if (reservedPerson) throw new ApiError("用户名已保留为学生人物身份", 409);
     const created = await tx.user.create({
       data: { username: input.username, displayName: input.displayName, passwordHash: hashPassword(temporaryPassword), role: "TEACHER", mustChangePassword: true },
       select: { id: true, username: true, displayName: true, enabled: true, mustChangePassword: true, createdAt: true },

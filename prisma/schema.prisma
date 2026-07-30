@@ -30,6 +30,11 @@ enum StudentGender {
   FEMALE
 }
 
+enum RadioPersonResourceStatus {
+  AVAILABLE
+  UNAVAILABLE
+}
+
 enum StudentReviewAction {
   SUBMITTED
   PROFILE_UPDATED
@@ -109,6 +114,9 @@ model User {
   validUntil            DateTime?                  @db.Date
   isLongTerm            Boolean                    @default(false)
   profileIncomplete     Boolean                    @default(false)
+  realName              String?
+  radioPersonId         String?                    @unique
+  radioPerson           RadioPerson?               @relation(fields: [radioPersonId], references: [id], onDelete: Restrict)
   authSessions          AuthSession[]
   sessions              PracticeSession[]
   wrongQuestions        WrongQuestion[]
@@ -123,6 +131,20 @@ model User {
   @@index([role, studentStatus, enabled])
   @@index([gradeId, studentStatus])
   @@index([reviewedById, reviewedAt])
+}
+
+model RadioPerson {
+  id             String                    @id
+  username       String                    @unique
+  name           String
+  profile        String                    @db.Text
+  resourceStatus RadioPersonResourceStatus @default(AVAILABLE)
+  statusNote     String?                   @db.VarChar(500)
+  student        User?
+  createdAt      DateTime                  @default(now())
+  updatedAt      DateTime                  @updatedAt
+
+  @@index([resourceStatus, name])
 }
 
 model AuthSession {

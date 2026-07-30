@@ -2,6 +2,7 @@ import "dotenv/config";
 import { PrismaMariaDb } from "@prisma/adapter-mariadb";
 import { Prisma, PrismaClient } from "../generated/prisma/client";
 import { RADIO_COURSE_CODE, RADIO_COURSE_ID } from "../lib/domain/course";
+import { RADIO_PERSON_CATALOG } from "../lib/domain/radio-person-catalog";
 import { knowledgePoints, levelRules, levels, questions } from "../lib/data/demo";
 import { hashPassword } from "../lib/server/password";
 import { DEFAULT_EXAM_RULES } from "../lib/domain/exam-rules";
@@ -37,9 +38,11 @@ async function main() {
   await prisma.user.updateMany({ where: { username: "instructor" }, data: { enabled: false, sessionVersion: { increment: 1 } } });
   await prisma.user.upsert({
     where: { username: "student" },
-    update: { displayName: "林小知", role: "STUDENT", studentStatus: "ACTIVE", registrationSource: "LEGACY", isLongTerm: true, profileIncomplete: true, mustChangePassword: false },
-    create: { username: "student", displayName: "林小知", role: "STUDENT", passwordHash, studentStatus: "ACTIVE", registrationSource: "LEGACY", isLongTerm: true, profileIncomplete: true, mustChangePassword: false },
+    update: { displayName: "林小知", realName: "林小知", role: "STUDENT", studentStatus: "ACTIVE", registrationSource: "LEGACY", isLongTerm: true, profileIncomplete: true, mustChangePassword: false },
+    create: { username: "student", displayName: "林小知", realName: "林小知", role: "STUDENT", passwordHash, studentStatus: "ACTIVE", registrationSource: "LEGACY", isLongTerm: true, profileIncomplete: true, mustChangePassword: false },
   });
+
+  await prisma.radioPerson.createMany({ data: RADIO_PERSON_CATALOG, skipDuplicates: true });
 
   for (const grade of grades) {
     await prisma.grade.upsert({ where: { code: grade.code }, update: { name: grade.name, sortOrder: grade.sortOrder, enabled: true }, create: grade });
