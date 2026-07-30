@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import { Check, Save, Settings2, TimerReset } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -10,6 +11,7 @@ import type { ExamRule, KnowledgePoint, Level, PracticeRule, Question } from "@/
 type Mode = "level" | "knowledge" | "exam";
 
 export function RuleEditor({ levels, points, questions, initialLevelRules, initialKnowledgeRules, initialExamRules }: { levels: Level[]; points: KnowledgePoint[]; questions: Question[]; initialLevelRules: Record<string, PracticeRule>; initialKnowledgeRules: Record<string, PracticeRule>; initialExamRules: Record<string, ExamRule> }) {
+  const router = useRouter();
   const [mode, setMode] = useState<Mode>("level");
   const [levelRules, setLevelRules] = useState(initialLevelRules);
   const [knowledgeRules, setKnowledgeRules] = useState(initialKnowledgeRules);
@@ -29,7 +31,7 @@ export function RuleEditor({ levels, points, questions, initialLevelRules, initi
       }) });
       const data = await response.json();
       if (!response.ok) { setError(data.message ?? "保存失败"); return; }
-      setSaved(true); window.setTimeout(() => setSaved(false), 1800);
+      setSaved(true); router.refresh(); window.setTimeout(() => setSaved(false), 1800);
     } catch { setError("保存失败，请检查服务连接"); }
     finally { setPending(false); }
   }

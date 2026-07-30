@@ -63,24 +63,28 @@ async function main() {
     knowledgePointIds.set(point.id, storedPoint.id);
   }
 
-  await prisma.question.createMany({
-    data: questions.map((question) => ({
-      id: question.id,
-      courseId: RADIO_COURSE_ID,
-      levelId: levelIds.get(question.levelId) ?? question.levelId,
-      knowledgePointId: knowledgePointIds.get(question.knowledgePointId) ?? question.knowledgePointId,
-      sourceBankCode: question.sourceBankCode,
-      externalQuestionCode: question.externalQuestionCode,
-      stem: question.stem,
-      type: question.type,
-      optionCount: question.optionCount,
-      correctOptionCount: question.correctOptionCount,
-      selectionSpec: question.selectionSpec,
-      options: question.options as Prisma.InputJsonValue,
-      correctOptionIds: question.correctOptionIds as Prisma.InputJsonValue,
-      status: question.status,
-    })),
-    skipDuplicates: true,
+  await prisma.$transaction(async (tx) => {
+    await tx.question.createMany({
+      data: questions.map((question) => ({
+        id: question.id,
+        courseId: RADIO_COURSE_ID,
+        levelId: levelIds.get(question.levelId) ?? question.levelId,
+        knowledgePointId: knowledgePointIds.get(question.knowledgePointId) ?? question.knowledgePointId,
+        sourceBankCode: question.sourceBankCode,
+        externalQuestionCode: question.externalQuestionCode,
+        stem: question.stem,
+        type: question.type,
+        optionCount: question.optionCount,
+        correctOptionCount: question.correctOptionCount,
+        selectionSpec: question.selectionSpec,
+        options: question.options as Prisma.InputJsonValue,
+        correctOptionIds: question.correctOptionIds as Prisma.InputJsonValue,
+        status: question.status,
+      })),
+      skipDuplicates: true,
+    });
+    const seededQuestions = await tx.question.findMany({ where: { courseId: RADIO_COURSE_ID }, select: { id: true, version: true, levelId: true, knowledgePointId: true, sourceBankCode: true, externalQuestionCode: true, stem: true, options: true, correctOptionIds: true, status: true } });
+    await tx.questionRevision.createMany({ data: seededQuestions.map((question) => ({ courseId: RADIO_COURSE_ID, questionId: question.id, revision: question.version, snapshot: { levelId: question.levelId, knowledgePointId: question.knowledgePointId, sourceBankCode: question.sourceBankCode, externalQuestionCode: question.externalQuestionCode, stem: question.stem, options: question.options, correctOptionIds: question.correctOptionIds, status: question.status }, changeSource: "SEED" })), skipDuplicates: true });
   });
 
   console.log(`Seed complete: ${levels.length} levels, ${knowledgePoints.length} knowledge points, ${questions.length} questions.`);

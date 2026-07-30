@@ -45,6 +45,7 @@ export type Level = {
 export type PracticeRule = {
   singleCount: number;
   multipleCount: number;
+  version?: number;
 };
 
 export type ExamRule = PracticeRule & {

@@ -7,18 +7,27 @@ import { RADIO_COURSE_ID } from "@/lib/domain/course";
 import { validateImportRow } from "@/lib/domain/question-import";
 import type { ImportQuestionRow } from "@/lib/domain/types";
 import { ensureKnowledgePoint } from "@/lib/server/knowledge-service";
+import { toQuestionSnapshot } from "@/lib/server/question-revisions";
+import { writeAuditLogInTransaction } from "@/lib/server/audit";
 
 type ImportBatchReportOptions = { page: number; pageSize: number; issuesOnly?: boolean };
 
-export async function revertImportBatch(batchId: string) {
+export async function revertImportBatch(batchId: string, actorUserId?: string) {
   return prisma.$transaction(async (tx) => {
     const batch = await tx.importBatch.findFirst({ where: { id: batchId, courseId: RADIO_COURSE_ID } });
     if (!batch) throw new ApiError("导入批次不存在", 404);
     if (batch.status !== "COMMITTED") throw new ApiError("只有已提交批次可以撤销", 409);
-    const archived = await tx.question.updateMany({ where: { courseId: RADIO_COURSE_ID, importBatchId: batchId, sessionQuestions: { some: {} } }, data: { status: "ARCHIVED" } });
+    const archivedIds = await tx.question.findMany({ where: { courseId: RADIO_COURSE_ID, importBatchId: batchId, sessionQuestions: { some: {} } }, select: { id: true } });
+    const archived = await tx.question.updateMany({ where: { id: { in: archivedIds.map((question) => question.id) }, courseId: RADIO_COURSE_ID }, data: { status: "ARCHIVED", version: { increment: 1 } } });
+    if (archivedIds.length) {
+      const archivedQuestions = await tx.question.findMany({ where: { id: { in: archivedIds.map((question) => question.id) }, courseId: RADIO_COURSE_ID }, select: { id: true, version: true, levelId: true, knowledgePointId: true, sourceBankCode: true, externalQuestionCode: true, stem: true, options: true, correctOptionIds: true, status: true } });
+      await tx.questionRevision.createMany({ data: archivedQuestions.map((question) => ({ courseId: RADIO_COURSE_ID, questionId: question.id, revision: question.version, snapshot: toQuestionSnapshot(question), changeSource: "IMPORT_REVERT_ARCHIVE", actorUserId })) });
+    }
     const deleted = await tx.question.deleteMany({ where: { courseId: RADIO_COURSE_ID, importBatchId: batchId, sessionQuestions: { none: {} }, answers: { none: {} }, wrongQuestions: { none: {} } } });
     await tx.importBatch.update({ where: { id: batchId }, data: { status: "REVERTED", revertedAt: new Date() } });
-    return { archived: archived.count, deleted: deleted.count };
+    const result = { archived: archived.count, deleted: deleted.count };
+    await writeAuditLogInTransaction(tx, { actorUserId, action: "IMPORT_REVERT", targetType: "ImportBatch", targetId: batchId, metadata: result });
+    return result;
   });
 }
 
@@ -105,7 +114,10 @@ export async function commitImportBatch(importedById: string, batchId: string) {
 
     const inserted = questions.length ? (await tx.question.createMany({ data: questions, skipDuplicates: true })).count : 0;
     const skipped = questions.length - inserted;
+    const insertedQuestions = inserted ? await tx.question.findMany({ where: { courseId: RADIO_COURSE_ID, importBatchId: batch.id }, select: { id: true, version: true, levelId: true, knowledgePointId: true, sourceBankCode: true, externalQuestionCode: true, stem: true, options: true, correctOptionIds: true, status: true } }) : [];
+    if (insertedQuestions.length) await tx.questionRevision.createMany({ data: insertedQuestions.map((question) => ({ courseId: RADIO_COURSE_ID, questionId: question.id, revision: question.version, snapshot: toQuestionSnapshot(question), changeSource: "IMPORT_COMMIT", actorUserId: importedById })) });
     await tx.importBatch.update({ where: { id: batch.id }, data: { insertedRows: inserted, duplicateRows: skipped } });
+    await writeAuditLogInTransaction(tx, { actorUserId: importedById, action: "IMPORT_COMMIT", targetType: "ImportBatch", targetId: batch.id, metadata: { inserted, skipped } });
     return { batchId: batch.id, inserted, skipped };
   }, { timeout: 60_000 });
 }

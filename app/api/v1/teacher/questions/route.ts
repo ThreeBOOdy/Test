@@ -5,11 +5,12 @@ import { prisma } from "@/lib/db";
 import { normalizeQuestionEditorInput } from "@/lib/domain/question-editor";
 import { readJsonBody } from "@/lib/domain/request-body";
 import { assertSameOrigin } from "@/lib/server/http";
-import { writeAuditLog } from "@/lib/server/audit";
+import { writeAuditLogInTransaction } from "@/lib/server/audit";
+import { toQuestionSnapshot } from "@/lib/server/question-revisions";
 import { ApiError, apiErrorResponse, requireTeacher } from "@/lib/server/api";
 import { RADIO_COURSE_ID } from "@/lib/domain/course";
 
-const schema = z.object({
+export const questionInputSchema = z.object({
   levelId: z.string().min(1),
   knowledgePointId: z.string().min(1),
   sourceBankCode: z.string().trim().max(100).optional(),
@@ -24,7 +25,7 @@ export async function POST(request: Request) {
   try {
     assertSameOrigin(request);
     const user = await requireTeacher();
-    const input = schema.parse(await readJsonBody(request));
+    const input = questionInputSchema.parse(await readJsonBody(request));
     const normalized = normalizeQuestionEditorInput(input);
     const [level, point] = await Promise.all([
       prisma.level.findFirst({ where: { id: input.levelId, courseId: RADIO_COURSE_ID, enabled: true } }),
@@ -33,29 +34,24 @@ export async function POST(request: Request) {
     if (!level) throw new ApiError("等级不存在或已停用", 404);
     if (!point) throw new ApiError("知识点不存在或已停用", 404);
     if (point._count.children > 0) throw new ApiError("题目必须归属末级知识点");
-    if (input.externalQuestionCode) {
-      const duplicate = await prisma.question.findFirst({ where: { courseId: RADIO_COURSE_ID, levelId: input.levelId, externalQuestionCode: input.externalQuestionCode } });
-      if (duplicate) throw new ApiError("该等级下已存在相同题目编号", 409);
-    }
-    const question = await prisma.question.create({
-      data: {
-        courseId: RADIO_COURSE_ID,
-        levelId: input.levelId,
-        knowledgePointId: input.knowledgePointId,
-        sourceBankCode: input.sourceBankCode || null,
-        externalQuestionCode: input.externalQuestionCode || null,
-        stem: input.stem,
-        type: normalized.type,
-        optionCount: normalized.optionCount,
-        correctOptionCount: normalized.correctOptionCount,
-        selectionSpec: normalized.selectionSpec,
-        options: normalized.options as Prisma.InputJsonValue,
-        correctOptionIds: normalized.correctOptionIds as Prisma.InputJsonValue,
-        status: input.status,
-      },
+    const question = await prisma.$transaction(async (tx) => {
+      if (input.externalQuestionCode) {
+        const duplicate = await tx.question.findFirst({ where: { courseId: RADIO_COURSE_ID, levelId: input.levelId, externalQuestionCode: input.externalQuestionCode } });
+        if (duplicate) throw new ApiError("该等级下已存在相同题目编号", 409);
+      }
+      const created = await tx.question.create({
+        data: {
+          courseId: RADIO_COURSE_ID, levelId: input.levelId, knowledgePointId: input.knowledgePointId,
+          sourceBankCode: input.sourceBankCode || null, externalQuestionCode: input.externalQuestionCode || null, stem: input.stem,
+          type: normalized.type, optionCount: normalized.optionCount, correctOptionCount: normalized.correctOptionCount, selectionSpec: normalized.selectionSpec,
+          options: normalized.options as Prisma.InputJsonValue, correctOptionIds: normalized.correctOptionIds as Prisma.InputJsonValue, status: input.status,
+        },
+      });
+      await tx.questionRevision.create({ data: { courseId: RADIO_COURSE_ID, questionId: created.id, revision: created.version, snapshot: toQuestionSnapshot(created), changeSource: "TEACHER_CREATE", actorUserId: user.id } });
+      await writeAuditLogInTransaction(tx, { actorUserId: user.id, action: "QUESTION_CREATE", targetType: "Question", targetId: created.id, metadata: { version: created.version } });
+      return created;
     });
-    await writeAuditLog({ actorUserId: user.id, action: "QUESTION_CREATE", targetType: "Question", targetId: question.id });
-    return NextResponse.json({ id: question.id }, { status: 201 });
+    return NextResponse.json({ id: question.id, version: question.version }, { status: 201 });
   } catch (error) {
     return apiErrorResponse(error, "创建题目失败");
   }

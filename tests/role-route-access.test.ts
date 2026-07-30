@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const mocks = vi.hoisted(() => ({
   getCurrentUser: vi.fn(),
   listStudents: vi.fn(),
+  listRegistrationReviews: vi.fn(),
   importBatchFindMany: vi.fn(),
   importBatchCount: vi.fn(),
   createPracticeSession: vi.fn(),
@@ -11,17 +12,21 @@ const mocks = vi.hoisted(() => ({
   revertImportBatch: vi.fn(),
   approveRegistration: vi.fn(),
   writeAuditLog: vi.fn(),
+  writeAuditLogInTransaction: vi.fn(),
   ensureKnowledgePoint: vi.fn(),
   levelFindFirst: vi.fn(),
   knowledgePointFindFirst: vi.fn(),
   knowledgePointFindUnique: vi.fn(),
   questionFindFirst: vi.fn(),
   questionCreate: vi.fn(),
+  questionRevisionCreate: vi.fn(),
+  auditLogCreate: vi.fn(),
 }));
 
 vi.mock("@/lib/server/session", () => ({ getCurrentUser: mocks.getCurrentUser }));
 vi.mock("@/lib/server/student-account-service", () => ({
   listStudents: mocks.listStudents,
+  listRegistrationReviews: mocks.listRegistrationReviews,
   approveRegistration: mocks.approveRegistration,
 }));
 vi.mock("@/lib/server/practice-service", () => ({ createPracticeSession: mocks.createPracticeSession }));
@@ -30,7 +35,7 @@ vi.mock("@/lib/server/import-service", () => ({
   getImportBatchReport: mocks.getImportBatchReport,
   revertImportBatch: mocks.revertImportBatch,
 }));
-vi.mock("@/lib/server/audit", () => ({ writeAuditLog: mocks.writeAuditLog }));
+vi.mock("@/lib/server/audit", () => ({ writeAuditLog: mocks.writeAuditLog, writeAuditLogInTransaction: mocks.writeAuditLogInTransaction }));
 vi.mock("@/lib/server/knowledge-service", () => ({ ensureKnowledgePoint: mocks.ensureKnowledgePoint }));
 vi.mock("@/lib/db", () => ({
   prisma: {
@@ -38,7 +43,12 @@ vi.mock("@/lib/db", () => ({
     level: { findFirst: mocks.levelFindFirst },
     knowledgePoint: { findFirst: mocks.knowledgePointFindFirst, findUnique: mocks.knowledgePointFindUnique },
     question: { findFirst: mocks.questionFindFirst, create: mocks.questionCreate, count: vi.fn() },
-    $transaction: vi.fn((callback: (transaction: object) => unknown) => callback({})),
+    $transaction: vi.fn((input: ((transaction: object) => unknown) | Promise<unknown>[]) => Array.isArray(input) ? Promise.all(input) : input({
+      question: { findFirst: mocks.questionFindFirst, create: mocks.questionCreate },
+      questionRevision: { create: mocks.questionRevisionCreate },
+      knowledgePoint: { findUnique: mocks.knowledgePointFindUnique },
+      auditLog: { create: mocks.auditLogCreate },
+    })),
   },
 }));
 
@@ -79,6 +89,7 @@ describe("single-role API access", () => {
   beforeEach(() => {
     for (const mock of Object.values(mocks)) mock.mockReset();
     mocks.listStudents.mockResolvedValue([]);
+    mocks.listRegistrationReviews.mockResolvedValue([]);
     mocks.importBatchFindMany.mockResolvedValue([]);
     mocks.importBatchCount.mockResolvedValue(0);
     mocks.createPracticeSession.mockResolvedValue({ id: "session-1" });
@@ -88,8 +99,8 @@ describe("single-role API access", () => {
     mocks.knowledgePointFindFirst.mockResolvedValue({ id: "point-1", enabled: true, _count: { children: 0 } });
     mocks.knowledgePointFindUnique.mockResolvedValue(null);
     mocks.questionFindFirst.mockResolvedValue(null);
-    mocks.questionCreate.mockResolvedValue({ id: "question-1" });
-    mocks.ensureKnowledgePoint.mockResolvedValue({ id: "point-1" });
+    mocks.questionCreate.mockResolvedValue({ id: "question-1", version: 1, levelId: "level-1", knowledgePointId: "point-1", sourceBankCode: null, externalQuestionCode: null, stem: "题目", options: [], correctOptionIds: [], status: "ACTIVE" });
+    mocks.ensureKnowledgePoint.mockResolvedValue({ id: "point-1", version: 1 });
   });
 
   it("allows only administrators to review registrations", async () => {
