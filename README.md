@@ -277,6 +277,7 @@ Copy-Item .env.example .env
 | --- | --- | --- |
 | `DATABASE_URL` | `mysql://practice:URL编码后的密码@127.0.0.1:3306/practice_dev` | Prisma 使用的 MySQL 地址；密码中的特殊字符必须进行 URL 编码 |
 | `SHADOW_DATABASE_URL` | `mysql://practice:URL编码后的密码@127.0.0.1:3306/practice_shadow` | `prisma migrate dev` 使用的独立 shadow database |
+| `COURSE_MIGRATION_DATABASE_URL` | `mysql://practice:URL编码后的密码@127.0.0.1:3306/practice_ci_migration` | RADIO 课程边界迁移集成测试使用的独立、可清空数据库；必须保留数据库名 `practice_ci_migration` |
 | `APP_SEED_PASSWORD` | `ChangeMe123!` | 演示账号种子密码 |
 | `AUTH_SECRET` | 至少 32 字符随机字符串 | JWT 签名密钥 |
 | `COOKIE_SECURE` | `false` | 本地 HTTP 为 `false`，正式 HTTPS 为 `true` |
@@ -309,6 +310,7 @@ Copy-Item .env.example .env
 ```dotenv
 DATABASE_URL="mysql://practice:URL编码后的密码@127.0.0.1:3306/practice_dev"
 SHADOW_DATABASE_URL="mysql://practice:URL编码后的密码@127.0.0.1:3306/practice_shadow"
+COURSE_MIGRATION_DATABASE_URL="mysql://practice:URL编码后的密码@127.0.0.1:3306/practice_ci_migration"
 ```
 
 完成首次迁移和演示数据写入：
@@ -602,6 +604,7 @@ npm.cmd run build
 - 等级练习即时判题、刷新恢复、历史记录、错题产生、错题组卷和掌握状态更新。
 - 教师移动端“更多”面板可访问全部管理入口，练习题目导航、草稿选择和完成摘要可独立渲染测试。
 - Excel 预检、警告报告、101 行完整提交和撤销。
+- RADIO 单课程边界迁移：旧题库、规则、练习会话和历史数据无损回填，并拒绝跨课程关联。
 
 当前版本验证基线：
 
@@ -623,6 +626,8 @@ npm.cmd run build
 npx.cmd prisma validate
 npm.cmd audit
 ```
+
+本机运行 `npm.cmd run test:integration` 前，确认 `.env` 中的 `COURSE_MIGRATION_DATABASE_URL` 指向由 `scripts/mysql-bootstrap.sql` 创建的 `practice_ci_migration`。该测试会清空并重建该数据库中的表，切勿指向开发或生产数据库。
 
 GitHub Actions 使用 MySQL 8.0.46 服务容器，并为集成测试和端到端测试创建独立数据库，自动执行依赖安装、Prisma Generate、数据库迁移、Seed、单元测试、集成测试、ESLint、生产构建和 Playwright E2E。
 
