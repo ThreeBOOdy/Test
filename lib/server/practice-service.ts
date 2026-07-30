@@ -123,7 +123,7 @@ export async function submitPracticeAnswer(userId: string, sessionId: string, qu
     const isCorrect = gradeQuestionSnapshot(snapshot, selectedOptionIds);
     await tx.practiceAnswer.create({ data: { courseId: RADIO_COURSE_ID, sessionId, questionId, selectedOptionIds: selectedOptionIds as Prisma.InputJsonValue, isCorrect } });
     await updateWrongQuestion(tx, userId, questionId, isCorrect);
-    const [answeredCount, correctCount, total] = await Promise.all([tx.practiceAnswer.count({ where: { courseId: RADIO_COURSE_ID, sessionId } }), tx.practiceAnswer.count({ where: { courseId: RADIO_COURSE_ID, sessionId, isCorrect: true } }), tx.practiceSessionQuestion.count({ where: { sessionId } })]);
+    const [answeredCount, correctCount, total] = await Promise.all([tx.practiceAnswer.count({ where: { courseId: RADIO_COURSE_ID, sessionId } }), tx.practiceAnswer.count({ where: { courseId: RADIO_COURSE_ID, sessionId, isCorrect: true } }), tx.practiceSessionQuestion.count({ where: { courseId: RADIO_COURSE_ID, sessionId } })]);
     await tx.practiceSession.update({ where: { id: sessionId }, data: { currentIndex: answeredCount, correctCount, ...(answeredCount === total ? { status: "COMPLETED", completedAt: new Date() } : {}) } });
     return { isCorrect, correctOptionIds: snapshot.correctOptionIds, selectedOptionIds, answeredCount, correctCount };
   });
