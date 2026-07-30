@@ -43,9 +43,9 @@ vi.mock("@/lib/db", () => {
   };
 });
 
-import { POST as createQuestion } from "@/app/api/v1/admin/questions/route";
-import { PUT as savePracticeRules } from "@/app/api/v1/admin/practice-rules/route";
-import { POST as previewImport } from "@/app/api/v1/imports/preview/route";
+import { POST as createQuestion } from "@/app/api/v1/teacher/questions/route";
+import { PUT as savePracticeRules } from "@/app/api/v1/teacher/practice-rules/route";
+import { POST as previewImport } from "@/app/api/v1/teacher/imports/preview/route";
 
 describe("radio course boundary", () => {
   beforeEach(() => {
@@ -61,7 +61,7 @@ describe("radio course boundary", () => {
   });
 
   it("ignores a forged course when creating a question", async () => {
-    const response = await createQuestion(jsonRequest("http://localhost/api/v1/admin/questions", "POST", {
+    const response = await createQuestion(jsonRequest("http://localhost/api/v1/teacher/questions", "POST", {
       courseId: "course-python",
       levelId: "level-radio",
       knowledgePointId: "point-radio",
@@ -77,7 +77,7 @@ describe("radio course boundary", () => {
   });
 
   it("ignores forged courses when saving practice rules", async () => {
-    const response = await savePracticeRules(jsonRequest("http://localhost/api/v1/admin/practice-rules", "PUT", {
+    const response = await savePracticeRules(jsonRequest("http://localhost/api/v1/teacher/practice-rules", "PUT", {
       courseId: "course-python",
       levelRules: [{ courseId: "course-python", levelId: "level-radio", singleCount: 1, multipleCount: 0 }],
       knowledgeRules: [],
@@ -100,7 +100,7 @@ describe("radio course boundary", () => {
     const buffer = await workbook.xlsx.writeBuffer();
     const file = new File([buffer], "questions.xlsx", { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
     Object.defineProperty(file, "arrayBuffer", { value: async () => buffer });
-    const request = new Request("http://localhost/api/v1/imports/preview", {
+    const request = new Request("http://localhost/api/v1/teacher/imports/preview", {
       method: "POST",
       headers: { origin: "http://localhost", host: "localhost" },
     });

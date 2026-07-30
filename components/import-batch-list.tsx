@@ -23,7 +23,7 @@ export function ImportBatchList({ batches }: { batches: Batch[] }) {
     if (!window.confirm("确认撤销这个导入批次？已被练习使用的题目会被归档。")) return;
     setPendingId(id);
     setMessage("");
-    const response = await fetch(`/api/v1/admin/import-batches/${id}/revert`, { method: "POST" });
+    const response = await fetch(`/api/v1/teacher/import-batches/${id}/revert`, { method: "POST" });
     const data = await response.json();
     setPendingId(undefined);
     if (!response.ok) {
@@ -41,7 +41,7 @@ export function ImportBatchList({ batches }: { batches: Batch[] }) {
     }
     setReportLoadingId(batchId);
     setMessage("");
-    const response = await fetch(`/api/v1/admin/import-batches/${batchId}?issuesOnly=true&page=${page}&pageSize=20`);
+    const response = await fetch(`/api/v1/teacher/import-batches/${batchId}?issuesOnly=true&page=${page}&pageSize=20`);
     const data = await response.json();
     setReportLoadingId(undefined);
     if (!response.ok) {

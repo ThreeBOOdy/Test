@@ -94,7 +94,7 @@ export function QuestionManager({ rows, levels, knowledgePoints }: { rows: Quest
     if (!form) return;
     setPending(true);
     setMessage("");
-    const response = await authenticatedFetch(form.id ? `/api/v1/admin/questions/${form.id}` : "/api/v1/admin/questions", {
+    const response = await authenticatedFetch(form.id ? `/api/v1/teacher/questions/${form.id}` : "/api/v1/teacher/questions", {
       method: form.id ? "PUT" : "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(form),

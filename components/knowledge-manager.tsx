@@ -37,7 +37,7 @@ export function KnowledgeManager({ points }: { points: KnowledgeRow[] }) {
     if (!form) return;
     setPending(true);
     setMessage("");
-    const response = await authenticatedFetch(form.id ? `/api/v1/admin/knowledge-points/${form.id}` : "/api/v1/admin/knowledge-points", {
+    const response = await authenticatedFetch(form.id ? `/api/v1/teacher/knowledge-points/${form.id}` : "/api/v1/teacher/knowledge-points", {
       method: form.id ? "PUT" : "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(form),

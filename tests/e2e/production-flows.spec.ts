@@ -204,7 +204,7 @@ test.describe.serial("production business flows", () => {
       await expect(batch.getByText(/警告［题目编号］/).first()).toBeVisible();
 
       page.once("dialog", (dialog) => dialog.accept());
-      const revertResponsePromise = page.waitForResponse((response) => response.request().method() === "POST" && response.url().includes("/api/v1/admin/import-batches/") && response.url().endsWith("/revert"), { timeout: 30_000 });
+      const revertResponsePromise = page.waitForResponse((response) => response.request().method() === "POST" && response.url().includes("/api/v1/teacher/import-batches/") && response.url().endsWith("/revert"), { timeout: 30_000 });
       await batch.getByRole("button", { name: "撤销" }).click();
       const revertResponse = await revertResponsePromise;
       expect(revertResponse.ok()).toBe(true);

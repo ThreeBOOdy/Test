@@ -7,6 +7,8 @@ const mocks = vi.hoisted(() => ({
   importBatchCount: vi.fn(),
   createPracticeSession: vi.fn(),
   commitImportBatch: vi.fn(),
+  getImportBatchReport: vi.fn(),
+  revertImportBatch: vi.fn(),
   approveRegistration: vi.fn(),
   writeAuditLog: vi.fn(),
   ensureKnowledgePoint: vi.fn(),
@@ -23,7 +25,11 @@ vi.mock("@/lib/server/student-account-service", () => ({
   approveRegistration: mocks.approveRegistration,
 }));
 vi.mock("@/lib/server/practice-service", () => ({ createPracticeSession: mocks.createPracticeSession }));
-vi.mock("@/lib/server/import-service", () => ({ commitImportBatch: mocks.commitImportBatch }));
+vi.mock("@/lib/server/import-service", () => ({
+  commitImportBatch: mocks.commitImportBatch,
+  getImportBatchReport: mocks.getImportBatchReport,
+  revertImportBatch: mocks.revertImportBatch,
+}));
 vi.mock("@/lib/server/audit", () => ({ writeAuditLog: mocks.writeAuditLog }));
 vi.mock("@/lib/server/knowledge-service", () => ({ ensureKnowledgePoint: mocks.ensureKnowledgePoint }));
 vi.mock("@/lib/db", () => ({
@@ -39,11 +45,16 @@ vi.mock("@/lib/db", () => ({
 import { GET as listRegistrations } from "@/app/api/v1/admin/registrations/route";
 import { POST as approveRegistration } from "@/app/api/v1/admin/registrations/[id]/approve/route";
 import { GET as listStudents } from "@/app/api/v1/admin/students/route";
-import { GET as listImportBatches } from "@/app/api/v1/admin/import-batches/route";
-import { POST as commitImportBatch } from "@/app/api/v1/imports/commit/route";
-import { POST as createQuestion } from "@/app/api/v1/admin/questions/route";
-import { POST as createKnowledgePoint } from "@/app/api/v1/admin/knowledge-points/route";
-import { PUT as savePracticeRules } from "@/app/api/v1/admin/practice-rules/route";
+import { GET as listImportBatches } from "@/app/api/v1/teacher/import-batches/route";
+import { GET as getImportBatch } from "@/app/api/v1/teacher/import-batches/[id]/route";
+import { POST as revertImportBatch } from "@/app/api/v1/teacher/import-batches/[id]/revert/route";
+import { POST as commitImportBatch } from "@/app/api/v1/teacher/imports/commit/route";
+import { POST as previewImportBatch } from "@/app/api/v1/teacher/imports/preview/route";
+import { POST as createQuestion } from "@/app/api/v1/teacher/questions/route";
+import { PUT as updateQuestion } from "@/app/api/v1/teacher/questions/[id]/route";
+import { POST as createKnowledgePoint } from "@/app/api/v1/teacher/knowledge-points/route";
+import { PUT as updateKnowledgePoint } from "@/app/api/v1/teacher/knowledge-points/[id]/route";
+import { PUT as savePracticeRules } from "@/app/api/v1/teacher/practice-rules/route";
 import { POST as createPracticeSession } from "@/app/api/v1/practice-sessions/route";
 
 const baseUser = {
@@ -111,16 +122,16 @@ describe("single-role API access", () => {
 
   it("allows only teachers to access teaching import batches", async () => {
     mocks.getCurrentUser.mockResolvedValue(teacher);
-    expect((await listImportBatches(new Request("http://localhost/api/v1/admin/import-batches"))).status).toBe(200);
+    expect((await listImportBatches(new Request("http://localhost/api/v1/teacher/import-batches"))).status).toBe(200);
 
     for (const user of [administrator, student]) {
       mocks.getCurrentUser.mockResolvedValue(user);
-      expect((await listImportBatches(new Request("http://localhost/api/v1/admin/import-batches"))).status).toBe(403);
+      expect((await listImportBatches(new Request("http://localhost/api/v1/teacher/import-batches"))).status).toBe(403);
     }
   });
 
   it("allows only teachers to commit question imports", async () => {
-    const request = () => new Request("http://localhost/api/v1/imports/commit", {
+    const request = () => new Request("http://localhost/api/v1/teacher/imports/commit", {
       method: "POST",
       headers: { "content-type": "application/json", origin: "http://localhost", host: "localhost" },
       body: JSON.stringify({ batchId: "batch-1" }),
@@ -136,17 +147,17 @@ describe("single-role API access", () => {
   });
 
   it("allows only teachers to create questions, knowledge points, and practice rules", async () => {
-    const questionRequest = () => new Request("http://localhost/api/v1/admin/questions", {
+    const questionRequest = () => new Request("http://localhost/api/v1/teacher/questions", {
       method: "POST",
       headers: { "content-type": "application/json", origin: "http://localhost", host: "localhost" },
       body: JSON.stringify({ levelId: "level-1", knowledgePointId: "point-1", stem: "题目", options: [{ id: "A", text: "正确" }, { id: "B", text: "错误" }], correctOptionIds: ["A"] }),
     });
-    const knowledgeRequest = () => new Request("http://localhost/api/v1/admin/knowledge-points", {
+    const knowledgeRequest = () => new Request("http://localhost/api/v1/teacher/knowledge-points", {
       method: "POST",
       headers: { "content-type": "application/json", origin: "http://localhost", host: "localhost" },
       body: JSON.stringify({ code: "9.1", name: "测试知识点", sortOrder: 0 }),
     });
-    const rulesRequest = () => new Request("http://localhost/api/v1/admin/practice-rules", {
+    const rulesRequest = () => new Request("http://localhost/api/v1/teacher/practice-rules", {
       method: "PUT",
       headers: { "content-type": "application/json", origin: "http://localhost", host: "localhost" },
       body: JSON.stringify({ levelRules: [], knowledgeRules: [], examRules: [] }),
@@ -162,6 +173,27 @@ describe("single-role API access", () => {
       expect((await createQuestion(questionRequest())).status).toBe(403);
       expect((await createKnowledgePoint(knowledgeRequest())).status).toBe(403);
       expect((await savePracticeRules(rulesRequest())).status).toBe(403);
+    }
+  });
+
+  it("rejects administrators and students at every teacher API endpoint", async () => {
+    const mutationHeaders = { "content-type": "application/json", origin: "http://localhost", host: "localhost" };
+    const teacherEndpoints = [
+      () => listImportBatches(new Request("http://localhost/api/v1/teacher/import-batches")),
+      () => getImportBatch(new Request("http://localhost/api/v1/teacher/import-batches/batch-1"), { params: Promise.resolve({ id: "batch-1" }) }),
+      () => revertImportBatch(new Request("http://localhost/api/v1/teacher/import-batches/batch-1/revert", { method: "POST", headers: { origin: "http://localhost", host: "localhost" } }), { params: Promise.resolve({ id: "batch-1" }) }),
+      () => previewImportBatch(new Request("http://localhost/api/v1/teacher/imports/preview", { method: "POST", headers: { origin: "http://localhost", host: "localhost" } })),
+      () => commitImportBatch(new Request("http://localhost/api/v1/teacher/imports/commit", { method: "POST", headers: mutationHeaders, body: JSON.stringify({ batchId: "batch-1" }) })),
+      () => createKnowledgePoint(new Request("http://localhost/api/v1/teacher/knowledge-points", { method: "POST", headers: mutationHeaders, body: JSON.stringify({ code: "9.1", name: "测试知识点" }) })),
+      () => updateKnowledgePoint(new Request("http://localhost/api/v1/teacher/knowledge-points/point-1", { method: "PUT", headers: mutationHeaders, body: JSON.stringify({ name: "测试知识点", sortOrder: 0, enabled: true }) }), { params: Promise.resolve({ id: "point-1" }) }),
+      () => savePracticeRules(new Request("http://localhost/api/v1/teacher/practice-rules", { method: "PUT", headers: mutationHeaders, body: JSON.stringify({ levelRules: [], knowledgeRules: [], examRules: [] }) })),
+      () => createQuestion(new Request("http://localhost/api/v1/teacher/questions", { method: "POST", headers: mutationHeaders, body: JSON.stringify({ levelId: "level-1", knowledgePointId: "point-1", stem: "题目", options: [{ id: "A", text: "正确" }, { id: "B", text: "错误" }], correctOptionIds: ["A"] }) })),
+      () => updateQuestion(new Request("http://localhost/api/v1/teacher/questions/question-1", { method: "PUT", headers: mutationHeaders, body: JSON.stringify({ levelId: "level-1", knowledgePointId: "point-1", stem: "题目", options: [{ id: "A", text: "正确" }, { id: "B", text: "错误" }], correctOptionIds: ["A"], status: "ACTIVE" }) }), { params: Promise.resolve({ id: "question-1" }) }),
+    ];
+
+    for (const user of [administrator, student]) {
+      mocks.getCurrentUser.mockResolvedValue(user);
+      for (const invoke of teacherEndpoints) expect((await invoke()).status).toBe(403);
     }
   });
 

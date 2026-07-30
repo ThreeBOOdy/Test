@@ -39,16 +39,16 @@ describe("application shell", () => {
     for (const label of ["注册审核", "学生账号", "学生导入", "年级配置", "学生管理"]) expect(within(dialog).queryByRole("link", { name: label })).not.toBeInTheDocument();
   });
 
-  it("does not show registration review in the teacher desktop navigation", () => {
+  it("keeps administrator account tools out of the teacher desktop navigation", () => {
     render(<AppShellView role="teacher" currentPath="/teacher" user={{ username: "teacher", displayName: "李老师" }}><div>教学内容</div></AppShellView>);
 
-    expect(screen.queryByRole("link", { name: "注册审核" })).not.toBeInTheDocument();
+    for (const label of ["注册审核", "学生账号", "学生导入", "年级配置", "学生管理"]) expect(screen.queryByRole("link", { name: label })).not.toBeInTheDocument();
   });
 
   it("shows only administrator account tools in the administrator console", () => {
     render(<AppShellView role="admin" currentPath="/admin" user={{ username: "admin", displayName: "系统管理员" }}><div>管理内容</div></AppShellView>);
     for (const label of ["注册审核", "学生账号", "学生导入", "年级配置"]) expect(screen.getAllByRole("link", { name: label }).length).toBeGreaterThan(0);
-    expect(screen.queryByRole("link", { name: "教学控制台" })).not.toBeInTheDocument();
+    for (const label of ["教学控制台", "题库管理", "知识点目录", "抽题规则", "Excel 导入", "教学统计"]) expect(screen.queryByRole("link", { name: label })).not.toBeInTheDocument();
   });
 
   it("makes every administrator section reachable on mobile", async () => {

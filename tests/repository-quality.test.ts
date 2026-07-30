@@ -89,16 +89,16 @@ describe("repository release quality", () => {
 
   it("uses single-role guards for teaching and student practice routes", () => {
     const teachingRoutes = [
-      "app/api/v1/admin/knowledge-points/route.ts",
-      "app/api/v1/admin/knowledge-points/[id]/route.ts",
-      "app/api/v1/admin/practice-rules/route.ts",
-      "app/api/v1/admin/questions/route.ts",
-      "app/api/v1/admin/questions/[id]/route.ts",
-      "app/api/v1/admin/import-batches/route.ts",
-      "app/api/v1/admin/import-batches/[id]/route.ts",
-      "app/api/v1/admin/import-batches/[id]/revert/route.ts",
-      "app/api/v1/imports/preview/route.ts",
-      "app/api/v1/imports/commit/route.ts",
+      "app/api/v1/teacher/knowledge-points/route.ts",
+      "app/api/v1/teacher/knowledge-points/[id]/route.ts",
+      "app/api/v1/teacher/practice-rules/route.ts",
+      "app/api/v1/teacher/questions/route.ts",
+      "app/api/v1/teacher/questions/[id]/route.ts",
+      "app/api/v1/teacher/import-batches/route.ts",
+      "app/api/v1/teacher/import-batches/[id]/route.ts",
+      "app/api/v1/teacher/import-batches/[id]/revert/route.ts",
+      "app/api/v1/teacher/imports/preview/route.ts",
+      "app/api/v1/teacher/imports/commit/route.ts",
     ];
     const administratorRoutes = [
       "app/api/v1/admin/registrations/route.ts",
@@ -126,6 +126,20 @@ describe("repository release quality", () => {
     for (const file of studentRoutes) {
       expect(read(file), `${file} should enforce active-student access`).toContain("requireActiveStudent");
       expect(read(file), `${file} should not use the legacy student-only guard`).not.toContain('requireRole("STUDENT")');
+    }
+  });
+
+  it("keeps teaching APIs out of the administrator namespace", () => {
+    const legacyTeachingRoutes = [
+      "app/api/v1/admin/knowledge-points",
+      "app/api/v1/admin/practice-rules",
+      "app/api/v1/admin/questions",
+      "app/api/v1/admin/import-batches",
+      "app/api/v1/imports",
+    ];
+
+    for (const route of legacyTeachingRoutes) {
+      expect(fs.existsSync(path.join(root, route)), `${route} must not remain as a compatibility route`).toBe(false);
     }
   });
 

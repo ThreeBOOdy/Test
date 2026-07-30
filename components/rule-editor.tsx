@@ -22,7 +22,7 @@ export function RuleEditor({ levels, points, questions, initialLevelRules, initi
   async function save() {
     setPending(true); setError("");
     try {
-      const response = await fetch("/api/v1/admin/practice-rules", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({
+      const response = await fetch("/api/v1/teacher/practice-rules", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({
         levelRules: Object.entries(levelRules).map(([levelId, rule]) => ({ levelId, ...rule })),
         knowledgeRules: Object.entries(knowledgeRules).map(([key, rule]) => { const [knowledgePointId, levelId] = key.split(":"); return { knowledgePointId, levelId, ...rule }; }),
         examRules: Object.entries(examRules).map(([levelId, rule]) => ({ levelId, ...rule })),
