@@ -5,17 +5,18 @@ import { StatCard } from "@/components/stat-card";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { CallsignLabel, FrequencyScale, SignalMeter } from "@/components/visual/radio-instruments";
 import { prisma } from "@/lib/db";
+import { RADIO_COURSE_ID } from "@/lib/domain/course";
 import { getDaysAgo } from "@/lib/server/time";
 
 export default async function TeacherPage() {
   const sevenDaysAgo = getDaysAgo(7);
   const [levels, activeQuestions, knowledgeCount, studentCount, recentSessions, importCount] = await Promise.all([
-    prisma.level.findMany({ where: { enabled: true }, orderBy: [{ sortOrder: "asc" }, { code: "asc" }] }),
-    prisma.question.findMany({ where: { status: "ACTIVE" }, select: { levelId: true, type: true } }),
-    prisma.knowledgePoint.count({ where: { enabled: true } }),
+    prisma.level.findMany({ where: { courseId: RADIO_COURSE_ID, enabled: true }, orderBy: [{ sortOrder: "asc" }, { code: "asc" }] }),
+    prisma.question.findMany({ where: { courseId: RADIO_COURSE_ID, status: "ACTIVE" }, select: { levelId: true, type: true } }),
+    prisma.knowledgePoint.count({ where: { courseId: RADIO_COURSE_ID, enabled: true } }),
     prisma.user.count({ where: { role: "STUDENT", enabled: true } }),
-    prisma.practiceSession.findMany({ where: { status: "COMPLETED", completedAt: { gte: sevenDaysAgo } }, select: { correctCount: true, singleCountSnapshot: true, multipleCountSnapshot: true } }),
-    prisma.importBatch.count({ where: { status: "COMMITTED" } }),
+    prisma.practiceSession.findMany({ where: { courseId: RADIO_COURSE_ID, status: "COMPLETED", completedAt: { gte: sevenDaysAgo } }, select: { correctCount: true, singleCountSnapshot: true, multipleCountSnapshot: true } }),
+    prisma.importBatch.count({ where: { courseId: RADIO_COURSE_ID, status: "COMMITTED" } }),
   ]);
   const totalAnswered = recentSessions.reduce((sum, session) => sum + session.singleCountSnapshot + session.multipleCountSnapshot, 0);
   const totalCorrect = recentSessions.reduce((sum, session) => sum + session.correctCount, 0);

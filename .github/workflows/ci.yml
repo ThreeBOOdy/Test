@@ -44,6 +44,7 @@ jobs:
       - run: npm run test:integration
         env:
           DATABASE_URL: mysql://practice:practice@127.0.0.1:3306/practice_ci_integration
+          COURSE_MIGRATION_DATABASE_URL: mysql://practice:practice@127.0.0.1:3306/practice_ci_migration
       - run: npm run lint
       - run: npm run build
       - run: npx playwright install --with-deps chromium

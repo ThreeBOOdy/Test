@@ -7,6 +7,7 @@ import { readJsonBody } from "@/lib/domain/request-body";
 import { assertSameOrigin } from "@/lib/server/http";
 import { writeAuditLog } from "@/lib/server/audit";
 import { ApiError, apiErrorResponse, requireTeachingUser } from "@/lib/server/api";
+import { RADIO_COURSE_ID } from "@/lib/domain/course";
 
 const schema = z.object({
   levelId: z.string().min(1),
@@ -27,16 +28,16 @@ export async function PUT(request: Request, context: { params: Promise<{ id: str
     const input = schema.parse(await readJsonBody(request));
     const normalized = normalizeQuestionEditorInput(input);
     const [question, level, point] = await Promise.all([
-      prisma.question.findUnique({ where: { id } }),
-      prisma.level.findUnique({ where: { id: input.levelId } }),
-      prisma.knowledgePoint.findUnique({ where: { id: input.knowledgePointId }, include: { _count: { select: { children: true } } } }),
+      prisma.question.findFirst({ where: { id, courseId: RADIO_COURSE_ID } }),
+      prisma.level.findFirst({ where: { id: input.levelId, courseId: RADIO_COURSE_ID } }),
+      prisma.knowledgePoint.findFirst({ where: { id: input.knowledgePointId, courseId: RADIO_COURSE_ID }, include: { _count: { select: { children: true } } } }),
     ]);
     if (!question) throw new ApiError("题目不存在", 404);
     if (!level || (!level.enabled && input.levelId !== question.levelId)) throw new ApiError("等级不存在或已停用", 404);
     if (!point || (!point.enabled && input.knowledgePointId !== question.knowledgePointId)) throw new ApiError("知识点不存在或已停用", 404);
     if (point._count.children > 0) throw new ApiError("题目必须归属末级知识点");
     if (input.externalQuestionCode) {
-      const duplicate = await prisma.question.findFirst({ where: { id: { not: id }, levelId: input.levelId, externalQuestionCode: input.externalQuestionCode } });
+      const duplicate = await prisma.question.findFirst({ where: { id: { not: id }, courseId: RADIO_COURSE_ID, levelId: input.levelId, externalQuestionCode: input.externalQuestionCode } });
       if (duplicate) throw new ApiError("该等级下已存在相同题目编号", 409);
     }
     await prisma.question.update({

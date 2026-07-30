@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { Prisma } from "@/generated/prisma/client";
 import { prisma } from "@/lib/db";
 import { getImportBatchExpiry } from "@/lib/domain/import-batch";
+import { RADIO_COURSE_ID } from "@/lib/domain/course";
 import { validateImportRow } from "@/lib/domain/question-import";
 import { assertRequestBodySize } from "@/lib/domain/request-body";
 import type { ImportQuestionRow, ValidatedQuestionRow } from "@/lib/domain/types";
@@ -58,7 +59,7 @@ export async function POST(request: Request) {
     const errorRows = results.filter((item) => item.issues.some((issue) => issue.severity === "error")).length;
     const expiresAt = getImportBatchExpiry(new Date());
     const batch = await prisma.$transaction(async (tx) => {
-      const created = await tx.importBatch.create({ data: { fileName: file.name, importedById: user.id, status: "PREVIEW", totalRows: results.length, validRows, warningRows, errorRows, expiresAt } });
+      const created = await tx.importBatch.create({ data: { courseId: RADIO_COURSE_ID, fileName: file.name, importedById: user.id, status: "PREVIEW", totalRows: results.length, validRows, warningRows, errorRows, expiresAt } });
       if (results.length) {
         await tx.importBatchRow.createMany({ data: results.map((item, index) => ({ batchId: created.id, rowNumber: index + 1, payload: JSON.parse(JSON.stringify(item.row)) as Prisma.InputJsonValue, issues: item.issues as Prisma.InputJsonValue, valid: item.issues.every((issue) => issue.severity !== "error") })) });
       }

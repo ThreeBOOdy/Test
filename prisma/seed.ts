@@ -1,6 +1,7 @@
 import "dotenv/config";
 import { PrismaMariaDb } from "@prisma/adapter-mariadb";
 import { Prisma, PrismaClient } from "../generated/prisma/client";
+import { RADIO_COURSE_CODE, RADIO_COURSE_ID } from "../lib/domain/course";
 import { knowledgePoints, levelRules, levels, questions } from "../lib/data/demo";
 import { hashPassword } from "../lib/server/password";
 import { DEFAULT_EXAM_RULES } from "../lib/domain/exam-rules";
@@ -22,6 +23,11 @@ const grades = [
 
 
 async function main() {
+  await prisma.course.upsert({
+    where: { code: RADIO_COURSE_CODE },
+    update: { name: "无线电课程", enabled: true, activeSlot: 1, sortOrder: 0 },
+    create: { id: RADIO_COURSE_ID, code: RADIO_COURSE_CODE, name: "无线电课程", enabled: true, activeSlot: 1, sortOrder: 0 },
+  });
   const seedPassword = process.env.APP_SEED_PASSWORD ?? "ChangeMe123!";
   const levelIds = new Map<string, string>();
   const knowledgePointIds = new Map<string, string>();
@@ -39,23 +45,24 @@ async function main() {
   }
 
   for (const level of levels) {
-    const storedLevel = await prisma.level.upsert({ where: { code: level.code }, update: { name: level.name, sortOrder: level.sortOrder, enabled: level.enabled }, create: level });
+    const storedLevel = await prisma.level.upsert({ where: { courseId_code: { courseId: RADIO_COURSE_ID, code: level.code } }, update: { name: level.name, sortOrder: level.sortOrder, enabled: level.enabled }, create: { ...level, courseId: RADIO_COURSE_ID } });
     levelIds.set(level.id, storedLevel.id);
     const rule = levelRules[level.id];
-    await prisma.levelPracticeRule.upsert({ where: { levelId: storedLevel.id }, update: rule, create: { levelId: storedLevel.id, ...rule } });
+    await prisma.levelPracticeRule.upsert({ where: { courseId_levelId: { courseId: RADIO_COURSE_ID, levelId: storedLevel.id } }, update: rule, create: { courseId: RADIO_COURSE_ID, levelId: storedLevel.id, ...rule } });
     const examRule = DEFAULT_EXAM_RULES[level.code as keyof typeof DEFAULT_EXAM_RULES];
-    if (examRule) await prisma.examRule.upsert({ where: { levelId: storedLevel.id }, update: {}, create: { levelId: storedLevel.id, ...examRule } });
+    if (examRule) await prisma.examRule.upsert({ where: { courseId_levelId: { courseId: RADIO_COURSE_ID, levelId: storedLevel.id } }, update: {}, create: { courseId: RADIO_COURSE_ID, levelId: storedLevel.id, ...examRule } });
   }
 
   for (const point of knowledgePoints.toSorted((left, right) => left.depth - right.depth)) {
     const parentId = point.parentId ? knowledgePointIds.get(point.parentId) ?? point.parentId : null;
-    const storedPoint = await prisma.knowledgePoint.upsert({ where: { code: point.code }, update: { name: point.name, parentId, path: point.path, depth: point.depth, sortOrder: point.sortOrder, enabled: point.enabled }, create: { ...point, parentId } });
+    const storedPoint = await prisma.knowledgePoint.upsert({ where: { courseId_code: { courseId: RADIO_COURSE_ID, code: point.code } }, update: { name: point.name, parentId, path: point.path, depth: point.depth, sortOrder: point.sortOrder, enabled: point.enabled }, create: { ...point, courseId: RADIO_COURSE_ID, parentId } });
     knowledgePointIds.set(point.id, storedPoint.id);
   }
 
   await prisma.question.createMany({
     data: questions.map((question) => ({
       id: question.id,
+      courseId: RADIO_COURSE_ID,
       levelId: levelIds.get(question.levelId) ?? question.levelId,
       knowledgePointId: knowledgePointIds.get(question.knowledgePointId) ?? question.knowledgePointId,
       sourceBankCode: question.sourceBankCode,

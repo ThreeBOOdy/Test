@@ -6,6 +6,7 @@ import { PaginationNav } from "@/components/pagination-nav";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { prisma } from "@/lib/db";
+import { RADIO_COURSE_ID } from "@/lib/domain/course";
 import { formatPercent } from "@/lib/utils";
 import { normalizePagination } from "@/lib/server/pagination";
 import { getCurrentUser } from "@/lib/server/session";
@@ -17,11 +18,11 @@ export default async function HistoryPage({ searchParams }: { searchParams: Prom
   const params = await searchParams;
   const { page, pageSize, skip } = normalizePagination({ page: params.page });
   const [sessions, total, answered, correct, duration] = await Promise.all([
-    prisma.practiceSession.findMany({ where: { userId: user.id }, include: { level: true, knowledgePoint: true, _count: { select: { questions: true } } }, orderBy: { startedAt: "desc" }, skip, take: pageSize }),
-    prisma.practiceSession.count({ where: { userId: user.id } }),
-    prisma.practiceAnswer.count({ where: { session: { userId: user.id, status: "COMPLETED" } } }),
-    prisma.practiceAnswer.count({ where: { session: { userId: user.id, status: "COMPLETED" }, isCorrect: true } }),
-    prisma.$queryRaw<Array<{ minutes: number | string }>>(Prisma.sql`SELECT CAST(COALESCE(SUM(TIMESTAMPDIFF(SECOND, \`startedAt\`, \`completedAt\`)), 0) AS SIGNED) / 60 AS minutes FROM \`PracticeSession\` WHERE \`userId\` = ${user.id} AND \`status\` = 'COMPLETED'`),
+    prisma.practiceSession.findMany({ where: { courseId: RADIO_COURSE_ID, userId: user.id }, include: { level: true, knowledgePoint: true, _count: { select: { questions: true } } }, orderBy: { startedAt: "desc" }, skip, take: pageSize }),
+    prisma.practiceSession.count({ where: { courseId: RADIO_COURSE_ID, userId: user.id } }),
+    prisma.practiceAnswer.count({ where: { courseId: RADIO_COURSE_ID, session: { courseId: RADIO_COURSE_ID, userId: user.id, status: "COMPLETED" } } }),
+    prisma.practiceAnswer.count({ where: { courseId: RADIO_COURSE_ID, session: { courseId: RADIO_COURSE_ID, userId: user.id, status: "COMPLETED" }, isCorrect: true } }),
+    prisma.$queryRaw<Array<{ minutes: number | string }>>(Prisma.sql`SELECT CAST(COALESCE(SUM(TIMESTAMPDIFF(SECOND, \`startedAt\`, \`completedAt\`)), 0) AS SIGNED) / 60 AS minutes FROM \`PracticeSession\` WHERE \`courseId\` = ${RADIO_COURSE_ID} AND \`userId\` = ${user.id} AND \`status\` = 'COMPLETED'`),
   ]);
   const average = answered ? correct / answered : 0;
   const totalMinutes = Math.round(Number(duration[0]?.minutes ?? 0));

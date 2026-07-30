@@ -10,6 +10,7 @@ import { EmptySignalState } from "@/components/visual/empty-signal-state";
 import { Artwork } from "@/components/visual/artwork";
 import { CallsignLabel, FrequencyScale, SignalMeter } from "@/components/visual/radio-instruments";
 import { prisma } from "@/lib/db";
+import { RADIO_COURSE_ID } from "@/lib/domain/course";
 import { getCurrentUser } from "@/lib/server/session";
 import { getDaysAgo } from "@/lib/server/time";
 
@@ -19,11 +20,11 @@ export default async function StudentPage() {
   if (user.capability !== "FULL_STUDENT") return null;
   const sevenDaysAgo = getDaysAgo(7);
   const [sessions, wrongQuestions, levelRules, knowledgeRules, activeQuestions] = await Promise.all([
-    prisma.practiceSession.findMany({ where: { userId: user.id }, include: { level: true, knowledgePoint: true }, orderBy: { startedAt: "desc" } }),
-    prisma.wrongQuestion.findMany({ where: { userId: user.id, mastered: false }, select: { question: { select: { knowledgePointId: true } } } }),
-    prisma.levelPracticeRule.findMany({ where: { enabled: true, level: { enabled: true } }, include: { level: true }, orderBy: { level: { sortOrder: "asc" } } }),
-    prisma.knowledgePracticeRule.findMany({ where: { enabled: true, level: { enabled: true }, knowledgePoint: { enabled: true } }, include: { level: true, knowledgePoint: true }, orderBy: [{ knowledgePoint: { sortOrder: "asc" } }, { level: { sortOrder: "asc" } }] }),
-    prisma.question.findMany({ where: { status: "ACTIVE", knowledgePoint: { enabled: true } }, select: { levelId: true, type: true, knowledgePoint: { select: { path: true } } } }),
+    prisma.practiceSession.findMany({ where: { courseId: RADIO_COURSE_ID, userId: user.id }, include: { level: true, knowledgePoint: true }, orderBy: { startedAt: "desc" } }),
+    prisma.wrongQuestion.findMany({ where: { courseId: RADIO_COURSE_ID, userId: user.id, mastered: false }, select: { question: { select: { knowledgePointId: true } } } }),
+    prisma.levelPracticeRule.findMany({ where: { courseId: RADIO_COURSE_ID, enabled: true, level: { enabled: true } }, include: { level: true }, orderBy: { level: { sortOrder: "asc" } } }),
+    prisma.knowledgePracticeRule.findMany({ where: { courseId: RADIO_COURSE_ID, enabled: true, level: { enabled: true }, knowledgePoint: { enabled: true } }, include: { level: true, knowledgePoint: true }, orderBy: [{ knowledgePoint: { sortOrder: "asc" } }, { level: { sortOrder: "asc" } }] }),
+    prisma.question.findMany({ where: { courseId: RADIO_COURSE_ID, status: "ACTIVE", knowledgePoint: { enabled: true } }, select: { levelId: true, type: true, knowledgePoint: { select: { path: true } } } }),
   ]);
   const completedSessions = sessions.filter((session) => session.status === "COMPLETED");
   const activeSession = sessions.find((session) => session.status === "IN_PROGRESS");

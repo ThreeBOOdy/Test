@@ -5,6 +5,7 @@ import { PageHeader } from "@/components/page-header";
 import { StatCard } from "@/components/stat-card";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { prisma } from "@/lib/db";
+import { RADIO_COURSE_ID } from "@/lib/domain/course";
 
 type KnowledgeStatRow = { code: string; name: string; answered: number | bigint | string; correct: number | bigint | string };
 type StudentStatRow = { username: string; displayName: string; answered: number | bigint | string; correct: number | bigint | string; sessions: number | bigint | string };
@@ -14,12 +15,12 @@ export default async function ReportsPage({ searchParams }: { searchParams: Prom
   const days = Math.min(365, Math.max(1, Number(params.days) || 30));
   const since = new Date(); since.setDate(since.getDate() - days);
   const [sessions, answered, correct, activeRows, knowledgeStats, studentStats] = await Promise.all([
-    prisma.practiceSession.count({ where: { startedAt: { gte: since } } }),
-    prisma.practiceAnswer.count({ where: { submittedAt: { gte: since } } }),
-    prisma.practiceAnswer.count({ where: { submittedAt: { gte: since }, isCorrect: true } }),
-    prisma.$queryRaw<Array<{ count: number | bigint | string }>>(Prisma.sql`SELECT CAST(COUNT(DISTINCT \`userId\`) AS SIGNED) AS count FROM \`PracticeSession\` WHERE \`startedAt\` >= ${since}`),
-    prisma.$queryRaw<KnowledgeStatRow[]>(Prisma.sql`SELECT kp.code, kp.name, CAST(COUNT(pa.id) AS SIGNED) AS answered, CAST(SUM(CASE WHEN pa.\`isCorrect\` = TRUE THEN 1 ELSE 0 END) AS SIGNED) AS correct FROM \`PracticeAnswer\` pa JOIN \`Question\` q ON q.id = pa.\`questionId\` JOIN \`KnowledgePoint\` kp ON kp.id = q.\`knowledgePointId\` WHERE pa.\`submittedAt\` >= ${since} GROUP BY kp.id, kp.code, kp.name ORDER BY (COUNT(pa.id) - SUM(CASE WHEN pa.\`isCorrect\` = TRUE THEN 1 ELSE 0 END)) DESC, COUNT(pa.id) DESC LIMIT 10`),
-    prisma.$queryRaw<StudentStatRow[]>(Prisma.sql`SELECT u.username, u.\`displayName\`, CAST(COUNT(pa.id) AS SIGNED) AS answered, CAST(SUM(CASE WHEN pa.\`isCorrect\` = TRUE THEN 1 ELSE 0 END) AS SIGNED) AS correct, CAST(COUNT(DISTINCT ps.id) AS SIGNED) AS sessions FROM \`User\` u JOIN \`PracticeSession\` ps ON ps.\`userId\` = u.id LEFT JOIN \`PracticeAnswer\` pa ON pa.\`sessionId\` = ps.id AND pa.\`submittedAt\` >= ${since} WHERE u.role = 'STUDENT' AND ps.\`startedAt\` >= ${since} GROUP BY u.id, u.username, u.\`displayName\` ORDER BY COUNT(pa.id) DESC LIMIT 20`),
+    prisma.practiceSession.count({ where: { courseId: RADIO_COURSE_ID, startedAt: { gte: since } } }),
+    prisma.practiceAnswer.count({ where: { courseId: RADIO_COURSE_ID, submittedAt: { gte: since } } }),
+    prisma.practiceAnswer.count({ where: { courseId: RADIO_COURSE_ID, submittedAt: { gte: since }, isCorrect: true } }),
+    prisma.$queryRaw<Array<{ count: number | bigint | string }>>(Prisma.sql`SELECT CAST(COUNT(DISTINCT \`userId\`) AS SIGNED) AS count FROM \`PracticeSession\` WHERE \`courseId\` = ${RADIO_COURSE_ID} AND \`startedAt\` >= ${since}`),
+    prisma.$queryRaw<KnowledgeStatRow[]>(Prisma.sql`SELECT kp.code, kp.name, CAST(COUNT(pa.id) AS SIGNED) AS answered, CAST(SUM(CASE WHEN pa.\`isCorrect\` = TRUE THEN 1 ELSE 0 END) AS SIGNED) AS correct FROM \`PracticeAnswer\` pa JOIN \`Question\` q ON q.id = pa.\`questionId\` AND q.\`courseId\` = pa.\`courseId\` JOIN \`KnowledgePoint\` kp ON kp.id = q.\`knowledgePointId\` AND kp.\`courseId\` = q.\`courseId\` WHERE pa.\`courseId\` = ${RADIO_COURSE_ID} AND pa.\`submittedAt\` >= ${since} GROUP BY kp.id, kp.code, kp.name ORDER BY (COUNT(pa.id) - SUM(CASE WHEN pa.\`isCorrect\` = TRUE THEN 1 ELSE 0 END)) DESC, COUNT(pa.id) DESC LIMIT 10`),
+    prisma.$queryRaw<StudentStatRow[]>(Prisma.sql`SELECT u.username, u.\`displayName\`, CAST(COUNT(pa.id) AS SIGNED) AS answered, CAST(SUM(CASE WHEN pa.\`isCorrect\` = TRUE THEN 1 ELSE 0 END) AS SIGNED) AS correct, CAST(COUNT(DISTINCT ps.id) AS SIGNED) AS sessions FROM \`User\` u JOIN \`PracticeSession\` ps ON ps.\`userId\` = u.id AND ps.\`courseId\` = ${RADIO_COURSE_ID} LEFT JOIN \`PracticeAnswer\` pa ON pa.\`sessionId\` = ps.id AND pa.\`courseId\` = ps.\`courseId\` AND pa.\`submittedAt\` >= ${since} WHERE u.role = 'STUDENT' AND ps.\`startedAt\` >= ${since} GROUP BY u.id, u.username, u.\`displayName\` ORDER BY COUNT(pa.id) DESC LIMIT 20`),
   ]);
   const activeStudents = Number(activeRows[0]?.count ?? 0);
   const normalizedKnowledgeStats = knowledgeStats.map((item) => ({ ...item, answered: Number(item.answered), correct: Number(item.correct) }));

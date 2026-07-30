@@ -5,6 +5,7 @@ import { readJsonBody } from "@/lib/domain/request-body";
 import { assertSameOrigin } from "@/lib/server/http";
 import { writeAuditLog } from "@/lib/server/audit";
 import { ApiError, apiErrorResponse, requireTeachingUser } from "@/lib/server/api";
+import { RADIO_COURSE_ID } from "@/lib/domain/course";
 
 const schema = z.object({ name: z.string().trim().min(1).max(200), sortOrder: z.number().int().min(0).max(100000), enabled: z.boolean() });
 
@@ -14,12 +15,12 @@ export async function PUT(request: Request, context: { params: Promise<{ id: str
     const user = await requireTeachingUser();
     const { id } = await context.params;
     const input = schema.parse(await readJsonBody(request));
-    const point = await prisma.knowledgePoint.findUnique({ where: { id } });
+    const point = await prisma.knowledgePoint.findFirst({ where: { id, courseId: RADIO_COURSE_ID } });
     if (!point) throw new ApiError("知识点不存在", 404);
     await prisma.$transaction([
       prisma.knowledgePoint.update({ where: { id }, data: { name: input.name, sortOrder: input.sortOrder } }),
       prisma.knowledgePoint.updateMany({
-        where: { OR: [{ id }, { path: { startsWith: `${point.path}/` } }] },
+        where: { courseId: RADIO_COURSE_ID, OR: [{ id }, { path: { startsWith: `${point.path}/` } }] },
         data: { enabled: input.enabled },
       }),
     ]);

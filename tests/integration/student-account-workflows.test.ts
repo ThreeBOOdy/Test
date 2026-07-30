@@ -44,11 +44,18 @@ beforeEach(async () => {
   await prisma.knowledgePracticeRule.deleteMany();
   await prisma.examRule.deleteMany();
   await prisma.levelPracticeRule.deleteMany();
-  await prisma.knowledgePoint.deleteMany();
+  await deleteKnowledgePoints();
   await prisma.level.deleteMany();
   await prisma.user.deleteMany();
   await prisma.grade.deleteMany();
 });
+
+async function deleteKnowledgePoints() {
+  while (await prisma.knowledgePoint.count()) {
+    const deleted = await prisma.knowledgePoint.deleteMany({ where: { children: { none: {} } } });
+    if (!deleted.count) throw new Error("Unable to delete knowledge point tree");
+  }
+}
 
 async function setup() {
   const grade = await prisma.grade.create({ data: { code: "GRADE_7", name: "七年级", sortOrder: 7 } });

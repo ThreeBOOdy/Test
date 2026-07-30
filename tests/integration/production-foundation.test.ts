@@ -5,6 +5,7 @@ import { assertDatabaseName } from "../../lib/domain/database-url";
 import { commitImportBatch, getImportBatchReport, revertImportBatch } from "../../lib/server/import-service";
 import { createPracticeSession, getPracticeSession, submitMockExam, submitPracticeAnswer } from "../../lib/server/practice-service";
 import { createSessionToken, findSessionUser, verifySessionToken } from "../../lib/server/session";
+import { RADIO_COURSE_ID } from "../../lib/domain/course";
 
 const connectionString = process.env.DATABASE_URL;
 if (!connectionString) throw new Error("DATABASE_URL is required for integration tests");
@@ -30,11 +31,19 @@ beforeEach(async () => {
   await prisma.knowledgePracticeRule.deleteMany();
   await prisma.examRule.deleteMany();
   await prisma.levelPracticeRule.deleteMany();
-  await prisma.knowledgePoint.deleteMany();
+  await deleteKnowledgePoints();
   await prisma.level.deleteMany();
+  await prisma.course.deleteMany({ where: { id: { not: RADIO_COURSE_ID } } });
   await prisma.user.deleteMany();
   await prisma.grade.deleteMany();
 });
+
+async function deleteKnowledgePoints() {
+  while (await prisma.knowledgePoint.count()) {
+    const deleted = await prisma.knowledgePoint.deleteMany({ where: { children: { none: {} } } });
+    if (!deleted.count) throw new Error("Unable to delete knowledge point tree");
+  }
+}
 
 async function createBaseRecords() {
   const user = await prisma.user.create({ data: { username: "student", displayName: "Student", passwordHash: "test", role: "STUDENT" } });
@@ -45,6 +54,40 @@ async function createBaseRecords() {
 }
 
 describe("production database foundation", () => {
+  it("allows only the RADIO course to be enabled", async () => {
+    await expect(prisma.course.create({ data: { code: "PYTHON", name: "Python", enabled: true, activeSlot: 1 } })).rejects.toBeTruthy();
+    await expect(prisma.course.update({ where: { id: RADIO_COURSE_ID }, data: { activeSlot: null } })).rejects.toBeTruthy();
+    await expect(prisma.course.update({ where: { id: RADIO_COURSE_ID }, data: { enabled: false, activeSlot: null } })).rejects.toBeTruthy();
+    await expect(prisma.courseBoundary.delete({ where: { id: 1 } })).rejects.toBeTruthy();
+    await expect(prisma.course.delete({ where: { id: RADIO_COURSE_ID } })).rejects.toMatchObject({ code: "P2003" });
+  });
+
+  it("rejects cross-course question ownership", async () => {
+    const otherCourse = await prisma.course.create({ data: { code: "PYTHON", name: "Python" } });
+    const radioLevel = await prisma.level.create({ data: { courseId: RADIO_COURSE_ID, code: "A", name: "Radio A" } });
+    const otherPoint = await prisma.knowledgePoint.create({ data: { courseId: otherCourse.id, code: "1.1", name: "Python Point", path: "/1/1.1", depth: 1 } });
+
+    await expect(prisma.question.create({ data: { courseId: RADIO_COURSE_ID, levelId: radioLevel.id, knowledgePointId: otherPoint.id, stem: "Cross course", type: "SINGLE_CHOICE", optionCount: 2, correctOptionCount: 1, selectionSpec: "2选1", options: [{ id: "A", text: "A" }, { id: "B", text: "B" }], correctOptionIds: ["A"] } })).rejects.toMatchObject({ code: "P2003" });
+  });
+
+  it("keeps practice selection inside the RADIO course boundary", async () => {
+    const otherCourse = await prisma.course.create({ data: { code: "PYTHON", name: "Python" } });
+    const user = await prisma.user.create({ data: { username: "course-student", displayName: "Course Student", passwordHash: "test", role: "STUDENT" } });
+    const radioLevel = await prisma.level.create({ data: { courseId: RADIO_COURSE_ID, code: "A", name: "Radio A" } });
+    const otherLevel = await prisma.level.create({ data: { courseId: otherCourse.id, code: "A", name: "Python A" } });
+    const radioPoint = await prisma.knowledgePoint.create({ data: { courseId: RADIO_COURSE_ID, code: "1.1", name: "Radio Point", path: "/1/1.1", depth: 1 } });
+    const otherPoint = await prisma.knowledgePoint.create({ data: { courseId: otherCourse.id, code: "1.1", name: "Python Point", path: "/1/1.1", depth: 1 } });
+    await prisma.levelPracticeRule.create({ data: { courseId: RADIO_COURSE_ID, levelId: radioLevel.id, singleCount: 1, multipleCount: 0 } });
+    await prisma.levelPracticeRule.create({ data: { courseId: otherCourse.id, levelId: otherLevel.id, singleCount: 1, multipleCount: 0 } });
+    const radioQuestion = await prisma.question.create({ data: { courseId: RADIO_COURSE_ID, levelId: radioLevel.id, knowledgePointId: radioPoint.id, externalQuestionCode: "Q-1", stem: "Radio", type: "SINGLE_CHOICE", optionCount: 2, correctOptionCount: 1, selectionSpec: "2选1", options: [{ id: "A", text: "A" }, { id: "B", text: "B" }], correctOptionIds: ["A"] } });
+    await prisma.question.create({ data: { courseId: otherCourse.id, levelId: otherLevel.id, knowledgePointId: otherPoint.id, externalQuestionCode: "Q-1", stem: "Python", type: "SINGLE_CHOICE", optionCount: 2, correctOptionCount: 1, selectionSpec: "2选1", options: [{ id: "A", text: "A" }, { id: "B", text: "B" }], correctOptionIds: ["A"] } });
+
+    const session = await createPracticeSession(user.id, { mode: "level", levelCode: "A", courseId: otherCourse.id } as Parameters<typeof createPracticeSession>[1]);
+
+    expect(session.questions.map((question) => question.id)).toEqual([radioQuestion.id]);
+    expect(await prisma.practiceSession.findUniqueOrThrow({ where: { id: session.id } })).toMatchObject({ courseId: RADIO_COURSE_ID, levelId: radioLevel.id });
+  });
+
   it("persists student account foundations and review history", async () => {
     const grade = await prisma.grade.create({ data: { code: "GRADE_7", name: "七年级", sortOrder: 7 } });
     const administrator = await prisma.user.create({ data: { username: "administrator", displayName: "Administrator", passwordHash: "test", role: "ADMIN" } });
@@ -81,7 +124,7 @@ describe("production database foundation", () => {
     await prisma.practiceSessionQuestion.create({ data: { sessionId: session.id, questionId: question.id, position: 0, snapshot } });
     await submitPracticeAnswer(user.id, session.id, question.id, ["A"]);
 
-    const answer = await prisma.practiceAnswer.findUniqueOrThrow({ where: { sessionId_questionId: { sessionId: session.id, questionId: question.id } } });
+    const answer = await prisma.practiceAnswer.findUniqueOrThrow({ where: { courseId_sessionId_questionId: { courseId: RADIO_COURSE_ID, sessionId: session.id, questionId: question.id } } });
     expect(answer.selectedOptionIds).toEqual(["A"]);
   });
 
@@ -257,8 +300,8 @@ describe("production database foundation", () => {
     const [correctQuestion, incorrectQuestion] = session.questions;
     await submitPracticeAnswer(user.id, session.id, correctQuestion.id, ["A"]);
     await submitPracticeAnswer(user.id, session.id, incorrectQuestion.id, ["B"]);
-    expect(await prisma.wrongQuestion.findUniqueOrThrow({ where: { userId_questionId: { userId: user.id, questionId: correctQuestion.id } } })).toMatchObject({ mastered: true, wrongCount: 1 });
-    expect(await prisma.wrongQuestion.findUniqueOrThrow({ where: { userId_questionId: { userId: user.id, questionId: incorrectQuestion.id } } })).toMatchObject({ mastered: false, wrongCount: 2 });
+    expect(await prisma.wrongQuestion.findUniqueOrThrow({ where: { courseId_userId_questionId: { courseId: RADIO_COURSE_ID, userId: user.id, questionId: correctQuestion.id } } })).toMatchObject({ mastered: true, wrongCount: 1 });
+    expect(await prisma.wrongQuestion.findUniqueOrThrow({ where: { courseId_userId_questionId: { courseId: RADIO_COURSE_ID, userId: user.id, questionId: incorrectQuestion.id } } })).toMatchObject({ mastered: false, wrongCount: 2 });
   });
 
   it("creates sequential practice in strict natural question-number order", async () => {

@@ -67,6 +67,30 @@ describe("MySQL project configuration", () => {
     expect(seed).not.toContain('name: "高三"');
   });
 
+  it("establishes the RADIO course before backfilling course-owned data", () => {
+    const migration = fs.readFileSync(path.resolve("prisma/migrations/20260730120000_radio_course_boundary/migration.sql"), "utf8");
+    const courseInsert = migration.indexOf("INSERT INTO `Course`");
+    const firstBackfill = migration.indexOf("UPDATE `Level` SET `courseId`");
+
+    expect(courseInsert).toBeGreaterThan(-1);
+    expect(firstBackfill).toBeGreaterThan(courseInsert);
+    expect(migration).not.toMatch(/DROP TABLE `(Question|PracticeSession|PracticeAnswer|WrongQuestion|ImportBatch)`/);
+  });
+
+  it("establishes and backfills the RADIO course boundary", () => {
+    const migration = fs.readFileSync(path.resolve("prisma/migrations/20260730120000_radio_course_boundary/migration.sql"), "utf8");
+
+    expect(migration).toContain("CREATE TABLE `Course`");
+    expect(migration).toContain("'course-radio', 'RADIO'");
+    for (const table of ["Level", "KnowledgePoint", "LevelPracticeRule", "KnowledgePracticeRule", "ExamRule", "Question", "ImportBatch", "PracticeSession", "PracticeSessionQuestion", "PracticeAnswer", "WrongQuestion"]) {
+      expect(migration).toContain(`ALTER TABLE \`${table}\` ADD COLUMN \`courseId\``);
+      expect(migration).toContain(`ALTER TABLE \`${table}\` ADD CONSTRAINT \`${table}_courseId_fkey\``);
+    }
+    expect(migration).toContain("CREATE UNIQUE INDEX `Question_courseId_levelId_externalQuestionCode_key`");
+    expect(migration).toContain("DROP INDEX `Question_levelId_externalQuestionCode_key` ON `Question`");
+    expect(migration).not.toMatch(/DELETE FROM `(Level|KnowledgePoint|Question|ImportBatch|PracticeSession)`/);
+  });
+
   it("uses MySQL-native aggregate and duration SQL", () => {
     const reportsPage = fs.readFileSync(path.resolve("app/teacher/reports/page.tsx"), "utf8");
     const studentsPage = fs.readFileSync(path.resolve("app/teacher/students/page.tsx"), "utf8");

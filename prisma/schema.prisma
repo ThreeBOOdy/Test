@@ -153,9 +153,45 @@ model StudentReviewRecord {
   @@index([action, createdAt])
 }
 
+model Course {
+  id                       String                    @id @default(cuid())
+  code                     String                    @unique
+  name                     String
+  sortOrder                Int                       @default(0)
+  enabled                  Boolean                   @default(false)
+  activeSlot               Int?                      @unique
+  boundaryId               Int?                      @unique
+  boundaryAnchor           CourseBoundary?           @relation("CourseBoundaryAnchor", fields: [boundaryId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  levels                   Level[]
+  examRules                ExamRule[]
+  knowledgePoints          KnowledgePoint[]
+  levelPracticeRules       LevelPracticeRule[]
+  knowledgePracticeRules   KnowledgePracticeRule[]
+  questions                Question[]
+  importBatches            ImportBatch[]
+  practiceSessions         PracticeSession[]
+  practiceSessionQuestions PracticeSessionQuestion[]
+  practiceAnswers          PracticeAnswer[]
+  wrongQuestions           WrongQuestion[]
+  boundaryRecord           CourseBoundary?           @relation("CourseBoundaryCourse")
+  createdAt                DateTime                  @default(now())
+  updatedAt                DateTime                  @updatedAt
+
+  @@index([enabled, sortOrder])
+}
+
+model CourseBoundary {
+  id             Int     @id
+  courseId       String  @unique
+  course         Course  @relation("CourseBoundaryCourse", fields: [courseId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  anchoredCourse Course? @relation("CourseBoundaryAnchor")
+}
+
 model Level {
   id             String                  @id @default(cuid())
-  code           String                  @unique
+  courseId       String                  @default("course-radio")
+  course         Course                  @relation(fields: [courseId], references: [id], onDelete: Restrict)
+  code           String
   name           String
   sortOrder      Int                     @default(0)
   enabled        Boolean                 @default(true)
@@ -166,30 +202,40 @@ model Level {
   sessions       PracticeSession[]
   createdAt      DateTime                @default(now())
   updatedAt      DateTime                @updatedAt
+
+  @@unique([courseId, code])
+  @@unique([courseId, id])
+  @@index([courseId, enabled, sortOrder])
 }
 
 model ExamRule {
   id              String   @id @default(cuid())
-  levelId         String   @unique
-  level           Level    @relation(fields: [levelId], references: [id], onDelete: Cascade)
+  courseId        String   @default("course-radio")
+  course          Course   @relation(fields: [courseId], references: [id], onDelete: Restrict)
+  levelId         String
+  level           Level    @relation(fields: [courseId, levelId], references: [courseId, id], onDelete: Cascade)
   singleCount     Int
   multipleCount   Int
   durationMinutes Int
   passingCount    Int
   enabled         Boolean  @default(true)
   updatedAt       DateTime @updatedAt
+
+  @@unique([courseId, levelId])
 }
 
 model KnowledgePoint {
   id            String                  @id @default(cuid())
-  code          String                  @unique
+  courseId      String                  @default("course-radio")
+  course        Course                  @relation(fields: [courseId], references: [id], onDelete: Restrict)
+  code          String
   name          String
-  path          String                  @unique
+  path          String
   depth         Int
   sortOrder     Int                     @default(0)
   enabled       Boolean                 @default(true)
   parentId      String?
-  parent        KnowledgePoint?         @relation("KnowledgeTree", fields: [parentId], references: [id])
+  parent        KnowledgePoint?         @relation("KnowledgeTree", fields: [courseId, parentId], references: [courseId, id], onDelete: Restrict)
   children      KnowledgePoint[]        @relation("KnowledgeTree")
   questions     Question[]
   practiceRules KnowledgePracticeRule[]
@@ -197,41 +243,51 @@ model KnowledgePoint {
   createdAt     DateTime                @default(now())
   updatedAt     DateTime                @updatedAt
 
-  @@index([parentId, sortOrder])
-  @@index([path])
+  @@unique([courseId, code])
+  @@unique([courseId, path])
+  @@unique([courseId, id])
+  @@index([courseId, parentId, sortOrder])
 }
 
 model LevelPracticeRule {
   id            String   @id @default(cuid())
-  levelId       String   @unique
-  level         Level    @relation(fields: [levelId], references: [id], onDelete: Cascade)
+  courseId      String   @default("course-radio")
+  course        Course   @relation(fields: [courseId], references: [id], onDelete: Restrict)
+  levelId       String
+  level         Level    @relation(fields: [courseId, levelId], references: [courseId, id], onDelete: Cascade)
   singleCount   Int      @default(0)
   multipleCount Int      @default(0)
   enabled       Boolean  @default(true)
   updatedAt     DateTime @updatedAt
+
+  @@unique([courseId, levelId])
 }
 
 model KnowledgePracticeRule {
   id               String         @id @default(cuid())
+  courseId         String         @default("course-radio")
+  course           Course         @relation(fields: [courseId], references: [id], onDelete: Restrict)
   knowledgePointId String
   levelId          String
-  knowledgePoint   KnowledgePoint @relation(fields: [knowledgePointId], references: [id], onDelete: Cascade)
-  level            Level          @relation(fields: [levelId], references: [id], onDelete: Cascade)
+  knowledgePoint   KnowledgePoint @relation(fields: [courseId, knowledgePointId], references: [courseId, id], onDelete: Cascade)
+  level            Level          @relation(fields: [courseId, levelId], references: [courseId, id], onDelete: Cascade)
   singleCount      Int            @default(0)
   multipleCount    Int            @default(0)
   enabled          Boolean        @default(true)
   updatedAt        DateTime       @updatedAt
 
-  @@unique([knowledgePointId, levelId])
-  @@index([levelId])
+  @@unique([courseId, knowledgePointId, levelId])
+  @@index([courseId, levelId])
 }
 
 model Question {
   id                   String                    @id @default(cuid())
+  courseId             String                    @default("course-radio")
+  course               Course                    @relation(fields: [courseId], references: [id], onDelete: Restrict)
   levelId              String
   knowledgePointId     String
-  level                Level                     @relation(fields: [levelId], references: [id])
-  knowledgePoint       KnowledgePoint            @relation(fields: [knowledgePointId], references: [id])
+  level                Level                     @relation(fields: [courseId, levelId], references: [courseId, id])
+  knowledgePoint       KnowledgePoint            @relation(fields: [courseId, knowledgePointId], references: [courseId, id])
   sourceBankCode       String?
   externalQuestionCode String?
   stem                 String                    @db.Text
@@ -243,28 +299,31 @@ model Question {
   correctOptionIds     Json
   status               QuestionStatus            @default(ACTIVE)
   importBatchId        String?
-  importBatch          ImportBatch?              @relation(fields: [importBatchId], references: [id])
+  importBatch          ImportBatch?              @relation(fields: [courseId, importBatchId], references: [courseId, id], onDelete: Restrict)
   sessionQuestions     PracticeSessionQuestion[]
   answers              PracticeAnswer[]
   wrongQuestions       WrongQuestion[]
   createdAt            DateTime                  @default(now())
   updatedAt            DateTime                  @updatedAt
 
-  @@unique([levelId, externalQuestionCode])
-  @@index([levelId, type, status])
-  @@index([knowledgePointId, levelId, type, status])
-  @@index([externalQuestionCode])
+  @@unique([courseId, levelId, externalQuestionCode])
+  @@unique([courseId, id])
+  @@index([courseId, levelId, type, status])
+  @@index([courseId, knowledgePointId, levelId, type, status])
+  @@index([courseId, externalQuestionCode])
 }
 
 model PracticeSession {
   id                      String                    @id @default(cuid())
+  courseId                String                    @default("course-radio")
+  course                  Course                    @relation(fields: [courseId], references: [id], onDelete: Restrict)
   userId                  String
   user                    User                      @relation(fields: [userId], references: [id])
   mode                    PracticeMode
   levelId                 String?
-  level                   Level?                    @relation(fields: [levelId], references: [id])
+  level                   Level?                    @relation(fields: [courseId, levelId], references: [courseId, id], onDelete: Restrict)
   knowledgePointId        String?
-  knowledgePoint          KnowledgePoint?           @relation(fields: [knowledgePointId], references: [id])
+  knowledgePoint          KnowledgePoint?           @relation(fields: [courseId, knowledgePointId], references: [courseId, id], onDelete: Restrict)
   status                  PracticeStatus            @default(IN_PROGRESS)
   singleCountSnapshot     Int
   multipleCountSnapshot   Int
@@ -278,53 +337,63 @@ model PracticeSession {
   questions               PracticeSessionQuestion[]
   answers                 PracticeAnswer[]
 
+  @@unique([courseId, id])
   @@index([userId, status, startedAt])
 }
 
 model PracticeSessionQuestion {
   id         String          @id @default(cuid())
+  courseId   String          @default("course-radio")
+  course     Course          @relation(fields: [courseId], references: [id], onDelete: Restrict)
   sessionId  String
   questionId String
   position   Int
   snapshot   Json
-  session    PracticeSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
-  question   Question        @relation(fields: [questionId], references: [id])
+  session    PracticeSession @relation(fields: [courseId, sessionId], references: [courseId, id], onDelete: Cascade)
+  question   Question        @relation(fields: [courseId, questionId], references: [courseId, id])
 
-  @@unique([sessionId, questionId])
-  @@unique([sessionId, position])
+  @@unique([courseId, sessionId, questionId])
+  @@unique([courseId, sessionId, position])
 }
 
 model PracticeAnswer {
   id                String          @id @default(cuid())
+  courseId          String          @default("course-radio")
+  course            Course          @relation(fields: [courseId], references: [id], onDelete: Restrict)
   sessionId         String
   questionId        String
-  session           PracticeSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
-  question          Question        @relation(fields: [questionId], references: [id])
+  session           PracticeSession @relation(fields: [courseId, sessionId], references: [courseId, id], onDelete: Cascade)
+  question          Question        @relation(fields: [courseId, questionId], references: [courseId, id])
   selectedOptionIds Json
   isCorrect         Boolean
   submittedAt       DateTime        @default(now())
 
-  @@unique([sessionId, questionId])
-  @@index([questionId, isCorrect])
+  @@unique([courseId, sessionId, questionId])
+  @@index([courseId, questionId, isCorrect])
 }
 
 model WrongQuestion {
   id          String    @id @default(cuid())
+  courseId    String    @default("course-radio")
+  course      Course    @relation(fields: [courseId], references: [id], onDelete: Restrict)
   userId      String
   questionId  String
   user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  question    Question  @relation(fields: [questionId], references: [id])
+  question    Question  @relation(fields: [courseId, questionId], references: [courseId, id])
   wrongCount  Int       @default(1)
   mastered    Boolean   @default(false)
   lastWrongAt DateTime  @default(now())
   masteredAt  DateTime?
 
-  @@unique([userId, questionId])
-  @@index([userId, mastered])
+  @@unique([courseId, userId, questionId])
+  @@index([userId])
+  @@index([courseId, userId, mastered])
 }
 
 model ImportBatch {
   id            String           @id @default(cuid())
+  courseId      String           @default("course-radio")
+  course        Course           @relation(fields: [courseId], references: [id], onDelete: Restrict)
   fileName      String
   status        ImportStatus     @default(PREVIEW)
   totalRows     Int              @default(0)
@@ -343,6 +412,7 @@ model ImportBatch {
   committedAt   DateTime?
   revertedAt    DateTime?
 
+  @@unique([courseId, id])
   @@index([importedById, status, createdAt])
 }
 

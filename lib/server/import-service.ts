@@ -3,6 +3,7 @@ import { Prisma } from "@/generated/prisma/client";
 import { prisma } from "@/lib/db";
 import { ApiError } from "@/lib/domain/api-error";
 import { isImportBatchExpired } from "@/lib/domain/import-batch";
+import { RADIO_COURSE_ID } from "@/lib/domain/course";
 import { validateImportRow } from "@/lib/domain/question-import";
 import type { ImportQuestionRow } from "@/lib/domain/types";
 import { ensureKnowledgePoint } from "@/lib/server/knowledge-service";
@@ -11,19 +12,19 @@ type ImportBatchReportOptions = { page: number; pageSize: number; issuesOnly?: b
 
 export async function revertImportBatch(batchId: string) {
   return prisma.$transaction(async (tx) => {
-    const batch = await tx.importBatch.findUnique({ where: { id: batchId } });
+    const batch = await tx.importBatch.findFirst({ where: { id: batchId, courseId: RADIO_COURSE_ID } });
     if (!batch) throw new ApiError("导入批次不存在", 404);
     if (batch.status !== "COMMITTED") throw new ApiError("只有已提交批次可以撤销", 409);
-    const archived = await tx.question.updateMany({ where: { importBatchId: batchId, sessionQuestions: { some: {} } }, data: { status: "ARCHIVED" } });
-    const deleted = await tx.question.deleteMany({ where: { importBatchId: batchId, sessionQuestions: { none: {} }, answers: { none: {} }, wrongQuestions: { none: {} } } });
+    const archived = await tx.question.updateMany({ where: { courseId: RADIO_COURSE_ID, importBatchId: batchId, sessionQuestions: { some: {} } }, data: { status: "ARCHIVED" } });
+    const deleted = await tx.question.deleteMany({ where: { courseId: RADIO_COURSE_ID, importBatchId: batchId, sessionQuestions: { none: {} }, answers: { none: {} }, wrongQuestions: { none: {} } } });
     await tx.importBatch.update({ where: { id: batchId }, data: { status: "REVERTED", revertedAt: new Date() } });
     return { archived: archived.count, deleted: deleted.count };
   });
 }
 
 export async function getImportBatchReport(batchId: string, options: ImportBatchReportOptions) {
-  const batch = await prisma.importBatch.findUnique({
-    where: { id: batchId },
+  const batch = await prisma.importBatch.findFirst({
+    where: { id: batchId, courseId: RADIO_COURSE_ID },
     select: { id: true, fileName: true, status: true, totalRows: true, validRows: true, warningRows: true, errorRows: true, insertedRows: true, duplicateRows: true, createdAt: true, expiresAt: true, committedAt: true, revertedAt: true },
   });
   if (!batch) throw new ApiError("导入批次不存在", 404);
@@ -40,7 +41,7 @@ export async function getImportBatchReport(batchId: string, options: ImportBatch
 
 export async function commitImportBatch(importedById: string, batchId: string) {
   const batch = await prisma.importBatch.findFirst({
-    where: { id: batchId, importedById },
+    where: { id: batchId, courseId: RADIO_COURSE_ID, importedById },
     include: { rows: { orderBy: { rowNumber: "asc" } } },
   });
   if (!batch) throw new ApiError("导入批次不存在", 404);
@@ -54,13 +55,13 @@ export async function commitImportBatch(importedById: string, batchId: string) {
 
   return prisma.$transaction(async (tx) => {
     const claimed = await tx.importBatch.updateMany({
-      where: { id: batch.id, status: "PREVIEW" },
+      where: { id: batch.id, courseId: RADIO_COURSE_ID, status: "PREVIEW" },
       data: { status: "COMMITTED", committedAt: new Date() },
     });
     if (claimed.count !== 1) throw new ApiError("该导入批次已被处理", 409);
 
     const levelCodes = [...new Set(validated.map((item) => item.row.levelCode))];
-    const levels = await tx.level.findMany({ where: { code: { in: levelCodes }, enabled: true } });
+    const levels = await tx.level.findMany({ where: { courseId: RADIO_COURSE_ID, code: { in: levelCodes }, enabled: true } });
     const levelByCode = new Map(levels.map((level) => [level.code, level]));
     for (const item of validated) {
       if (!levelByCode.has(item.row.levelCode)) throw new ApiError(`${formatImportLocation(item.row)} 等级 ${item.row.levelCode} 不存在或已停用`, 409);
@@ -73,7 +74,7 @@ export async function commitImportBatch(importedById: string, batchId: string) {
       }
     }
     const knowledgePoints = await tx.knowledgePoint.findMany({
-      where: { id: { in: [...knowledgeByCode.values()].map((point) => point.id) } },
+      where: { courseId: RADIO_COURSE_ID, id: { in: [...knowledgeByCode.values()].map((point) => point.id) } },
       include: { _count: { select: { children: true } } },
     });
     const knowledgeById = new Map(knowledgePoints.map((point) => [point.id, point]));
@@ -85,6 +86,7 @@ export async function commitImportBatch(importedById: string, batchId: string) {
         throw new ApiError(`${formatImportLocation(item.row)} 知识点 ${knowledgePoint.code} 不是末级节点`, 409);
       }
       return {
+        courseId: RADIO_COURSE_ID,
         levelId: level.id,
         knowledgePointId: knowledgePoint.id,
         sourceBankCode: item.row.sourceBankCode || null,

@@ -7,6 +7,7 @@ import { readJsonBody } from "@/lib/domain/request-body";
 import { assertSameOrigin } from "@/lib/server/http";
 import { writeAuditLog } from "@/lib/server/audit";
 import { ApiError, apiErrorResponse, requireTeachingUser } from "@/lib/server/api";
+import { RADIO_COURSE_ID } from "@/lib/domain/course";
 
 const schema = z.object({
   levelId: z.string().min(1),
@@ -26,18 +27,19 @@ export async function POST(request: Request) {
     const input = schema.parse(await readJsonBody(request));
     const normalized = normalizeQuestionEditorInput(input);
     const [level, point] = await Promise.all([
-      prisma.level.findFirst({ where: { id: input.levelId, enabled: true } }),
-      prisma.knowledgePoint.findFirst({ where: { id: input.knowledgePointId, enabled: true }, include: { _count: { select: { children: true } } } }),
+      prisma.level.findFirst({ where: { id: input.levelId, courseId: RADIO_COURSE_ID, enabled: true } }),
+      prisma.knowledgePoint.findFirst({ where: { id: input.knowledgePointId, courseId: RADIO_COURSE_ID, enabled: true }, include: { _count: { select: { children: true } } } }),
     ]);
     if (!level) throw new ApiError("等级不存在或已停用", 404);
     if (!point) throw new ApiError("知识点不存在或已停用", 404);
     if (point._count.children > 0) throw new ApiError("题目必须归属末级知识点");
     if (input.externalQuestionCode) {
-      const duplicate = await prisma.question.findFirst({ where: { levelId: input.levelId, externalQuestionCode: input.externalQuestionCode } });
+      const duplicate = await prisma.question.findFirst({ where: { courseId: RADIO_COURSE_ID, levelId: input.levelId, externalQuestionCode: input.externalQuestionCode } });
       if (duplicate) throw new ApiError("该等级下已存在相同题目编号", 409);
     }
     const question = await prisma.question.create({
       data: {
+        courseId: RADIO_COURSE_ID,
         levelId: input.levelId,
         knowledgePointId: input.knowledgePointId,
         sourceBankCode: input.sourceBankCode || null,
