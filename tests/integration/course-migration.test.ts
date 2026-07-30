@@ -23,6 +23,7 @@ beforeAll(async () => {
   }
   await seedLegacyCourseData(connection);
   await connection.importFile({ file: path.resolve("prisma/migrations/20260730120000_radio_course_boundary/migration.sql") });
+  await connection.importFile({ file: path.resolve("prisma/migrations/20260730153500_enforce_radio_course_activation/migration.sql") });
 });
 
 afterAll(async () => {
@@ -71,16 +72,14 @@ describe("RADIO course migration", () => {
     await expect(prisma.wrongQuestion.create({ data: { courseId: RADIO_COURSE_ID, userId: "legacy-user", questionId: otherQuestion.id } })).rejects.toMatchObject({ code: "P2003" });
   });
 
-  it("allows a future course to replace RADIO as the sole enabled course", async () => {
+  it("keeps RADIO as the sole enabled course", async () => {
     const nextCourse = await prisma.course.create({ data: { code: "PYTHON_NEXT", name: "Python Next" } });
 
-    await expect(prisma.course.create({ data: { code: "SECOND_ACTIVE", name: "Second Active", enabled: true, activeSlot: 1 } })).rejects.toMatchObject({ code: "P2002" });
-    await prisma.$transaction([
-      prisma.course.update({ where: { id: RADIO_COURSE_ID }, data: { enabled: false, activeSlot: null } }),
-      prisma.course.update({ where: { id: nextCourse.id }, data: { enabled: true, activeSlot: 1 } }),
-    ]);
+    await expect(prisma.course.create({ data: { code: "SECOND_ACTIVE", name: "Second Active", enabled: true, activeSlot: 1 } })).rejects.toMatchObject({ code: "P2039" });
+    await expect(prisma.course.update({ where: { id: RADIO_COURSE_ID }, data: { enabled: false, activeSlot: null } })).rejects.toMatchObject({ code: "P2039" });
+    await expect(prisma.course.update({ where: { id: nextCourse.id }, data: { enabled: true, activeSlot: 1 } })).rejects.toMatchObject({ code: "P2039" });
 
-    await expect(prisma.course.findMany({ where: { enabled: true }, select: { id: true, code: true } })).resolves.toEqual([{ id: nextCourse.id, code: "PYTHON_NEXT" }]);
+    await expect(prisma.course.findMany({ where: { enabled: true }, select: { id: true, code: true } })).resolves.toEqual([{ id: RADIO_COURSE_ID, code: "RADIO" }]);
   });
 });
 

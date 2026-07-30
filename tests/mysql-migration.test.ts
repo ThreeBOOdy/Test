@@ -95,6 +95,17 @@ describe("MySQL project configuration", () => {
     expect(migration).not.toMatch(/DELETE FROM `(Level|KnowledgePoint|Question|ImportBatch|PracticeSession)`/);
   });
 
+  it("locks RADIO as the sole enabled course", () => {
+    const migration = fs.readFileSync(path.resolve("prisma/migrations/20260730153500_enforce_radio_course_activation/migration.sql"), "utf8");
+
+    expect(migration).toContain("DROP CHECK `Course_enabled_active_slot_check`");
+    expect(migration).toContain("Course_radio_activation_check");
+    expect(migration).toContain("`id` = 'course-radio'");
+    expect(migration).toContain("`code` = 'RADIO'");
+    expect(migration).toContain("`enabled` = true");
+    expect(migration).toContain("`activeSlot` = 1");
+  });
+
   it("uses MySQL-native aggregate and duration SQL", () => {
     const reportsPage = fs.readFileSync(path.resolve("app/teacher/reports/page.tsx"), "utf8");
     const studentsPage = fs.readFileSync(path.resolve("app/teacher/students/page.tsx"), "utf8");
