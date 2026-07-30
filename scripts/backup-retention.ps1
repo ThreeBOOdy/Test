@@ -1,6 +1,5 @@
 param(
   [string]$BackupDirectory = ".\backups",
-  [string]$OfflineDirectory,
   [int]$Daily = 14,
   [int]$Weekly = 8,
   [int]$Monthly = 12,
@@ -10,20 +9,9 @@ $ErrorActionPreference = "Stop"
 $projectRoot = Split-Path -Parent $PSScriptRoot
 $npm = Get-Command npm.cmd -ErrorAction SilentlyContinue
 if (-not $npm) { $npm = Get-Command npm -ErrorAction Stop }
-$arguments = @(
-  "tsx", "scripts/backup-cli.ts", "backup",
-  "--backup-root", $BackupDirectory,
-  "--daily", $Daily,
-  "--weekly", $Weekly,
-  "--monthly", $Monthly,
-  "--log-file", $LogFile
-)
-if ($OfflineDirectory) {
-  $arguments += @("--offline-root", $OfflineDirectory)
-}
 Push-Location $projectRoot
 try {
-  & $npm.Source exec -- @arguments
+  & $npm.Source exec -- tsx scripts/backup-cli.ts cleanup --backup-root $BackupDirectory --daily $Daily --weekly $Weekly --monthly $Monthly --log-file $LogFile
   if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 } finally {
   Pop-Location

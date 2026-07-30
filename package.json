@@ -12,6 +12,11 @@
     "test:integration": "vitest run --config vitest.integration.config.ts",
     "test:e2e": "playwright test",
     "test:watch": "vitest",
+    "backup": "tsx scripts/backup-cli.ts backup",
+    "backup:cleanup": "tsx scripts/backup-cli.ts cleanup",
+    "backup:offline": "tsx scripts/backup-cli.ts offline-copy",
+    "backup:verify": "tsx scripts/backup-cli.ts verify",
+    "backup:restore": "tsx scripts/backup-cli.ts restore",
     "db:generate": "prisma generate",
     "db:migrate": "prisma migrate dev",
     "db:seed": "tsx prisma/seed.ts"

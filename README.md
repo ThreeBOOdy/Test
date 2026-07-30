@@ -377,7 +377,7 @@ docker compose down -v
 
 ## 服务器 Docker 部署
 
-生产服务器只需安装 Docker Engine 和 Docker Compose v2，不需要安装项目依赖对应版本的 Node.js、MySQL、Prisma 或 Caddy。
+应用容器运行只需 Docker Engine 和 Docker Compose v2，不需要在宿主机安装 MySQL、Prisma 或 Caddy。若在宿主机或 Windows 任务计划程序运行仓库内的备份 PowerShell 工具，还必须安装 Node.js 24、执行 `npm ci`，并允许该运维账号调用 Docker Compose；脚本会自动切换到项目根目录。
 
 首次部署时复制生产代码并创建 `.env`：
 
@@ -635,23 +635,64 @@ GitHub Actions 使用 MySQL 8.0.46 服务容器，并为集成测试和端到端
 
 ## 数据备份与恢复
 
-### 备份
+生产备份使用流式 AES-256-GCM 认证加密。`mysqldump` 的标准输出直接进入加密流，脚本不会在主机或数据库容器中生成明文 SQL 文件。每份备份包含：
+
+- `*.backup`：加密数据库转储。
+- `*.backup.manifest.json`：数据库版本、应用提交、最新 Prisma 迁移、UTC 创建时间、加密文件 SHA-256、密钥标识和恢复服务信息；清单使用独立的 `BACKUP_MANIFEST_AUTH_KEY` 执行 HMAC-SHA-256 认证。
+- `logs/backup-operations.jsonl`：成功或失败结果；失败命令返回非零退出码，日志行可直接由日志采集或告警系统解析。
+
+### 密钥准备
+
+备份密钥必须由密钥管理系统、密码保险库或受保护的调度器注入，不得写入仓库、部署目录中的 `.env`、备份目录或日志。密钥必须是独立的 32 字节随机值，并使用 Base64 编码：
 
 ```powershell
-.\scripts\backup.ps1
+$env:BACKUP_ENCRYPTION_KEY = <从外部密钥管理系统读取的 Base64 值>
+$env:BACKUP_ENCRYPTION_KEY_ID = "production-backup-2026"
+$env:BACKUP_MANIFEST_AUTH_KEY = <从外部密钥管理系统读取的另一份 Base64 值>
 ```
+
+密钥保险库中必须保留可恢复副本，并由生产服务器之外的受控主体持有；不能只保存在生产服务器。轮换备份加密密钥时保留旧密钥及其 `BACKUP_ENCRYPTION_KEY_ID`，直到对应备份全部过期；恢复旧备份时注入对应旧密钥。`BACKUP_MANIFEST_AUTH_KEY` 是独立且稳定的清单认证密钥，应覆盖完整保留窗口并按单独计划轮换，因此新旧加密密钥生成的清单可以共存和统一清理。
+
+### 创建、保留与离线复制
+
+```powershell
+.\scripts\backup.ps1 -BackupDirectory E:\PracticeBackups -OfflineDirectory F:\PracticeOffline
+```
+
+默认保留最近 `14` 个日层级、`8` 个周层级和 `12` 个月层级。层级选择以清单内的 UTC `createdAt` 为准；清理前会解析真实路径并拒绝删除备份根目录之外（包括通过符号链接跳出目录）的目标。可单独执行清理：
+
+```powershell
+.\scripts\backup-retention.ps1 -BackupDirectory E:\PracticeBackups -Daily 14 -Weekly 8 -Monthly 12
+```
+
+离线介质不应长期挂载在生产服务器上。介质临时挂载后，可复制指定备份；脚本会在复制前校验源 SHA-256，并在复制后再次计算目标 SHA-256。同名代际已存在时脚本拒绝覆盖，防止旧清单与新文件错配：
+
+```powershell
+.\scripts\backup-offline-copy.ps1 `
+  -ManifestFile E:\PracticeBackups\practice-YYYYMMDDTHHMMSSZ.backup.manifest.json `
+  -BackupDirectory E:\PracticeBackups `
+  -OfflineDirectory F:\PracticeOffline
+```
+
+Windows 任务计划程序或其他调度器应每日运行 `backup.ps1`，保留其非零退出码，并采集 `logs/backup-operations.jsonl`。若离线介质并非每天挂载，可省略 `-OfflineDirectory`，并在介质接入窗口单独运行离线复制脚本。
 
 ### 恢复
 
-恢复前应停止应用写入，并确认目标数据库可以被覆盖：
+恢复前确认目标数据库可以被覆盖，并先在隔离环境执行。恢复脚本先验证清单 HMAC、SHA-256 和 AES-GCM 认证标签，将认证完成的明文暂存在数据库容器的受限内存文件系统 `/dev/shm`，并预留至少加密文件大小加 16 MiB 的可用空间，然后才停止应用并导入 MySQL；恢复结束即删除暂存文件，不会把明文写入持久存储。可通过 `BACKUP_RESTORE_TMP_DIRECTORY` 指定其他受保护的容器内临时文件系统：
 
 ```powershell
-.\scripts\restore.ps1 -BackupFile .\backups\practice-YYYYMMDD-HHMMSS.sql
+.\scripts\restore.ps1 `
+  -ManifestFile E:\PracticeBackups\practice-YYYYMMDDTHHMMSSZ.backup.manifest.json `
+  -BackupDirectory E:\PracticeBackups
 ```
 
-脚本在 MySQL 容器内使用 `mysqldump` / `mysql`，并通过 `docker compose cp` 传输 SQL 文件，避免 Windows PowerShell 文本管道造成编码损坏。
+恢复成功还要求清单迁移版本与数据库一致、关键表计数合理、至少存在一个可登录账号、恰好一个启用的 `RADIO` 课程，并在存在学生敏感字段时完成 AES-GCM 解密抽样。导入或数据库核验失败时应用保持停止，等待人工处置。
 
-生产环境建议使用云数据库自动备份，并定期验证备份文件可以正常恢复。
+恢复演练必须在隔离环境设置 `BACKUP_RESTORE_BASE_URL`、`BACKUP_RESTORE_SMOKE_USERNAME` 和 `BACKUP_RESTORE_SMOKE_PASSWORD`；可用 `BACKUP_RESTORE_SMOKE_LEVEL_CODE` 指定等级，默认 `A`。脚本重启应用后会强制完成就绪检查、真实学生登录、创建一轮练习并提交第一道题的答案，任一步失败均返回非零退出且不会记录为恢复成功。冒烟学生应为专用测试账号，凭据由外部密码保险库注入，不得写入仓库或日志。
+
+部署目录没有 Git 元数据时，调度器必须注入 `APP_COMMIT`。也可通过 `BACKUP_DIRECTORY`、`BACKUP_OFFLINE_DIRECTORY`、`BACKUP_LOG_FILE`、`BACKUP_RETENTION_DAILY`、`BACKUP_RETENTION_WEEKLY` 和 `BACKUP_RETENTION_MONTHLY` 设置默认值。
+
+至少每月在隔离环境执行恢复演练，核对清单中的迁移版本、关键表数量、敏感字段解密抽样以及登录和练习核心链路，并将演练时间、备份文件、耗时和结果写入运维记录。加密文件生成成功不等于已经验证可恢复。
 
 ## 安全说明
 
@@ -716,7 +757,9 @@ New-StudentDataKey
 
 ```powershell
 .\scripts\backup.ps1
-.\scripts\restore.ps1 -BackupFile .\backups\practice-YYYYMMDD-HHMMSS.sql
+.\scripts\restore.ps1 `
+  -ManifestFile .\backups\practice-YYYYMMDDTHHMMSSZ.backup.manifest.json `
+  -BackupDirectory .\backups
 ```
 
 升级步骤：
@@ -729,7 +772,7 @@ New-StudentDataKey
 回滚步骤：
 
 1. 若仅应用代码异常且迁移向后兼容，切回上一版本镜像并重新运行生产 Compose。
-2. 若数据库迁移不兼容，停止应用，使用升级前 `.sql` 文件执行 `scripts/restore.ps1`，再启动上一版本镜像。
+2. 若数据库迁移不兼容，使用升级前的 `.backup.manifest.json` 清单执行 `scripts/restore.ps1`，再启动上一版本镜像。
 3. Prisma 生产迁移不自动执行向下迁移；任何破坏性 Schema 变更都必须先验证备份恢复。
 
 正式公网部署后仍建议接入外部监控、集中日志、异常告警和异地备份。

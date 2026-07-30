@@ -1,12 +1,16 @@
-param([Parameter(Mandatory = $true)][string]$BackupFile)
+param(
+  [Parameter(Mandatory = $true)][string]$ManifestFile,
+  [string]$BackupDirectory = ".\backups",
+  [string]$LogFile = ".\logs\backup-operations.jsonl"
+)
 $ErrorActionPreference = "Stop"
-$resolved = (Resolve-Path -LiteralPath $BackupFile).Path
-$containerSource = "/tmp/practice-restore.sql"
-docker compose -f docker-compose.prod.yml stop app
+$projectRoot = Split-Path -Parent $PSScriptRoot
+$npm = Get-Command npm.cmd -ErrorAction SilentlyContinue
+if (-not $npm) { $npm = Get-Command npm -ErrorAction Stop }
+Push-Location $projectRoot
 try {
-  docker compose -f docker-compose.prod.yml cp $resolved "db:$containerSource"
-  docker compose -f docker-compose.prod.yml exec -T db sh -c 'exec mysql -u practice -p"$MYSQL_PASSWORD" practice < /tmp/practice-restore.sql'
+  & $npm.Source exec -- tsx scripts/backup-cli.ts restore --manifest $ManifestFile --backup-root $BackupDirectory --log-file $LogFile
+  if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 } finally {
-  docker compose -f docker-compose.prod.yml exec -T db rm -f $containerSource | Out-Null
-  docker compose -f docker-compose.prod.yml start app
+  Pop-Location
 }

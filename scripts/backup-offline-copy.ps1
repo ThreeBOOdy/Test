@@ -1,29 +1,16 @@
 param(
+  [Parameter(Mandatory = $true)][string]$ManifestFile,
+  [Parameter(Mandatory = $true)][string]$OfflineDirectory,
   [string]$BackupDirectory = ".\backups",
-  [string]$OfflineDirectory,
-  [int]$Daily = 14,
-  [int]$Weekly = 8,
-  [int]$Monthly = 12,
   [string]$LogFile = ".\logs\backup-operations.jsonl"
 )
 $ErrorActionPreference = "Stop"
 $projectRoot = Split-Path -Parent $PSScriptRoot
 $npm = Get-Command npm.cmd -ErrorAction SilentlyContinue
 if (-not $npm) { $npm = Get-Command npm -ErrorAction Stop }
-$arguments = @(
-  "tsx", "scripts/backup-cli.ts", "backup",
-  "--backup-root", $BackupDirectory,
-  "--daily", $Daily,
-  "--weekly", $Weekly,
-  "--monthly", $Monthly,
-  "--log-file", $LogFile
-)
-if ($OfflineDirectory) {
-  $arguments += @("--offline-root", $OfflineDirectory)
-}
 Push-Location $projectRoot
 try {
-  & $npm.Source exec -- @arguments
+  & $npm.Source exec -- tsx scripts/backup-cli.ts offline-copy --manifest $ManifestFile --backup-root $BackupDirectory --offline-root $OfflineDirectory --log-file $LogFile
   if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 } finally {
   Pop-Location

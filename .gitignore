@@ -14,3 +14,5 @@ test.patch-probe
 .tools/
 *.tsbuildinfo
 tmp/
+backups/
+logs/
