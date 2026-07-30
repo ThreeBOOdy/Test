@@ -53,9 +53,34 @@ describe("RADIO course migration", () => {
 
   it("rejects cross-course relationships after migration", async () => {
     const otherCourse = await prisma.course.create({ data: { code: "PYTHON", name: "Python" } });
-    const otherPoint = await prisma.knowledgePoint.create({ data: { courseId: otherCourse.id, code: "1.1", name: "Python Point", path: "/1/1.1", depth: 1 } });
+    const [otherLevel, otherPoint, otherBatch] = await Promise.all([
+      prisma.level.create({ data: { courseId: otherCourse.id, code: "P", name: "Python Level" } }),
+      prisma.knowledgePoint.create({ data: { courseId: otherCourse.id, code: "1.1", name: "Python Point", path: "/1/1.1", depth: 1 } }),
+      prisma.importBatch.create({ data: { courseId: otherCourse.id, fileName: "python.xlsx", importedById: "legacy-user", totalRows: 0, validRows: 0 } }),
+    ]);
+    const otherQuestion = await prisma.question.create({ data: { courseId: otherCourse.id, levelId: otherLevel.id, knowledgePointId: otherPoint.id, importBatchId: otherBatch.id, stem: "Python question", type: "SINGLE_CHOICE", optionCount: 2, correctOptionCount: 1, selectionSpec: "2选1", options: [{ id: "A", text: "A" }, { id: "B", text: "B" }], correctOptionIds: ["A"] } });
 
-    await expect(prisma.question.create({ data: { courseId: RADIO_COURSE_ID, levelId: "legacy-level", knowledgePointId: otherPoint.id, stem: "Cross course", type: "SINGLE_CHOICE", optionCount: 2, correctOptionCount: 1, selectionSpec: "2选1", options: [{ id: "A", text: "A" }, { id: "B", text: "B" }], correctOptionIds: ["A"] } })).rejects.toMatchObject({ code: "P2003" });
+    await expect(prisma.levelPracticeRule.create({ data: { courseId: RADIO_COURSE_ID, levelId: otherLevel.id, singleCount: 1, multipleCount: 0 } })).rejects.toMatchObject({ code: "P2003" });
+    await expect(prisma.knowledgePracticeRule.create({ data: { courseId: RADIO_COURSE_ID, levelId: "legacy-level", knowledgePointId: otherPoint.id, singleCount: 1, multipleCount: 0 } })).rejects.toMatchObject({ code: "P2003" });
+    await expect(prisma.examRule.create({ data: { courseId: RADIO_COURSE_ID, levelId: otherLevel.id, singleCount: 1, multipleCount: 0, durationMinutes: 30, passingCount: 1 } })).rejects.toMatchObject({ code: "P2003" });
+    await expect(prisma.question.create({ data: { courseId: RADIO_COURSE_ID, levelId: "legacy-level", knowledgePointId: otherPoint.id, stem: "Cross course point", type: "SINGLE_CHOICE", optionCount: 2, correctOptionCount: 1, selectionSpec: "2选1", options: [{ id: "A", text: "A" }, { id: "B", text: "B" }], correctOptionIds: ["A"] } })).rejects.toMatchObject({ code: "P2003" });
+    await expect(prisma.question.create({ data: { courseId: RADIO_COURSE_ID, levelId: "legacy-level", knowledgePointId: "legacy-point", importBatchId: otherBatch.id, stem: "Cross course import", type: "SINGLE_CHOICE", optionCount: 2, correctOptionCount: 1, selectionSpec: "2选1", options: [{ id: "A", text: "A" }, { id: "B", text: "B" }], correctOptionIds: ["A"] } })).rejects.toMatchObject({ code: "P2003" });
+    await expect(prisma.practiceSession.create({ data: { courseId: RADIO_COURSE_ID, userId: "legacy-user", mode: "LEVEL_COMPREHENSIVE", levelId: otherLevel.id, singleCountSnapshot: 1, multipleCountSnapshot: 0 } })).rejects.toMatchObject({ code: "P2003" });
+    await expect(prisma.practiceSessionQuestion.create({ data: { courseId: RADIO_COURSE_ID, sessionId: "legacy-session", questionId: otherQuestion.id, position: 1, snapshot: {} } })).rejects.toMatchObject({ code: "P2003" });
+    await expect(prisma.practiceAnswer.create({ data: { courseId: RADIO_COURSE_ID, sessionId: "legacy-session", questionId: otherQuestion.id, selectedOptionIds: ["A"], isCorrect: true } })).rejects.toMatchObject({ code: "P2003" });
+    await expect(prisma.wrongQuestion.create({ data: { courseId: RADIO_COURSE_ID, userId: "legacy-user", questionId: otherQuestion.id } })).rejects.toMatchObject({ code: "P2003" });
+  });
+
+  it("allows a future course to replace RADIO as the sole enabled course", async () => {
+    const nextCourse = await prisma.course.create({ data: { code: "PYTHON_NEXT", name: "Python Next" } });
+
+    await expect(prisma.course.create({ data: { code: "SECOND_ACTIVE", name: "Second Active", enabled: true, activeSlot: 1 } })).rejects.toMatchObject({ code: "P2002" });
+    await prisma.$transaction([
+      prisma.course.update({ where: { id: RADIO_COURSE_ID }, data: { enabled: false, activeSlot: null } }),
+      prisma.course.update({ where: { id: nextCourse.id }, data: { enabled: true, activeSlot: 1 } }),
+    ]);
+
+    await expect(prisma.course.findMany({ where: { enabled: true }, select: { id: true, code: true } })).resolves.toEqual([{ id: nextCourse.id, code: "PYTHON_NEXT" }]);
   });
 });
 

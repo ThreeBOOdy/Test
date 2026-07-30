@@ -12,7 +12,7 @@ CREATE TABLE `Course` (
     UNIQUE INDEX `Course_code_key`(`code`),
     UNIQUE INDEX `Course_activeSlot_key`(`activeSlot`),
     INDEX `Course_enabled_sortOrder_idx`(`enabled`, `sortOrder`),
-    CONSTRAINT `Course_radio_activation_check` CHECK (((`id` = 'course-radio' AND `code` = 'RADIO' AND `enabled` = true AND `activeSlot` IS NOT NULL AND `activeSlot` = 1) OR (`id` <> 'course-radio' AND `code` <> 'RADIO' AND `enabled` = false AND `activeSlot` IS NULL)) IS TRUE),
+    CONSTRAINT `Course_enabled_active_slot_check` CHECK (((`enabled` = true AND `activeSlot` = 1) OR (`enabled` = false AND `activeSlot` IS NULL)) IS TRUE),
     PRIMARY KEY (`id`)
 ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci;
 
@@ -20,22 +20,6 @@ INSERT INTO `Course` (`id`, `code`, `name`, `enabled`, `activeSlot`, `sortOrder`
 VALUES ('course-radio', 'RADIO', '无线电课程', true, 1, 0, CURRENT_TIMESTAMP(3), CURRENT_TIMESTAMP(3))
 ON DUPLICATE KEY UPDATE `name` = VALUES(`name`), `enabled` = true, `activeSlot` = 1, `updatedAt` = CURRENT_TIMESTAMP(3);
 
-CREATE TABLE `CourseBoundary` (
-    `id` INTEGER NOT NULL,
-    `courseId` VARCHAR(191) NOT NULL,
-
-    UNIQUE INDEX `CourseBoundary_courseId_key`(`courseId`),
-    CONSTRAINT `CourseBoundary_singleton_check` CHECK (`id` = 1 AND `courseId` = 'course-radio'),
-    PRIMARY KEY (`id`)
-) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci;
-
-INSERT INTO `CourseBoundary` (`id`, `courseId`) VALUES (1, 'course-radio');
-ALTER TABLE `CourseBoundary` ADD CONSTRAINT `CourseBoundary_courseId_fkey` FOREIGN KEY (`courseId`) REFERENCES `Course`(`id`) ON DELETE RESTRICT ON UPDATE RESTRICT;
-ALTER TABLE `Course` ADD COLUMN `boundaryId` INTEGER NULL;
-UPDATE `Course` SET `boundaryId` = 1 WHERE `id` = 'course-radio';
-ALTER TABLE `Course` ADD CONSTRAINT `Course_radio_boundary_check` CHECK (((`id` = 'course-radio' AND `boundaryId` = 1) OR (`id` <> 'course-radio' AND `boundaryId` IS NULL)) IS TRUE);
-CREATE UNIQUE INDEX `Course_boundaryId_key` ON `Course`(`boundaryId`);
-ALTER TABLE `Course` ADD CONSTRAINT `Course_boundaryId_fkey` FOREIGN KEY (`boundaryId`) REFERENCES `CourseBoundary`(`id`) ON DELETE RESTRICT ON UPDATE RESTRICT;
 
 ALTER TABLE `Level` ADD COLUMN `courseId` VARCHAR(191) NULL;
 ALTER TABLE `KnowledgePoint` ADD COLUMN `courseId` VARCHAR(191) NULL;

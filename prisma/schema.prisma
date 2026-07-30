@@ -160,8 +160,6 @@ model Course {
   sortOrder                Int                       @default(0)
   enabled                  Boolean                   @default(false)
   activeSlot               Int?                      @unique
-  boundaryId               Int?                      @unique
-  boundaryAnchor           CourseBoundary?           @relation("CourseBoundaryAnchor", fields: [boundaryId], references: [id], onDelete: Restrict, onUpdate: Restrict)
   levels                   Level[]
   examRules                ExamRule[]
   knowledgePoints          KnowledgePoint[]
@@ -173,19 +171,12 @@ model Course {
   practiceSessionQuestions PracticeSessionQuestion[]
   practiceAnswers          PracticeAnswer[]
   wrongQuestions           WrongQuestion[]
-  boundaryRecord           CourseBoundary?           @relation("CourseBoundaryCourse")
   createdAt                DateTime                  @default(now())
   updatedAt                DateTime                  @updatedAt
 
   @@index([enabled, sortOrder])
 }
 
-model CourseBoundary {
-  id             Int     @id
-  courseId       String  @unique
-  course         Course  @relation("CourseBoundaryCourse", fields: [courseId], references: [id], onDelete: Restrict, onUpdate: Restrict)
-  anchoredCourse Course? @relation("CourseBoundaryAnchor")
-}
 
 model Level {
   id             String                  @id @default(cuid())

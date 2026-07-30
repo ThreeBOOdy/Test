@@ -82,6 +82,10 @@ describe("MySQL project configuration", () => {
 
     expect(migration).toContain("CREATE TABLE `Course`");
     expect(migration).toContain("'course-radio', 'RADIO'");
+    expect(migration).toContain("UNIQUE INDEX `Course_activeSlot_key`(`activeSlot`)");
+    expect(migration).toContain("Course_enabled_active_slot_check");
+    expect(migration).not.toContain("CourseBoundary");
+    expect(migration).not.toContain("Course_radio_activation_check");
     for (const table of ["Level", "KnowledgePoint", "LevelPracticeRule", "KnowledgePracticeRule", "ExamRule", "Question", "ImportBatch", "PracticeSession", "PracticeSessionQuestion", "PracticeAnswer", "WrongQuestion"]) {
       expect(migration).toContain(`ALTER TABLE \`${table}\` ADD COLUMN \`courseId\``);
       expect(migration).toContain(`ALTER TABLE \`${table}\` ADD CONSTRAINT \`${table}_courseId_fkey\``);

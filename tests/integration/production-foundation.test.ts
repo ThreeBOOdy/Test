@@ -54,12 +54,17 @@ async function createBaseRecords() {
 }
 
 describe("production database foundation", () => {
-  it("allows only the RADIO course to be enabled", async () => {
-    await expect(prisma.course.create({ data: { code: "PYTHON", name: "Python", enabled: true, activeSlot: 1 } })).rejects.toBeTruthy();
+  it("keeps RADIO as the current sole enabled course while allowing a future replacement", async () => {
+    const nextCourse = await prisma.course.create({ data: { code: "PYTHON", name: "Python" } });
+
+    await expect(prisma.course.create({ data: { code: "SECOND_ACTIVE", name: "Second Active", enabled: true, activeSlot: 1 } })).rejects.toMatchObject({ code: "P2002" });
     await expect(prisma.course.update({ where: { id: RADIO_COURSE_ID }, data: { activeSlot: null } })).rejects.toBeTruthy();
-    await expect(prisma.course.update({ where: { id: RADIO_COURSE_ID }, data: { enabled: false, activeSlot: null } })).rejects.toBeTruthy();
-    await expect(prisma.courseBoundary.delete({ where: { id: 1 } })).rejects.toBeTruthy();
-    await expect(prisma.course.delete({ where: { id: RADIO_COURSE_ID } })).rejects.toMatchObject({ code: "P2003" });
+    await prisma.$transaction([
+      prisma.course.update({ where: { id: RADIO_COURSE_ID }, data: { enabled: false, activeSlot: null } }),
+      prisma.course.update({ where: { id: nextCourse.id }, data: { enabled: true, activeSlot: 1 } }),
+    ]);
+
+    await expect(prisma.course.findMany({ where: { enabled: true }, select: { id: true } })).resolves.toEqual([{ id: nextCourse.id }]);
   });
 
   it("rejects cross-course question ownership", async () => {

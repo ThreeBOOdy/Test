@@ -118,12 +118,10 @@ describe("radio course boundary", () => {
     expect(migration).toContain("CREATE TABLE `Course`");
     expect(migration).toContain("'course-radio', 'RADIO', '无线电课程', true, 1");
     expect(migration).toContain("UNIQUE INDEX `Course_activeSlot_key`");
-    expect(migration).toContain("CONSTRAINT `Course_radio_activation_check`");
-    expect(migration).toContain("`id` = 'course-radio' AND `code` = 'RADIO' AND `enabled` = true AND `activeSlot` IS NOT NULL AND `activeSlot` = 1");
-    expect(migration).toContain("CREATE TABLE `CourseBoundary`");
-    expect(migration).toContain("INSERT INTO `CourseBoundary` (`id`, `courseId`) VALUES (1, 'course-radio')");
-    expect(migration).toContain("CONSTRAINT `Course_radio_boundary_check`");
-    expect(migration).toContain("CONSTRAINT `Course_boundaryId_fkey`");
+    expect(migration).toContain("CONSTRAINT `Course_enabled_active_slot_check`");
+    expect(migration).toContain("(`enabled` = true AND `activeSlot` = 1)");
+    expect(migration).not.toContain("CourseBoundary");
+    expect(migration).not.toContain("Course_radio_activation_check");
     for (const table of ["Level", "KnowledgePoint", "ExamRule", "LevelPracticeRule", "KnowledgePracticeRule", "Question", "PracticeSession", "PracticeSessionQuestion", "PracticeAnswer", "WrongQuestion", "ImportBatch"]) {
       expect(migration).toContain(`UPDATE \`${table}\` SET \`courseId\` = 'course-radio' WHERE \`courseId\` IS NULL`);
       expect(migration).toContain(`ALTER TABLE \`${table}\` MODIFY \`courseId\` VARCHAR(191) NOT NULL DEFAULT 'course-radio'`);
