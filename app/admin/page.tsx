@@ -1,11 +1,12 @@
 import Link from "next/link";
-import { ClipboardCheck, FileSpreadsheet, School, UsersRound } from "lucide-react";
+import { ClipboardCheck, FileSpreadsheet, School, UserRoundCog, UsersRound } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
 import { PageHeader } from "@/components/page-header";
 
 const administratorActions = [
   { href: "/admin/registrations", label: "注册审核", description: "审核学生自主提交的注册资料", icon: ClipboardCheck },
   { href: "/admin/students", label: "学生账号", description: "维护账号状态、有效期和长期设置", icon: UsersRound },
+  { href: "/admin/teachers", label: "教师账号", description: "创建、停用与重置教师账号", icon: UserRoundCog },
   { href: "/admin/student-import", label: "学生导入", description: "通过 Excel 批量创建并直接启用账号", icon: FileSpreadsheet },
   { href: "/admin/grades", label: "年级配置", description: "维护学生注册和导入可选年级", icon: School },
 ];
