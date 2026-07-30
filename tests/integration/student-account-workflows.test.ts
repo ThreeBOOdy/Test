@@ -4,7 +4,9 @@ import { PrismaClient } from "../../generated/prisma/client";
 import { assertDatabaseName } from "../../lib/domain/database-url";
 import {
   approveRegistration,
+  approveRegistrations,
   getStudentDetail,
+  listRegistrationReviews,
   getRegistrationStatus,
   registerStudent,
   rejectRegistration,
@@ -58,6 +60,14 @@ async function deleteKnowledgePoints() {
     const deleted = await prisma.knowledgePoint.deleteMany({ where: { children: { none: {} } } });
     if (!deleted.count) throw new Error("Unable to delete knowledge point tree");
   }
+}
+
+function nationalIdFor(index: number) {
+  const base = "11010519491231" + String(index).padStart(3, "0");
+  const weights = [7, 9, 10, 5, 8, 4, 2, 1, 6, 3, 7, 9, 10, 5, 8, 4, 2];
+  const checkDigits = ["1", "0", "X", "9", "8", "7", "6", "5", "4", "3", "2"];
+  const total = [...base].reduce((sum, digit, position) => sum + Number(digit) * weights[position]!, 0);
+  return base + checkDigits[total % 11];
 }
 
 async function setup() {
@@ -147,6 +157,48 @@ describe("student account workflows", () => {
     const rejected = attempts.find((attempt): attempt is PromiseRejectedResult => attempt.status === "rejected");
     expect(rejected?.reason).toMatchObject({ message: "RADIO_PERSON_UNAVAILABLE", status: 409 });
     expect(await prisma.user.count({ where: { radioPersonId: profile.radioPersonId } })).toBe(1);
+  });
+
+  it("paginates registration reviews on the server with search and status filters", async () => {
+    const { grade } = await setup();
+    for (let index = 1; index <= 21; index += 1) {
+      const id = `radio-person-${String(index + 10).padStart(3, "0")}`;
+      await prisma.radioPerson.create({ data: { id, username: `radio-page-${index}`, name: `分页学生${index}`, profile: "测试人物" } });
+      await registerStudent({ ...profile, realName: `分页学生${index}`, nationalId: nationalIdFor(index), phone: `139001${String(index).padStart(5, "0")}`, gradeId: grade.id, radioPersonId: id });
+    }
+
+    const result = await listRegistrationReviews({ page: 2, pageSize: 20, status: "PENDING", search: "分页学生" });
+
+    expect(result.pagination).toEqual({ page: 2, pageSize: 20, total: 21, totalPages: 2 });
+    expect(result.items).toHaveLength(1);
+    expect(result.items[0]?.realName).toBe("分页学生21");
+  });
+
+  it("rolls back every approval when a batch contains a stale application", async () => {
+    const { grade, administrator } = await setup();
+    const first = await registerStudent({ ...profile, gradeId: grade.id });
+    const second = await registerStudent({ ...profile, realName: "李四", nationalId: "110105194912310038", phone: "13900139000", gradeId: grade.id, radioPersonId: "radio-person-002" });
+    await rejectRegistration(administrator.id, second.id, { reason: "资料不完整" });
+
+    await expect(approveRegistrations(administrator.id, [first.id, second.id], "2026-07-30")).rejects.toMatchObject({ message: "STALE_ACCOUNT_STATE", status: 409 });
+    expect((await prisma.user.findUniqueOrThrow({ where: { id: first.id } })).studentStatus).toBe("PENDING");
+    expect((await prisma.user.findUniqueOrThrow({ where: { id: second.id } })).studentStatus).toBe("REJECTED");
+    expect(await prisma.studentReviewRecord.count({ where: { action: "APPROVED" } })).toBe(0);
+  });
+
+  it("allows exactly one concurrent review to approve an application", async () => {
+    const { grade, administrator } = await setup();
+    const student = await registerStudent({ ...profile, gradeId: grade.id });
+    const attempts = await Promise.allSettled([
+      approveRegistration(administrator.id, student.id, {}, "2026-07-30"),
+      approveRegistration(administrator.id, student.id, {}, "2026-07-30"),
+    ]);
+
+    expect(attempts.filter((attempt) => attempt.status === "fulfilled")).toHaveLength(1);
+    const rejected = attempts.find((attempt): attempt is PromiseRejectedResult => attempt.status === "rejected");
+    expect(rejected?.reason).toMatchObject({ message: "STALE_ACCOUNT_STATE", status: 409 });
+    expect((await prisma.user.findUniqueOrThrow({ where: { id: student.id } })).studentStatus).toBe("ACTIVE");
+    expect(await prisma.studentReviewRecord.count({ where: { studentId: student.id, action: "APPROVED" } })).toBe(1);
   });
 
   it("keeps the confirmed person bound through rejection, deactivation, expiry, and administrator updates", async () => {

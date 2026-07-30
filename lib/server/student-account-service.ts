@@ -268,22 +268,56 @@ export async function resubmitRegistration(studentId: string) {
 
 export async function approveRegistration(administratorId: string, studentId: string, rawInput: unknown, businessDate = getBusinessDate()) {
   const input = approveRegistrationSchema.parse(rawInput);
+  try {
+    return await prisma.$transaction((tx) => approveRegistrationInTransaction(tx, administratorId, studentId, input, businessDate));
+  } catch (error) {
+    mapReviewConflict(error);
+  }
+}
+
+function mapReviewConflict(error: unknown): never {
+  if (error instanceof ApiError) throw error;
+  if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2034") throw new ApiError("STALE_ACCOUNT_STATE", 409);
+  throw error;
+}
+
+async function assertRegistrationApprovalConflicts(tx: Transaction, student: { id: string; username: string; nationalIdHash: string | null; phoneHash: string | null; radioPersonId: string | null }) {
+  if (!student.radioPersonId) throw new ApiError("RADIO_PERSON_UNAVAILABLE", 409);
+  const person = await tx.radioPerson.findUnique({ where: { id: student.radioPersonId }, include: { student: { select: { id: true } } } });
+  if (!person || person.resourceStatus !== "AVAILABLE" || person.student?.id !== student.id || person.username !== student.username) throw new ApiError("RADIO_PERSON_UNAVAILABLE", 409);
+  const usernameOwner = await tx.user.findUnique({ where: { username: student.username }, select: { id: true } });
+  if (!usernameOwner || usernameOwner.id !== student.id || !student.nationalIdHash || !student.phoneHash) throw new ApiError("REGISTRATION_CONFLICT", 409);
+  await assertUniqueStudentIdentity(tx, { nationalIdHash: student.nationalIdHash, phoneHash: student.phoneHash, excludeId: student.id });
+}
+
+async function approveRegistrationInTransaction(tx: Transaction, administratorId: string, studentId: string, input: ReturnType<typeof approveRegistrationSchema.parse>, businessDate: string) {
   const defaults = buildDefaultValidity(businessDate);
   const validFrom = input.validFrom ?? defaults.validFrom;
   const validUntil = input.validUntil ?? defaults.validUntil;
-  return prisma.$transaction(async (tx) => {
-    const current = await tx.user.findFirst({ where: { id: studentId, role: "STUDENT" } });
-    if (!current || current.studentStatus !== "PENDING") throw new ApiError("STALE_ACCOUNT_STATE", 409);
-    assertReviewTransition("PENDING", "ACTIVE");
-    const reviewedAt = new Date();
-    const result = await tx.user.updateMany({ where: { id: studentId, studentStatus: "PENDING", updatedAt: current.updatedAt }, data: { studentStatus: "ACTIVE", validFrom: dateValue(validFrom), validUntil: dateValue(validUntil), isLongTerm: input.isLongTerm ?? false, reviewedAt, reviewedById: administratorId, rejectionReason: null, sessionVersion: { increment: 1 } } });
-    if (result.count !== 1) throw new ApiError("STALE_ACCOUNT_STATE", 409);
-    const updated = await tx.user.findUniqueOrThrow({ where: { id: studentId } });
-    const profileSnapshot = snapshot(updated);
-    await tx.studentReviewRecord.create({ data: { studentId, actorUserId: administratorId, action: "APPROVED", beforeStatus: "PENDING", afterStatus: "ACTIVE", profileSnapshot } });
-    await tx.auditLog.create({ data: { actorUserId: administratorId, action: "STUDENT_REGISTRATION_APPROVE", targetType: "User", targetId: studentId, metadata: { ...profileSnapshot, validFrom, validUntil, isLongTerm: updated.isLongTerm } } });
-    return { approved: true };
-  });
+  const current = await tx.user.findFirst({ where: { id: studentId, role: "STUDENT" } });
+  if (!current || current.studentStatus !== "PENDING") throw new ApiError("STALE_ACCOUNT_STATE", 409);
+  await assertRegistrationApprovalConflicts(tx, current);
+  assertReviewTransition("PENDING", "ACTIVE");
+  const reviewedAt = new Date();
+  const result = await tx.user.updateMany({ where: { id: studentId, studentStatus: "PENDING", updatedAt: current.updatedAt }, data: { studentStatus: "ACTIVE", validFrom: dateValue(validFrom), validUntil: dateValue(validUntil), isLongTerm: input.isLongTerm ?? false, reviewedAt, reviewedById: administratorId, rejectionReason: null, sessionVersion: { increment: 1 } } });
+  if (result.count !== 1) throw new ApiError("STALE_ACCOUNT_STATE", 409);
+  const updated = await tx.user.findUniqueOrThrow({ where: { id: studentId } });
+  const profileSnapshot = snapshot(updated);
+  await tx.studentReviewRecord.create({ data: { studentId, actorUserId: administratorId, action: "APPROVED", beforeStatus: "PENDING", afterStatus: "ACTIVE", profileSnapshot } });
+  await tx.auditLog.create({ data: { actorUserId: administratorId, action: "STUDENT_REGISTRATION_APPROVE", targetType: "User", targetId: studentId, metadata: { ...profileSnapshot, validFrom, validUntil, isLongTerm: updated.isLongTerm } } });
+  return { approved: true };
+}
+
+export async function approveRegistrations(administratorId: string, studentIds: string[], businessDate = getBusinessDate()) {
+  if (new Set(studentIds).size !== studentIds.length) throw new ApiError("批量审核目标不能重复", 400);
+  try {
+    return await prisma.$transaction(async (tx) => {
+      for (const studentId of studentIds) await approveRegistrationInTransaction(tx, administratorId, studentId, {}, businessDate);
+      return { approved: studentIds.length };
+    });
+  } catch (error) {
+    mapReviewConflict(error);
+  }
 }
 
 export async function rejectRegistration(administratorId: string, studentId: string, rawInput: unknown) {
@@ -306,6 +340,27 @@ export async function listStudents(input: { status?: "PENDING" | "ACTIVE" | "REJ
   const search = input.search?.trim();
   const students = await prisma.user.findMany({ where: { role: "STUDENT", ...(input.status ? { studentStatus: input.status } : {}), ...(search ? { OR: [{ username: { contains: search } }, { displayName: { contains: search } }, { school: { contains: search } }, { phoneLast4: { contains: search } }] } : {}) }, include: { grade: true }, orderBy: [{ submittedAt: "asc" }, { createdAt: "asc" }] });
   return students.map((student) => ({ id: student.id, username: student.username, realName: student.realName ?? student.displayName, displayName: student.displayName, gender: student.gender, school: student.school, grade: student.grade, nationalIdMasked: student.nationalIdLast4 ? `${"*".repeat(14)}${student.nationalIdLast4}` : null, phoneMasked: student.phoneLast4 ? `***-***-${student.phoneLast4}` : null, registrationSource: student.registrationSource, studentStatus: student.studentStatus, enabled: student.enabled, validFrom: dateOnly(student.validFrom), validUntil: dateOnly(student.validUntil), isLongTerm: student.isLongTerm, createdAt: student.createdAt.toISOString() }));
+}
+
+export async function listRegistrationReviews(input: { page?: number; pageSize?: number; status?: "PENDING" | "ACTIVE" | "REJECTED"; search?: string } = {}) {
+  const page = input.page ?? 1;
+  const pageSize = input.pageSize ?? 20;
+  const search = input.search?.trim();
+  const where = {
+    role: "STUDENT" as const,
+    ...(input.status ? { studentStatus: input.status } : {}),
+    ...(search ? { OR: [{ username: { contains: search } }, { displayName: { contains: search } }, { realName: { contains: search } }, { school: { contains: search } }, { phoneLast4: { contains: search } }] } : {}),
+  };
+  return prisma.$transaction(async (tx) => {
+    const total = await tx.user.count({ where });
+    const totalPages = Math.max(1, Math.ceil(total / pageSize));
+    const currentPage = Math.min(page, totalPages);
+    const students = await tx.user.findMany({ where, include: { grade: true }, orderBy: [{ submittedAt: "asc" }, { createdAt: "asc" }, { id: "asc" }], skip: (currentPage - 1) * pageSize, take: pageSize });
+    return {
+      items: students.map((student) => ({ id: student.id, username: student.username, realName: student.realName ?? student.displayName, school: student.school, grade: student.grade ? { name: student.grade.name } : null, nationalIdMasked: student.nationalIdLast4 ? `**************${student.nationalIdLast4}` : null, phoneMasked: student.phoneLast4 ? `***-***-${student.phoneLast4}` : null, studentStatus: student.studentStatus, submittedAt: student.submittedAt?.toISOString() ?? null })),
+      pagination: { page: currentPage, pageSize, total, totalPages },
+    };
+  });
 }
 
 export async function getStudentDetail(studentId: string) {
