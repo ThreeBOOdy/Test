@@ -24,6 +24,7 @@ export async function POST(request: Request) {
     assertSameOrigin(request);
     const currentUser = await getCurrentUser();
     if (!currentUser) return NextResponse.json({ message: messages.login }, { status: 401 });
+    if (currentUser.activationRequired) return NextResponse.json({ message: "请先使用初始密码和激活码完成账号激活" }, { status: 403 });
     const input = schema.parse(await readJsonBody(request));
     const user = await prisma.user.findUnique({ where: { id: currentUser.id } });
     if (!user || !verifyPassword(input.currentPassword, user.passwordHash)) return NextResponse.json({ message: messages.current }, { status: 400 });

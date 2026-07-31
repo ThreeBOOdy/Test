@@ -8,7 +8,7 @@ import { getCurrentUser } from "@/lib/server/session";
 
 export { ApiError } from "@/lib/domain/api-error";
 
-async function requireExactAccess(role: "ADMIN" | "TEACHER" | "STUDENT", capability: "FULL_ADMIN" | "FULL_TEACHER" | "FULL_STUDENT" | "REGISTRATION_ONLY") {
+async function requireExactAccess(role: "ADMIN" | "TEACHER" | "STUDENT", capability: "FULL_ADMIN" | "FULL_TEACHER" | "FULL_STUDENT") {
   const user = await getCurrentUser();
   if (!user) throw new ApiError("请先登录", 401);
   if (user.role !== role || user.capability !== capability) throw new ApiError("权限不足", 403);
@@ -27,8 +27,19 @@ export function requireActiveStudent() {
   return requireExactAccess("STUDENT", "FULL_STUDENT");
 }
 
+async function requireStudentCapability(capability: "REGISTRATION_ONLY" | "ACTIVATION_ONLY") {
+  const user = await getCurrentUser();
+  if (!user) throw new ApiError("请先登录", 401);
+  if (user.role !== "STUDENT" || user.capability !== capability) throw new ApiError("权限不足", 403);
+  return user;
+}
+
 export function requireRegistrationStudent() {
-  return requireExactAccess("STUDENT", "REGISTRATION_ONLY");
+  return requireStudentCapability("REGISTRATION_ONLY");
+}
+
+export function requireActivationStudent() {
+  return requireStudentCapability("ACTIVATION_ONLY");
 }
 
 export function apiError(error: unknown, fallback: string) {

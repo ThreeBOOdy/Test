@@ -16,6 +16,7 @@ import {
   radioPersonUpdateSchema,
 } from "@/lib/domain/student-registration";
 import { hashPassword } from "@/lib/server/password";
+import { regeneratePendingStudentActivation } from "@/lib/server/student-activation-service";
 import { revokeUserSessions } from "@/lib/server/session";
 import {
   decryptSensitiveValue,
@@ -422,12 +423,17 @@ export async function updateStudentAccount(administratorId: string, studentId: s
 }
 
 export async function resetStudentPassword(administratorId: string, studentId: string) {
+  const student = await prisma.user.findFirst({ where: { id: studentId, role: "STUDENT" }, select: { activationRequired: true } });
+  if (!student) throw new ApiError("学生账号不存在", 404);
+  if (student.activationRequired) {
+    const credential = await regeneratePendingStudentActivation(administratorId, studentId);
+    return { activationRequired: true, initialPassword: credential.initialPassword, activationCode: credential.activationCode, expiresAt: credential.expiresAt.toISOString() };
+  }
   const temporaryPassword = `${randomBytes(8).toString("base64url")}A1`;
   await prisma.$transaction(async (tx) => {
-    const result = await tx.user.updateMany({ where: { id: studentId, role: "STUDENT" }, data: { passwordHash: hashPassword(temporaryPassword), mustChangePassword: true, sessionVersion: { increment: 1 } } });
-    if (result.count !== 1) throw new ApiError("学生账号不存在", 404);
+    await tx.user.update({ where: { id: studentId }, data: { passwordHash: hashPassword(temporaryPassword), mustChangePassword: true, sessionVersion: { increment: 1 } } });
     await revokeUserSessions(studentId, tx);
     await tx.auditLog.create({ data: { actorUserId: administratorId, action: "STUDENT_PASSWORD_RESET", targetType: "User", targetId: studentId } });
   });
-  return { temporaryPassword };
+  return { activationRequired: false, temporaryPassword };
 }

@@ -39,5 +39,6 @@ export function getDefaultPathForCapability(capability: AccessCapability) {
   if (capability === "FULL_ADMIN") return "/admin";
   if (capability === "FULL_TEACHER") return "/teacher";
   if (capability === "REGISTRATION_ONLY") return "/registration/status";
+  if (capability === "ACTIVATION_ONLY") return "/activate";
   return "/student";
 }

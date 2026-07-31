@@ -1,13 +1,14 @@
 export type AppRole = "ADMIN" | "TEACHER" | "STUDENT";
 export type StudentStatus = "PENDING" | "ACTIVE" | "REJECTED";
-export type AccessCapability = "FULL_ADMIN" | "FULL_TEACHER" | "FULL_STUDENT" | "REGISTRATION_ONLY";
+export type AccessCapability = "FULL_ADMIN" | "FULL_TEACHER" | "FULL_STUDENT" | "REGISTRATION_ONLY" | "ACTIVATION_ONLY";
 export type AccessErrorCode =
   | "ACCOUNT_DISABLED"
   | "ACCOUNT_EXPIRED"
   | "ACCOUNT_NOT_YET_VALID"
   | "REGISTRATION_PENDING"
   | "REGISTRATION_REJECTED"
-  | "PASSWORD_CHANGE_REQUIRED";
+  | "PASSWORD_CHANGE_REQUIRED"
+  | "ACTIVATION_REQUIRED";
 
 export type AccountAccessInput = {
   role: AppRole;
@@ -17,11 +18,13 @@ export type AccountAccessInput = {
   validFrom: string | null;
   validUntil: string | null;
   mustChangePassword: boolean;
+  activationRequired?: boolean;
 };
 
 export type AccessDecision =
   | { capability: "FULL_ADMIN" | "FULL_TEACHER" | "FULL_STUDENT"; errorCode: null }
   | { capability: "REGISTRATION_ONLY"; errorCode: "REGISTRATION_PENDING" | "REGISTRATION_REJECTED" }
+  | { capability: "ACTIVATION_ONLY"; errorCode: "ACTIVATION_REQUIRED" }
   | { capability: null; errorCode: "ACCOUNT_DISABLED" | "ACCOUNT_EXPIRED" | "ACCOUNT_NOT_YET_VALID" | "PASSWORD_CHANGE_REQUIRED" };
 
 type IsoDate = {
@@ -66,6 +69,7 @@ export function addCalendarYear(date: string) {
 
 export function evaluateAccountAccess(input: AccountAccessInput, today: string): AccessDecision {
   if (!input.enabled) return { capability: null, errorCode: "ACCOUNT_DISABLED" };
+  if (input.activationRequired) return { capability: "ACTIVATION_ONLY", errorCode: "ACTIVATION_REQUIRED" };
   if (input.mustChangePassword) return { capability: null, errorCode: "PASSWORD_CHANGE_REQUIRED" };
   if (input.role === "ADMIN") return { capability: "FULL_ADMIN", errorCode: null };
   if (input.role === "TEACHER") return { capability: "FULL_TEACHER", errorCode: null };

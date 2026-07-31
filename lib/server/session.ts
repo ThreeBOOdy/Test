@@ -16,6 +16,7 @@ export type SessionUser = {
   role: AppRole;
   enabled: boolean;
   mustChangePassword: boolean;
+  activationRequired: boolean;
   sessionVersion: number;
   studentStatus: StudentStatus | null;
   isLongTerm: boolean;
@@ -57,6 +58,7 @@ function toSessionUser(user: Omit<SessionUser, "capability" | "accessErrorCode">
     role: user.role,
     enabled: user.enabled,
     mustChangePassword: user.mustChangePassword,
+    activationRequired: user.activationRequired,
     studentStatus: user.studentStatus,
     isLongTerm: user.isLongTerm,
     validFrom: toIsoDate(user.validFrom),
@@ -78,6 +80,7 @@ export async function findSessionUser(token: string, now = new Date()): Promise<
           role: true,
           enabled: true,
           mustChangePassword: true,
+          activationRequired: true,
           sessionVersion: true,
           studentStatus: true,
           isLongTerm: true,

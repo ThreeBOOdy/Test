@@ -4,6 +4,7 @@ import { Prisma } from "@/generated/prisma/client";
 import { prisma } from "@/lib/db";
 import { ApiError } from "@/lib/domain/api-error";
 import { findWorkbookDuplicates, validateStudentImportRow, type NormalizedStudentImportRow, type StudentImportIssue, type StudentImportRowInput } from "@/lib/domain/student-import";
+import { createActivationCredential, issueStudentActivation } from "@/lib/server/student-activation-service";
 import { hashPassword } from "@/lib/server/password";
 import { encryptSensitiveValue, hashSensitiveValue } from "@/lib/server/student-sensitive-data";
 import { getBusinessDate } from "@/lib/server/time";
@@ -46,9 +47,6 @@ function normalizePageOptions(options: PageOptions = {}) {
   return { page, pageSize };
 }
 
-function passwordProvided(input: StudentImportRowInput) {
-  return String(input.initialPassword ?? "").trim().length > 0;
-}
 
 async function context() {
   const [grades, users, people] = await Promise.all([
@@ -142,7 +140,7 @@ export async function previewStudentImport(administratorId: string, fileName: st
     const created = await transaction.studentImportBatch.create({ data: { fileName, status: "PREVIEW", totalRows: parsed.length, validRows: parsed.filter((item) => item.validation.valid).length, errorRows: parsed.filter((item) => !item.validation.valid).length, sheetNames: workbook.worksheets.map((sheet) => sheet.name), createdById: administratorId, expiresAt } });
     for (const item of parsed) {
       const draft = splitDraft(item.validation.row, item.input);
-      const initialPasswordHash = passwordProvided(item.input) && !item.validation.issues.some((issue) => issue.field === "initialPassword") ? hashPassword(String(item.input.initialPassword).trim()) : null;
+      const initialPasswordHash = null;
       await transaction.studentImportRow.create({ data: { batchId: created.id, sheetName: item.sheetName, sourceRowNumber: item.sourceRowNumber, payload: asJson(draft.payload), initialPasswordHash, issues: asJson(item.validation.issues), valid: item.validation.valid } });
     }
     return created;
@@ -154,10 +152,9 @@ export async function updateStudentImportRow(administratorId: string, batchId: s
   const { rows } = await ownedBatchWithRows(administratorId, batchId);
   const current = rows.find((row) => row.id === rowId);
   if (!current) throw new ApiError("导入行不存在", 404);
-  const suppliedPassword = passwordProvided(input);
-  const validation = validateStudentImportRow(input, await context(), { hasInitialPassword: !suppliedPassword && Boolean(current.initialPasswordHash) });
+  const validation = validateStudentImportRow(input, await context());
   const draft = splitDraft(validation.row, input);
-  const initialPasswordHash = suppliedPassword ? (validation.issues.some((issue) => issue.field === "initialPassword") ? null : hashPassword(String(input.initialPassword).trim())) : current.initialPasswordHash;
+  const initialPasswordHash = null;
   await prisma.studentImportRow.update({ where: { id: rowId }, data: { payload: asJson(draft.payload), initialPasswordHash, issues: asJson(validation.issues), valid: validation.valid } });
   return revalidateStudentImport(administratorId, batchId, options);
 }
@@ -167,7 +164,7 @@ export async function revalidateStudentImport(administratorId: string, batchId: 
   const validationContext = await context();
   const validations = rows.map((row) => {
     const input = { ...(row.payload as Record<string, unknown>), initialPassword: "" } as StudentImportRowInput;
-    return { row, input, validation: validateStudentImportRow(input, validationContext, { hasInitialPassword: Boolean(row.initialPasswordHash) }) };
+    return { row, input, validation: validateStudentImportRow(input, validationContext) };
   });
   const normalized = validations.filter((item) => item.validation.row).map((item) => ({ sheetName: item.row.sheetName, sourceRowNumber: item.row.sourceRowNumber, row: item.validation.row! }));
   const duplicates = findWorkbookDuplicates(normalized);
@@ -190,15 +187,19 @@ export async function commitStudentImport(administratorId: string, batchId: stri
     const batch = await transaction.studentImportBatch.findFirst({ where: { id: batchId, createdById: administratorId, status: "PREVIEW", expiresAt: { gt: new Date() } }, include: { rows: true } });
     if (!batch || batch.errorRows > 0 || batch.validRows !== batch.totalRows) throw new ApiError("所有行通过校验后才能导入", 409);
     const createdIds: string[] = [];
+    const credentials: { username: string; initialPassword: string; activationCode: string; expiresAt: string }[] = [];
     for (const draft of batch.rows) {
       const payload = draft.payload as unknown as DraftPayload;
-      if (!payload || !draft.initialPasswordHash || !payload.gradeId) throw new ApiError("导入行资料不完整", 409);
-      const student = await transaction.user.create({ data: { username: payload.username, displayName: payload.displayName, passwordHash: draft.initialPasswordHash, role: "STUDENT", enabled: payload.enabled, mustChangePassword: true, studentStatus: "ACTIVE", registrationSource: "EXCEL_IMPORT", nationalIdEncrypted: encryptSensitiveValue(payload.nationalId), nationalIdHash: hashSensitiveValue(payload.nationalId), nationalIdLast4: payload.nationalId.slice(-4), gender: payload.gender, school: payload.school, gradeId: payload.gradeId, phoneEncrypted: encryptSensitiveValue(payload.phone), phoneHash: hashSensitiveValue(payload.phone), phoneLast4: payload.phone.slice(-4), submittedAt: new Date(), reviewedAt: new Date(), reviewedById: administratorId, validFrom: new Date(`${payload.validFrom}T00:00:00Z`), validUntil: new Date(`${payload.validUntil}T00:00:00Z`), isLongTerm: payload.isLongTerm, profileIncomplete: false } });
+      if (!payload || !payload.gradeId) throw new ApiError("导入行资料不完整", 409);
+      const credential = createActivationCredential();
+      const student = await transaction.user.create({ data: { username: payload.username, displayName: payload.displayName, passwordHash: hashPassword(credential.initialPassword), role: "STUDENT", enabled: payload.enabled, mustChangePassword: false, activationRequired: true, studentStatus: "ACTIVE", registrationSource: "EXCEL_IMPORT", nationalIdEncrypted: encryptSensitiveValue(payload.nationalId), nationalIdHash: hashSensitiveValue(payload.nationalId), nationalIdLast4: payload.nationalId.slice(-4), gender: payload.gender, school: payload.school, gradeId: payload.gradeId, phoneEncrypted: encryptSensitiveValue(payload.phone), phoneHash: hashSensitiveValue(payload.phone), phoneLast4: payload.phone.slice(-4), submittedAt: new Date(), reviewedAt: new Date(), reviewedById: administratorId, validFrom: new Date(`${payload.validFrom}T00:00:00Z`), validUntil: new Date(`${payload.validUntil}T00:00:00Z`), isLongTerm: payload.isLongTerm, profileIncomplete: false } });
       createdIds.push(student.id);
+      await issueStudentActivation(transaction, student.id, credential);
+      credentials.push({ username: payload.username, initialPassword: credential.initialPassword, activationCode: credential.activationCode, expiresAt: credential.expiresAt.toISOString() });
       await transaction.studentImportRow.update({ where: { id: draft.id }, data: { initialPasswordHash: null } });
     }
     await transaction.studentImportBatch.update({ where: { id: batchId }, data: { status: "COMMITTED", committedAt: new Date() } });
     await transaction.auditLog.create({ data: { actorUserId: administratorId, action: "STUDENT_IMPORT_COMMIT", targetType: "StudentImportBatch", targetId: batchId, metadata: { count: createdIds.length } } });
-    return { committed: true, count: createdIds.length, studentIds: createdIds };
+    return { committed: true, count: createdIds.length, studentIds: createdIds, credentials };
   });
 }

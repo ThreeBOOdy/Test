@@ -111,7 +111,7 @@ export function StudentManager({ students }: { students: Row[] }) {
   async function reset(row: Row) {
     const response = await fetch(`/api/v1/admin/students/${row.id}/reset-password`, { method: "POST" });
     const result = await response.json();
-    setMessage(response.ok ? `临时密码：${result.temporaryPassword}` : result.message);
+    setMessage(response.ok ? (result.activationRequired ? `新的初始密码：${result.initialPassword}；新的激活码：${result.activationCode}；有效至 ${new Date(result.expiresAt).toLocaleDateString("zh-CN")}` : `临时密码：${result.temporaryPassword}`) : result.message);
   }
 
   const update = <K extends keyof EditForm>(key: K, value: EditForm[K]) => setForm((current) => current ? { ...current, [key]: value } : current);

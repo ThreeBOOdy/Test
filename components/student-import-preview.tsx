@@ -15,6 +15,8 @@ type ImportRow = {
   valid: boolean;
 };
 
+type ActivationCredential = { username: string; initialPassword: string; activationCode: string; expiresAt: string };
+
 type Batch = {
   id: string;
   totalRows: number;
@@ -83,6 +85,7 @@ export function StudentImportPreview() {
   const [batch, setBatch] = useState<Batch | null>(null);
   const [editing, setEditing] = useState<EditingRow | null>(null);
   const [message, setMessage] = useState("");
+  const [credentials, setCredentials] = useState<ActivationCredential[]>([]);
   const [pending, setPending] = useState(false);
 
   async function upload(event: React.ChangeEvent<HTMLInputElement>) {
@@ -149,11 +152,12 @@ export function StudentImportPreview() {
       { method: "POST" },
     );
     const result = await response.json();
-    setMessage(
-      response.ok
-        ? `成功导入 ${result.count} 个学生账号，账号直接生效。`
-        : result.message,
-    );
+    if (response.ok) {
+      setCredentials(result.credentials ?? []);
+      setMessage(`成功导入 ${result.count} 个学生账号。请立即安全分发下方凭据；离开此结果后系统无法恢复明文。`);
+    } else {
+      setMessage(result.message);
+    }
   }
 
   function openEditor(row: ImportRow) {
@@ -308,8 +312,7 @@ export function StudentImportPreview() {
               <label className="text-sm font-semibold">学校<input aria-label="学校" value={editing.draft.school} onChange={(event) => updateDraft("school", event.target.value)} className={inputClassName} /></label>
               <label className="text-sm font-semibold">年级<input aria-label="年级" value={editing.draft.grade} onChange={(event) => updateDraft("grade", event.target.value)} className={inputClassName} /></label>
               <label className="text-sm font-semibold">手机号<input aria-label="手机号" value={editing.draft.phone} onChange={(event) => updateDraft("phone", event.target.value)} className={inputClassName} /></label>
-              <label className="text-sm font-semibold">初始密码<input aria-label="初始密码" type="password" value={editing.draft.initialPassword} onChange={(event) => updateDraft("initialPassword", event.target.value)} placeholder="留空则保留已校验密码" className={inputClassName} /></label>
-              <label className="text-sm font-semibold">有效期开始<input aria-label="有效期开始" type="date" value={editing.draft.validFrom} onChange={(event) => updateDraft("validFrom", event.target.value)} className={inputClassName} /></label>
+                            <label className="text-sm font-semibold">有效期开始<input aria-label="有效期开始" type="date" value={editing.draft.validFrom} onChange={(event) => updateDraft("validFrom", event.target.value)} className={inputClassName} /></label>
               <label className="text-sm font-semibold">有效期结束<input aria-label="有效期结束" type="date" value={editing.draft.validUntil} onChange={(event) => updateDraft("validUntil", event.target.value)} className={inputClassName} /></label>
             </div>
 
@@ -326,6 +329,7 @@ export function StudentImportPreview() {
         </div>
       ) : null}
 
+      {credentials.length ? <div className="mt-4 overflow-auto rounded-xl border border-amber-300/30 bg-amber-300/[.08] p-4"><p className="text-sm font-extrabold">一次性激活凭据（仅此展示）</p><table className="mt-3 min-w-[680px] w-full text-left text-sm"><thead><tr><th>导入用户名</th><th>初始密码</th><th>激活码</th><th>过期时间</th></tr></thead><tbody>{credentials.map((credential) => <tr key={credential.username} className="border-t border-amber-200/20"><td className="py-2">{credential.username}</td><td className="py-2 font-mono">{credential.initialPassword}</td><td className="py-2 font-mono">{credential.activationCode}</td><td className="py-2">{new Date(credential.expiresAt).toLocaleDateString("zh-CN")}</td></tr>)}</tbody></table></div> : null}
       {message ? <div role="status" className="mt-4 rounded-xl bg-[var(--surface-soft)] p-3">{message}</div> : null}
     </>
   );

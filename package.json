@@ -17,6 +17,7 @@
     "backup:offline": "tsx scripts/backup-cli.ts offline-copy",
     "backup:verify": "tsx scripts/backup-cli.ts verify",
     "backup:restore": "tsx scripts/backup-cli.ts restore",
+    "security:cleanup": "tsx scripts/security-maintenance.ts",
     "db:generate": "prisma generate",
     "db:migrate": "prisma migrate dev",
     "db:seed": "tsx prisma/seed.ts"

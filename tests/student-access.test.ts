@@ -130,6 +130,9 @@ describe("student account access", () => {
     expect(evaluateAccountAccess({ ...activeStudent, studentStatus, validFrom: null, validUntil: null }, "2026-07-26")).toEqual({ capability: "REGISTRATION_ONLY", errorCode });
   });
 
+  it("keeps imported students activation-only until initialization completes", () => {
+    expect(evaluateAccountAccess({ ...activeStudent, activationRequired: true }, "2026-07-26")).toEqual({ capability: "ACTIVATION_ONLY", errorCode: "ACTIVATION_REQUIRED" });
+  });
   it("blocks disabled accounts before forced-password access", () => {
     expect(evaluateAccountAccess({ ...activeStudent, enabled: false, mustChangePassword: true }, "2026-07-26")).toEqual({ capability: null, errorCode: "ACCOUNT_DISABLED" });
   });

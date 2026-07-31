@@ -33,6 +33,7 @@ export async function POST(request: Request) {
       validFrom: dateOnly(user.validFrom),
       validUntil: dateOnly(user.validUntil),
       mustChangePassword: user.mustChangePassword,
+      activationRequired: user.activationRequired,
     }, getBusinessDate());
     if (!access.capability && access.errorCode !== "PASSWORD_CHANGE_REQUIRED") {
       const messages = {
@@ -43,7 +44,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ message: messages[access.errorCode] }, { status: 403 });
     }
     const token = await createSession(user);
-    const response = NextResponse.json({ user: { id: user.id, username: user.username, displayName: user.displayName, role: user.role, mustChangePassword: user.mustChangePassword, capability: access.capability } });
+    const response = NextResponse.json({ user: { id: user.id, username: user.username, displayName: user.displayName, role: user.role, mustChangePassword: user.mustChangePassword, activationRequired: user.activationRequired, capability: access.capability } });
     setSessionCookie(response, token);
     return response;
   } catch (error) {

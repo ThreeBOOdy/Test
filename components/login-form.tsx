@@ -58,7 +58,7 @@ export function LoginForm() {
       const fallback = data.user.capability ? getDefaultPathForCapability(data.user.capability) : "/change-password";
       const destination = data.user.mustChangePassword
         ? "/change-password"
-        : data.user.capability === "REGISTRATION_ONLY"
+        : data.user.capability === "REGISTRATION_ONLY" || data.user.capability === "ACTIVATION_ONLY"
           ? fallback
           : safeNext(next, data.user.role) ?? fallback;
       window.location.assign(destination);

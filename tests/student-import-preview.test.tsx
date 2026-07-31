@@ -64,7 +64,7 @@ describe("StudentImportPreview", () => {
     expect(screen.getByLabelText("学校")).toHaveValue("示例中学");
     expect(screen.getByLabelText("年级")).toHaveValue("七年级");
     expect(screen.getByLabelText("手机号")).toHaveValue("13800138000");
-    expect(screen.getByLabelText("初始密码")).toHaveValue("");
+    expect(screen.queryByLabelText("初始密码")).toBeNull();
     expect(screen.getByLabelText("启用账号")).toBeChecked();
     expect(screen.getByLabelText("有效期开始")).toHaveValue("2026-07-26");
     expect(screen.getByLabelText("有效期结束")).toHaveValue("2027-07-26");

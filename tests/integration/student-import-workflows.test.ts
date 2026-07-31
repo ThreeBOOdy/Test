@@ -68,7 +68,7 @@ describe("student Excel import workflows", () => {
     expect(JSON.stringify(preview)).not.toContain("Student2026");
     const draftedRows = await prisma.studentImportRow.findMany({ where: { batchId: preview.id }, select: { initialPasswordHash: true } });
     expect(draftedRows).toHaveLength(2);
-    expect(draftedRows.every((row) => row.initialPasswordHash?.startsWith("scrypt$"))).toBe(true);
+    expect(draftedRows.every((row) => row.initialPasswordHash === null)).toBe(true);
     expect(JSON.stringify(draftedRows)).not.toContain("Student2026");
 
     const firstRow = preview.rows[0];
@@ -76,11 +76,11 @@ describe("student Excel import workflows", () => {
     expect(edited.rows[0].payload).toMatchObject({ username: "excel-a-edited", gender: "FEMALE" });
 
     const result = await commitStudentImport(administrator.id, preview.id);
-    expect(result).toMatchObject({ committed: true, count: 2 });
+    expect(result).toMatchObject({ committed: true, count: 2, credentials: expect.arrayContaining([expect.objectContaining({ username: "excel-a-edited" }), expect.objectContaining({ username: "excel-b" })]) });
     const students = await prisma.user.findMany({ where: { registrationSource: "EXCEL_IMPORT" }, orderBy: { username: "asc" } });
     expect(students).toHaveLength(2);
-    expect(students[0]).toMatchObject({ username: "excel-a-edited", studentStatus: "ACTIVE", mustChangePassword: true, enabled: true, isLongTerm: false });
-    expect(students[1]).toMatchObject({ username: "excel-b", studentStatus: "ACTIVE", mustChangePassword: true, enabled: false, isLongTerm: true });
+    expect(students[0]).toMatchObject({ username: "excel-a-edited", studentStatus: "ACTIVE", mustChangePassword: false, activationRequired: true, enabled: true, isLongTerm: false });
+    expect(students[1]).toMatchObject({ username: "excel-b", studentStatus: "ACTIVE", mustChangePassword: false, activationRequired: true, enabled: false, isLongTerm: true });
     expect(students[0].validFrom?.toISOString().slice(0, 10)).toBe(businessDate);
     expect(students[0].validUntil?.toISOString().slice(0, 10)).toBe(addCalendarYear(businessDate));
     expect(await prisma.studentImportRow.count({ where: { batchId: preview.id, initialPasswordHash: { not: null } } })).toBe(0);
