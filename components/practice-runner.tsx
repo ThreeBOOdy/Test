@@ -13,7 +13,7 @@ import { getInitialQuestionIndex, toggleDraftSelection } from "@/lib/domain/prac
 import type { PublicAnswerResult, PublicPracticeSession } from "@/lib/domain/types";
 import { cn } from "@/lib/utils";
 
-type ExamSubmitResult = { correctCount: number; total: number; passingCount: number; passed: boolean; completedAt: string; message?: string };
+type ExamSubmitResult = { correctCount: number; total: number; passingCount: number; passed: boolean; settlementSource: "STUDENT_SUBMISSION" | "AUTO_SETTLEMENT"; completedAt: string; message?: string };
 
 export function PracticeRunner({ session }: { session: PublicPracticeSession }) {
   const isExam = session.mode === "MOCK_EXAM";
@@ -186,7 +186,7 @@ export function PracticeRunner({ session }: { session: PublicPracticeSession }) 
 
   const studentFacingTitle = isExam ? "模拟考试" : "当前练习";
 
-  if (summaryVisible) return <PracticeSummary title={studentFacingTitle} correct={isExam ? examResult?.correctCount ?? 0 : correctCount} total={isExam ? examResult?.total ?? session.total : session.total} passingCount={isExam ? examResult?.passingCount : session.exam?.passingCount} />;
+  if (summaryVisible) return <PracticeSummary title={studentFacingTitle} correct={isExam ? examResult?.correctCount ?? 0 : correctCount} total={isExam ? examResult?.total ?? session.total : session.total} passingCount={isExam ? examResult?.passingCount : session.exam?.passingCount} settlementSource={isExam ? examResult?.settlementSource : undefined} />;
 
   const progressCount = isExam ? draftedCount : answeredCount;
   return <div className="practice-reading safe-bottom mx-auto max-w-7xl">

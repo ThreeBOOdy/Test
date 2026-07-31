@@ -1,6 +1,8 @@
 export type QuestionType = "SINGLE_CHOICE" | "MULTIPLE_CHOICE";
 export type QuestionStatus = "ACTIVE" | "DISABLED" | "ARCHIVED";
 export type PracticeMode = "LEVEL_COMPREHENSIVE" | "KNOWLEDGE_POINT" | "WRONG_QUESTION" | "QUESTION_ORDER" | "RANDOM_ALL" | "MOCK_EXAM";
+export type PracticeStatus = "IN_PROGRESS" | "COMPLETED" | "ABANDONED";
+export type ExamSettlementSource = "STUDENT_SUBMISSION" | "AUTO_SETTLEMENT";
 
 export type QuestionOption = {
   id: string;
@@ -111,6 +113,7 @@ export type PublicExamResult = {
   total: number;
   passingCount: number;
   passed: boolean;
+  settlementSource: ExamSettlementSource;
   completedAt: string;
 };
 

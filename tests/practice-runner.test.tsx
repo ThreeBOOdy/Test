@@ -81,7 +81,7 @@ describe("PracticeRunner", () => {
   it("submits mock exam answers together and shows the pass result", async () => {
     const user = userEvent.setup();
     const question = practiceSessionFixture().questions[0];
-    vi.mocked(fetch).mockImplementation(async (input) => new Response(JSON.stringify(input.toString().endsWith("/submit") ? { results: { [question.id]: { isCorrect: true, correctOptionIds: ["A"], selectedOptionIds: ["A"], answeredCount: 1, correctCount: 1 } }, correctCount: 1, total: 1, passingCount: 1, passed: true } : { version: 1, answers: { [question.id]: ["A"] }, currentIndex: 0, updatedAt: new Date().toISOString() }), { status: 200, headers: { "Content-Type": "application/json" } }));
+    vi.mocked(fetch).mockImplementation(async (input) => new Response(JSON.stringify(input.toString().endsWith("/submit") ? { results: { [question.id]: { isCorrect: true, correctOptionIds: ["A"], selectedOptionIds: ["A"], answeredCount: 1, correctCount: 1 } }, correctCount: 1, total: 1, passingCount: 1, passed: true, settlementSource: "STUDENT_SUBMISSION", completedAt: new Date().toISOString() } : { version: 1, answers: { [question.id]: ["A"] }, currentIndex: 0, updatedAt: new Date().toISOString() }), { status: 200, headers: { "Content-Type": "application/json" } }));
     render(<PracticeRunner session={practiceSessionFixture({ mode: "MOCK_EXAM", title: "A级 · 模拟考试", questions: [question], total: 1, exam: { durationMinutes: 40, passingCount: 1, expiresAt: new Date(Date.now() + 40 * 60_000).toISOString() } })} />);
 
     await user.click(screen.getByRole("radio", { name: /每秒三十万千米/ }));

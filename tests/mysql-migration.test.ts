@@ -137,16 +137,15 @@ describe("MySQL project configuration", () => {
     expect(migration).not.toMatch(/DELETE FROM `Question`|DROP TABLE `Question`/);
   });
   it("uses MySQL-native aggregate and duration SQL", () => {
-    const reportsPage = fs.readFileSync(path.resolve("app/teacher/reports/page.tsx"), "utf8");
+    const statisticsService = fs.readFileSync(path.resolve("lib/server/learning-statistics-service.ts"), "utf8");
     const studentsPage = fs.readFileSync(path.resolve("app/teacher/students/page.tsx"), "utf8");
-    const historyPage = fs.readFileSync(path.resolve("app/student/history/page.tsx"), "utf8");
 
-    expect(reportsPage).toMatch(/CAST\(COUNT\(DISTINCT \\`userId\\`\) AS SIGNED\)/);
-    expect(reportsPage).toContain("SUM(CASE WHEN");
+    expect(statisticsService).toMatch(/CAST\(COUNT\(DISTINCT/);
+    expect(statisticsService).toContain("SUM(CASE WHEN");
     expect(studentsPage).toContain('redirect("/teacher"');
     expect(studentsPage).not.toContain("$queryRaw");
-    expect(historyPage).toContain("TIMESTAMPDIFF(SECOND");
-    expect(historyPage).toContain("CAST(COALESCE");
+    expect(statisticsService).toContain("TIMESTAMPDIFF(SECOND");
+    expect(statisticsService).toContain("CAST(COALESCE");
   });
 });
 

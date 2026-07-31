@@ -69,6 +69,11 @@ enum PracticeStatus {
   ABANDONED
 }
 
+enum ExamSettlementSource {
+  STUDENT_SUBMISSION
+  AUTO_SETTLEMENT
+}
+
 enum ImportStatus {
   PREVIEW
   COMMITTED
@@ -404,6 +409,7 @@ model PracticeSession {
   durationMinutesSnapshot Int?
   passingCountSnapshot    Int?
   expiresAt               DateTime?
+  examSettlementSource    ExamSettlementSource?
   startedAt               DateTime                  @default(now())
   completedAt             DateTime?
   questions               PracticeSessionQuestion[]
@@ -511,6 +517,7 @@ model ImportBatch {
 
   @@unique([courseId, id])
   @@index([importedById, status, createdAt])
+  @@index([status, expiresAt])
 }
 
 model ImportBatchRow {

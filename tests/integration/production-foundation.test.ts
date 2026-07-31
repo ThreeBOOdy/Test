@@ -6,6 +6,7 @@ import { commitImportBatch, getImportBatchReport, revertImportBatch } from "../.
 import { abandonMockExam, createPracticeSession, getPracticeSession, saveExamDraft, settleExpiredMockExams, submitMockExam, submitPracticeAnswer } from "../../lib/server/practice-service";
 import { createSession, findSessionUser, revokeSession, revokeUserSessions } from "../../lib/server/session";
 import { RADIO_COURSE_ID } from "../../lib/domain/course";
+import { getTeacherLearningStatistics } from "../../lib/server/learning-statistics-service";
 
 const connectionString = process.env.DATABASE_URL;
 if (!connectionString) throw new Error("DATABASE_URL is required for integration tests");
@@ -415,8 +416,8 @@ describe("production database foundation", () => {
 
     expect(session.exam).toMatchObject({ durationMinutes: 40, passingCount: 1 });
     expect(reloaded?.questions.map((question) => ({ id: question.id, options: question.options }))).toEqual(session.questions.map((question) => ({ id: question.id, options: question.options })));
-    expect(submission).toMatchObject({ correctCount: 1, total: 2, passingCount: 1, passed: true });
-    expect(await prisma.practiceSession.findUniqueOrThrow({ where: { id: session.id } })).toMatchObject({ status: "COMPLETED", durationMinutesSnapshot: 40, passingCountSnapshot: 1, correctCount: 1 });
+    expect(submission).toMatchObject({ correctCount: 1, total: 2, passingCount: 1, passed: true, settlementSource: "STUDENT_SUBMISSION" });
+    expect(await prisma.practiceSession.findUniqueOrThrow({ where: { id: session.id } })).toMatchObject({ status: "COMPLETED", durationMinutesSnapshot: 40, passingCountSnapshot: 1, correctCount: 1, examSettlementSource: "STUDENT_SUBMISSION" });
   });
 
   it("settles expired mock exams from drafts without exposing answer keys", async () => {
@@ -432,9 +433,10 @@ describe("production database foundation", () => {
 
     expect(firstScan + secondScan).toBeGreaterThanOrEqual(1);
     expect(reloaded?.initialResults).toEqual({});
-    expect(reloaded?.examResult).toMatchObject({ correctCount: 1, total: 1, passed: true });
+    expect(reloaded?.examResult).toMatchObject({ correctCount: 1, total: 1, passed: true, settlementSource: "AUTO_SETTLEMENT" });
     expect(JSON.stringify(reloaded)).not.toContain("correctOptionIds");
     expect(replay).toEqual(reloaded?.examResult);
+    expect(await prisma.practiceSession.findUniqueOrThrow({ where: { id: session.id } })).toMatchObject({ status: "COMPLETED", examSettlementSource: "AUTO_SETTLEMENT" });
     expect(await prisma.practiceAnswer.count({ where: { courseId: RADIO_COURSE_ID, sessionId: session.id } })).toBe(1);
   });
 
@@ -448,6 +450,24 @@ describe("production database foundation", () => {
     expect(await prisma.practiceSession.findUniqueOrThrow({ where: { id: session.id } })).toMatchObject({ status: "ABANDONED", correctCount: 0 });
     expect(await prisma.practiceAnswer.count({ where: { courseId: RADIO_COURSE_ID, sessionId: session.id } })).toBe(0);
     expect(await prisma.wrongQuestion.count({ where: { courseId: RADIO_COURSE_ID, userId: user.id, questionId: question.id } })).toBe(0);
+  });
+
+  it("uses completed sessions only for teacher statistics across mixed session states", async () => {
+    const { user, level, point, question } = await createBaseRecords();
+    const teacher = await prisma.user.create({ data: { username: "stats-teacher", displayName: "Stats Teacher", passwordHash: "test", role: "TEACHER" } });
+    const now = new Date();
+    const completedAt = new Date(now.getTime() - 60_000);
+    const completed = await prisma.practiceSession.create({ data: { userId: user.id, mode: "LEVEL_COMPREHENSIVE", levelId: level.id, singleCountSnapshot: 1, multipleCountSnapshot: 0, status: "COMPLETED", correctCount: 1, startedAt: completedAt, completedAt } });
+    await prisma.practiceSessionQuestion.create({ data: { sessionId: completed.id, questionId: question.id, position: 0, snapshot: { questionId: question.id, levelId: level.id, knowledgePointId: point.id, stem: question.stem, type: question.type, optionCount: 2, correctOptionCount: 1, selectionSpec: "2选1", options: question.options, correctOptionIds: ["A"], levelCode: level.code, knowledgeName: point.name } } });
+    await prisma.practiceAnswer.create({ data: { sessionId: completed.id, questionId: question.id, selectedOptionIds: ["A"], isCorrect: true, submittedAt: completedAt } });
+    await prisma.practiceSession.create({ data: { userId: user.id, mode: "MOCK_EXAM", levelId: level.id, singleCountSnapshot: 1, multipleCountSnapshot: 0, status: "IN_PROGRESS", startedAt: now } });
+    await prisma.practiceSession.create({ data: { userId: user.id, mode: "MOCK_EXAM", levelId: level.id, singleCountSnapshot: 1, multipleCountSnapshot: 0, status: "ABANDONED", startedAt: now, completedAt: now } });
+    await prisma.practiceSession.create({ data: { userId: teacher.id, mode: "LEVEL_COMPREHENSIVE", levelId: level.id, singleCountSnapshot: 1, multipleCountSnapshot: 0, status: "COMPLETED", correctCount: 1, startedAt: completedAt, completedAt } });
+
+    await expect(getTeacherLearningStatistics(new Date(now.getTime() - 5 * 60_000))).resolves.toMatchObject({
+      summary: { completedSessions: 1, activeStudents: 1, answered: 1, correct: 1, accuracy: 100 },
+      students: [{ displayName: "Student", completedSessions: 1, answered: 1, correct: 1, accuracy: 100 }],
+    });
   });
 
   it("deletes unused imported questions, archives referenced ones, and prevents repeated revert", async () => {

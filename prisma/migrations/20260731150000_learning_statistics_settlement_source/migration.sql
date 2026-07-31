@@ -1,0 +1,1 @@
+ALTER TABLE `PracticeSession` ADD COLUMN `examSettlementSource` ENUM('STUDENT_SUBMISSION', 'AUTO_SETTLEMENT') NULL;
