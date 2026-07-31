@@ -5,6 +5,7 @@ import { ApiError } from "@/lib/domain/api-error";
 import { parseJsonStringArray } from "@/lib/domain/json-string-array";
 import { selectPracticeQuestions, selectPrioritizedRandomQuestions, shuffle, sortQuestionsByBankNumber } from "@/lib/domain/practice-engine";
 import { createQuestionSnapshot, gradeQuestionSnapshot, toPublicQuestionSnapshot, type QuestionSnapshot } from "@/lib/domain/practice-snapshot";
+import { advanceWrongQuestionMastery } from "@/lib/domain/wrong-question-mastery";
 import type { ExamRule, PracticeMode, PublicAnswerResult, PublicPracticeSession, Question, QuestionOption } from "@/lib/domain/types";
 import { RADIO_COURSE_ID } from "@/lib/domain/course";
 
@@ -97,7 +98,7 @@ async function persistPracticeSession(userId: string, mode: PracticeMode, levelI
 }
 
 export async function getPracticeSession(userId: string, sessionId: string): Promise<PublicPracticeSession | null> {
-  const session = await prisma.practiceSession.findFirst({ where: { id: sessionId, courseId: RADIO_COURSE_ID, userId }, include: { questions: { orderBy: { position: "asc" } }, answers: { where: { courseId: RADIO_COURSE_ID } } } });
+  const session = await prisma.practiceSession.findFirst({ where: { id: sessionId, courseId: RADIO_COURSE_ID, userId }, include: { questions: { orderBy: { position: "asc" } }, answers: { where: { courseId: RADIO_COURSE_ID } }, examDraft: true } });
   if (!session) return null;
   const snapshots = session.questions.map((item) => item.snapshot as unknown as QuestionSnapshot);
   const correctCount = session.answers.filter((answer) => answer.isCorrect).length;
@@ -108,7 +109,34 @@ export async function getPracticeSession(userId: string, sessionId: string): Pro
   const exam = session.mode === "MOCK_EXAM" && session.durationMinutesSnapshot && session.passingCountSnapshot && session.expiresAt
     ? { durationMinutes: session.durationMinutesSnapshot, passingCount: session.passingCountSnapshot, expiresAt: session.expiresAt }
     : undefined;
-  return toPublicSession(session, snapshots, results, exam);
+  const draft = session.mode === "MOCK_EXAM" && session.examDraft ? toPublicDraft(session.examDraft.answers, session.examDraft.currentIndex, session.examDraft.version, session.examDraft.updatedAt) : undefined;
+  return toPublicSession(session, snapshots, results, exam, draft);
+}
+
+export async function saveExamDraft(userId: string, sessionId: string, input: { answers: Record<string, string[]>; currentIndex: number; version: number }) {
+  const session = await prisma.practiceSession.findFirst({ where: { id: sessionId, courseId: RADIO_COURSE_ID, userId }, include: { questions: true, answers: true, examDraft: true } });
+  if (!session) throw new ApiError("模拟考试不存在", 404);
+  if (session.mode !== "MOCK_EXAM") throw new ApiError("当前会话不是模拟考试", 409);
+  if (session.status !== "IN_PROGRESS" || session.answers.length) throw new ApiError("模拟考试已经结束", 409);
+  if (!Number.isInteger(input.currentIndex) || input.currentIndex < 0 || input.currentIndex >= session.questions.length) throw new ApiError("当前题号无效");
+  const questionIds = new Set(session.questions.map((question) => question.questionId));
+  for (const [questionId, selectedOptionIds] of Object.entries(input.answers)) {
+    const sessionQuestion = session.questions.find((question) => question.questionId === questionId);
+    if (!questionIds.has(questionId) || !sessionQuestion) throw new ApiError("草稿中包含无效题目");
+    if (!Array.isArray(selectedOptionIds) || selectedOptionIds.some((optionId) => typeof optionId !== "string")) throw new ApiError("草稿答案格式无效");
+    validateSelection(sessionQuestion.snapshot as unknown as QuestionSnapshot, selectedOptionIds, true);
+  }
+  const currentVersion = session.examDraft?.version ?? 0;
+  if (input.version !== currentVersion) throw new ApiError("考试草稿版本已更新，请重新加载", 409);
+  let saved;
+  if (session.examDraft) {
+    saved = await prisma.examDraft.updateMany({ where: { courseId: RADIO_COURSE_ID, sessionId, version: input.version }, data: { answers: input.answers as Prisma.InputJsonValue, currentIndex: input.currentIndex, version: { increment: 1 } } });
+  } else {
+    try { await prisma.examDraft.create({ data: { courseId: RADIO_COURSE_ID, sessionId, answers: input.answers as Prisma.InputJsonValue, currentIndex: input.currentIndex, version: 1 } }); saved = { count: 1 }; } catch (error) { if (!(error instanceof Prisma.PrismaClientKnownRequestError) || error.code !== "P2002") throw error; saved = { count: 0 }; }
+  }
+  if (saved.count !== 1) throw new ApiError("考试草稿版本已更新，请重新加载", 409);
+  const draft = await prisma.examDraft.findUniqueOrThrow({ where: { courseId_sessionId: { courseId: RADIO_COURSE_ID, sessionId } } });
+  return toPublicDraft(draft.answers, draft.currentIndex, draft.version, draft.updatedAt);
 }
 
 export async function submitPracticeAnswer(userId: string, sessionId: string, questionId: string, selectedOptionIds: string[], idempotencyKey: string) {
@@ -130,9 +158,11 @@ export async function submitPracticeAnswer(userId: string, sessionId: string, qu
       const answeredCount = answeredBefore + 1;
       const correctCount = correctBefore + Number(isCorrect);
       await tx.practiceAnswer.create({ data: { courseId: RADIO_COURSE_ID, sessionId, questionId, selectedOptionIds: selectedOptionIds as Prisma.InputJsonValue, idempotencyKey, isCorrect, answeredCountAtSubmission: answeredCount, correctCountAtSubmission: correctCount } });
-      await updateWrongQuestion(tx, userId, questionId, isCorrect);
+      if (!isCorrect) await recordWrongQuestionAttempt(tx, userId, questionId, "ANSWERED_WRONG");
       const total = await tx.practiceSessionQuestion.count({ where: { courseId: RADIO_COURSE_ID, sessionId } });
-      await tx.practiceSession.update({ where: { id: sessionId }, data: { currentIndex: answeredCount, correctCount, ...(answeredCount === total ? { status: "COMPLETED", completedAt: new Date() } : {}) } });
+      const completedAt = answeredCount === total ? new Date() : undefined;
+      await tx.practiceSession.update({ where: { id: sessionId }, data: { currentIndex: answeredCount, correctCount, ...(completedAt ? { status: "COMPLETED", completedAt } : {}) } });
+      if (completedAt) await settleWrongQuestionMastery(tx, userId, sessionId);
       return { isCorrect, correctOptionIds: snapshot.correctOptionIds, selectedOptionIds, answeredCount, correctCount };
     });
   } catch (error) {
@@ -146,7 +176,7 @@ export async function submitPracticeAnswer(userId: string, sessionId: string, qu
 
 export async function submitMockExam(userId: string, sessionId: string, submittedAnswers: { questionId: string; selectedOptionIds: string[] }[]) {
   return prisma.$transaction(async (tx) => {
-    const session = await tx.practiceSession.findFirst({ where: { id: sessionId, courseId: RADIO_COURSE_ID, userId }, include: { questions: { orderBy: { position: "asc" } }, answers: { where: { courseId: RADIO_COURSE_ID } } } });
+    const session = await tx.practiceSession.findFirst({ where: { id: sessionId, courseId: RADIO_COURSE_ID, userId }, include: { questions: { orderBy: { position: "asc" } }, answers: { where: { courseId: RADIO_COURSE_ID } }, examDraft: true } });
     if (!session) throw new ApiError("模拟考试不存在", 404);
     if (session.mode !== "MOCK_EXAM") throw new ApiError("当前会话不是模拟考试", 409);
     if (session.status !== "IN_PROGRESS" || session.answers.length) throw new ApiError("模拟考试已经交卷", 409);
@@ -162,10 +192,11 @@ export async function submitMockExam(userId: string, sessionId: string, submitte
       return { questionId: item.questionId, snapshot, selectedOptionIds, isCorrect: gradeQuestionSnapshot(snapshot, selectedOptionIds) };
     });
     await tx.practiceAnswer.createMany({ data: graded.map((answer) => ({ courseId: RADIO_COURSE_ID, sessionId, questionId: answer.questionId, selectedOptionIds: answer.selectedOptionIds as Prisma.InputJsonValue, isCorrect: answer.isCorrect })) });
-    for (const answer of graded) await updateWrongQuestion(tx, userId, answer.questionId, answer.isCorrect);
     const correctCount = graded.filter((answer) => answer.isCorrect).length;
     const completedAt = new Date();
     await tx.practiceSession.update({ where: { id: sessionId }, data: { status: "COMPLETED", currentIndex: graded.length, correctCount, completedAt } });
+    await settleWrongQuestionMastery(tx, userId, sessionId);
+    await tx.examDraft.deleteMany({ where: { courseId: RADIO_COURSE_ID, sessionId } });
     const results = Object.fromEntries(graded.map((answer) => [answer.questionId, { isCorrect: answer.isCorrect, correctOptionIds: answer.snapshot.correctOptionIds, selectedOptionIds: answer.selectedOptionIds, answeredCount: graded.length, correctCount } satisfies PublicAnswerResult]));
     const passingCount = session.passingCountSnapshot ?? graded.length;
     return { results, correctCount, total: graded.length, passingCount, passed: correctCount >= passingCount, completedAt: completedAt.toISOString() };
@@ -212,8 +243,13 @@ function createSnapshots(records: QuestionRecord[], questions: Question[]) {
   });
 }
 
-function toPublicSession(session: { id: string; mode: PracticeMode }, snapshots: QuestionSnapshot[], results: Record<string, PublicAnswerResult>, exam?: { durationMinutes: number; passingCount: number; expiresAt: Date }): PublicPracticeSession {
-  return { id: session.id, mode: session.mode, title: sessionTitle(session.mode, snapshots), total: snapshots.length, questions: snapshots.map(toPublicQuestionSnapshot), initialResults: results, ...(exam ? { exam: { durationMinutes: exam.durationMinutes, passingCount: exam.passingCount, expiresAt: exam.expiresAt.toISOString() } } : {}) };
+function toPublicSession(session: { id: string; mode: PracticeMode }, snapshots: QuestionSnapshot[], results: Record<string, PublicAnswerResult>, exam?: { durationMinutes: number; passingCount: number; expiresAt: Date }, draft?: PublicPracticeSession["draft"]): PublicPracticeSession {
+  return { id: session.id, mode: session.mode, title: sessionTitle(session.mode, snapshots), total: snapshots.length, questions: snapshots.map(toPublicQuestionSnapshot), initialResults: results, ...(exam ? { exam: { durationMinutes: exam.durationMinutes, passingCount: exam.passingCount, expiresAt: exam.expiresAt.toISOString() } } : {}), ...(draft ? { draft } : {}) };
+}
+
+function toPublicDraft(answers: unknown, currentIndex: number, version: number, updatedAt: Date): NonNullable<PublicPracticeSession["draft"]> {
+  if (!answers || typeof answers !== "object" || Array.isArray(answers)) throw new ApiError("考试草稿数据损坏", 500);
+  return { answers: Object.fromEntries(Object.entries(answers).map(([questionId, selectedOptionIds]) => [questionId, parseJsonStringArray(selectedOptionIds, "draft.answers")])), currentIndex, version, updatedAt: updatedAt.toISOString() };
 }
 
 function validateSelection(snapshot: QuestionSnapshot, selectedOptionIds: string[], allowEmpty: boolean) {
@@ -238,9 +274,32 @@ function hasSameOptionIds(left: string[], right: string[]) {
   return left.length === right.length && new Set(left).size === left.length && left.every((optionId) => right.includes(optionId));
 }
 
-async function updateWrongQuestion(tx: Prisma.TransactionClient, userId: string, questionId: string, isCorrect: boolean) {
-  if (isCorrect) await tx.wrongQuestion.updateMany({ where: { courseId: RADIO_COURSE_ID, userId, questionId, mastered: false }, data: { mastered: true, masteredAt: new Date() } });
-  else await tx.wrongQuestion.upsert({ where: { courseId_userId_questionId: { courseId: RADIO_COURSE_ID, userId, questionId } }, update: { wrongCount: { increment: 1 }, lastWrongAt: new Date(), mastered: false, masteredAt: null }, create: { courseId: RADIO_COURSE_ID, userId, questionId } });
+async function recordWrongQuestionAttempt(tx: Prisma.TransactionClient, userId: string, questionId: string, reason: "ANSWERED_WRONG" | "UNANSWERED") {
+  await tx.wrongQuestion.upsert({
+    where: { courseId_userId_questionId: { courseId: RADIO_COURSE_ID, userId, questionId } },
+    update: { wrongCount: { increment: 1 }, lastWrongReason: reason, lastWrongAt: new Date() },
+    create: { courseId: RADIO_COURSE_ID, userId, questionId, lastWrongReason: reason },
+  });
+}
+
+async function settleWrongQuestionMastery(tx: Prisma.TransactionClient, userId: string, sessionId: string) {
+  const session = await tx.practiceSession.findFirst({
+    where: { id: sessionId, courseId: RADIO_COURSE_ID, userId, status: "COMPLETED" },
+    include: { answers: { where: { courseId: RADIO_COURSE_ID } } },
+  });
+  if (!session) return;
+  for (const answer of session.answers) {
+    const current = await tx.wrongQuestion.findUnique({ where: { courseId_userId_questionId: { courseId: RADIO_COURSE_ID, userId, questionId: answer.questionId } } });
+    if (!current && answer.isCorrect) continue;
+    const next = advanceWrongQuestionMastery(current ?? { correctSessionCount: 0, mastered: false, lastCountedSessionId: null }, answer.isCorrect ? "CORRECT" : "WRONG", sessionId);
+    const wrongReason = answer.isCorrect ? null : parseJsonStringArray(answer.selectedOptionIds, "selectedOptionIds").length ? "ANSWERED_WRONG" : "UNANSWERED";
+    const shouldIncrementWrongCount = !answer.isCorrect && session.mode === "MOCK_EXAM";
+    await tx.wrongQuestion.upsert({
+      where: { courseId_userId_questionId: { courseId: RADIO_COURSE_ID, userId, questionId: answer.questionId } },
+      update: { ...(answer.isCorrect ? {} : { ...(shouldIncrementWrongCount ? { wrongCount: { increment: 1 } } : {}), lastWrongReason: wrongReason, lastWrongAt: new Date() }), correctSessionCount: next.correctSessionCount, mastered: next.mastered, lastCountedSessionId: next.lastCountedSessionId, masteredAt: next.mastered ? current?.masteredAt ?? new Date() : null },
+      create: { courseId: RADIO_COURSE_ID, userId, questionId: answer.questionId, wrongCount: answer.isCorrect ? 1 : 1, lastWrongReason: wrongReason, correctSessionCount: next.correctSessionCount, mastered: next.mastered, lastCountedSessionId: next.lastCountedSessionId, masteredAt: next.mastered ? new Date() : null },
+    });
+  }
 }
 
 function sessionTitle(mode: PracticeMode, snapshots: QuestionSnapshot[]) {

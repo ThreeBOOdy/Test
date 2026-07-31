@@ -137,15 +137,15 @@ model User {
 }
 
 model StudentActivation {
-  id                 String   @id @default(cuid())
-  userId             String   @unique
-  user               User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  version            Int      @default(1)
-  activationCodeHash String   @db.Text
+  id                 String    @id @default(cuid())
+  userId             String    @unique
+  user               User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  version            Int       @default(1)
+  activationCodeHash String    @db.Text
   expiresAt          DateTime
   usedAt             DateTime?
-  createdAt          DateTime @default(now())
-  updatedAt          DateTime @updatedAt
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
 
   @@index([expiresAt, usedAt])
 }
@@ -165,11 +165,11 @@ model RadioPerson {
 }
 
 model AuthSession {
-  id                String   @id @default(cuid())
-  tokenHash         String   @unique
+  id                String    @id @default(cuid())
+  tokenHash         String    @unique
   userId            String
-  user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  createdAt         DateTime @default(now())
+  user              User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt         DateTime  @default(now())
   lastSeenAt        DateTime
   idleExpiresAt     DateTime
   absoluteExpiresAt DateTime
@@ -225,6 +225,7 @@ model Course {
   questions                Question[]
   importBatches            ImportBatch[]
   practiceSessions         PracticeSession[]
+  examDrafts               ExamDraft[]
   practiceSessionQuestions PracticeSessionQuestion[]
   practiceAnswers          PracticeAnswer[]
   wrongQuestions           WrongQuestion[]
@@ -233,7 +234,6 @@ model Course {
 
   @@index([enabled, sortOrder])
 }
-
 
 model Level {
   id             String                  @id @default(cuid())
@@ -369,16 +369,16 @@ model Question {
 }
 
 model QuestionRevision {
-  id            String   @id @default(cuid())
-  courseId      String   @default("course-radio")
-  questionId    String
-  question      Question @relation(fields: [courseId, questionId], references: [courseId, id], onDelete: Restrict)
-  revision      Int
-  snapshot      Json
-  changeSource  String
-  actorUserId   String?
-  actor         User?    @relation(fields: [actorUserId], references: [id], onDelete: SetNull)
-  createdAt     DateTime @default(now())
+  id           String   @id @default(cuid())
+  courseId     String   @default("course-radio")
+  questionId   String
+  question     Question @relation(fields: [courseId, questionId], references: [courseId, id], onDelete: Restrict)
+  revision     Int
+  snapshot     Json
+  changeSource String
+  actorUserId  String?
+  actor        User?    @relation(fields: [actorUserId], references: [id], onDelete: SetNull)
+  createdAt    DateTime @default(now())
 
   @@unique([courseId, questionId, revision])
   @@index([courseId, questionId, createdAt])
@@ -408,9 +408,26 @@ model PracticeSession {
   completedAt             DateTime?
   questions               PracticeSessionQuestion[]
   answers                 PracticeAnswer[]
+  examDraft               ExamDraft?
 
   @@unique([courseId, id])
   @@index([userId, status, startedAt])
+}
+
+model ExamDraft {
+  id           String          @id @default(cuid())
+  courseId     String          @default("course-radio")
+  course       Course          @relation(fields: [courseId], references: [id], onDelete: Restrict)
+  sessionId    String
+  session      PracticeSession @relation(fields: [courseId, sessionId], references: [courseId, id], onDelete: Cascade)
+  answers      Json
+  currentIndex Int             @default(0)
+  version      Int             @default(0)
+  updatedAt    DateTime        @updatedAt
+  createdAt    DateTime        @default(now())
+
+  @@unique([courseId, sessionId])
+  @@index([updatedAt])
 }
 
 model PracticeSessionQuestion {
@@ -449,17 +466,20 @@ model PracticeAnswer {
 }
 
 model WrongQuestion {
-  id          String    @id @default(cuid())
-  courseId    String    @default("course-radio")
-  course      Course    @relation(fields: [courseId], references: [id], onDelete: Restrict)
-  userId      String
-  questionId  String
-  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  question    Question  @relation(fields: [courseId, questionId], references: [courseId, id])
-  wrongCount  Int       @default(1)
-  mastered    Boolean   @default(false)
-  lastWrongAt DateTime  @default(now())
-  masteredAt  DateTime?
+  id                   String    @id @default(cuid())
+  courseId             String    @default("course-radio")
+  course               Course    @relation(fields: [courseId], references: [id], onDelete: Restrict)
+  userId               String
+  questionId           String
+  user                 User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  question             Question  @relation(fields: [courseId, questionId], references: [courseId, id])
+  wrongCount           Int       @default(1)
+  lastWrongReason      String?
+  correctSessionCount  Int       @default(0)
+  lastCountedSessionId String?
+  mastered             Boolean   @default(false)
+  lastWrongAt          DateTime  @default(now())
+  masteredAt           DateTime?
 
   @@unique([courseId, userId, questionId])
   @@index([userId])
@@ -564,7 +584,6 @@ model SensitiveDataReauthenticationAttempt {
   @@index([userId, success, createdAt])
   @@index([ipHash, success, createdAt])
 }
-
 model AuditLog {
   id          String   @id @default(cuid())
   actorUserId String?
