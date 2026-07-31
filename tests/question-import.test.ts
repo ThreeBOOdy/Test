@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { normalizeAnswer, validateImportRow } from "../lib/domain/question-import";
+import { classifyImportDuplicate, findBatchDuplicateRows, normalizeAnswer, validateImportRow } from "../lib/domain/question-import";
 import type { ImportQuestionRow } from "../lib/domain/types";
 
 function row(overrides: Partial<ImportQuestionRow> = {}): ImportQuestionRow {
@@ -41,5 +41,21 @@ describe("question import validation", () => {
 
     expect(risky.issues).toContainEqual(expect.objectContaining({ severity: "warning", field: "题干" }));
     expect(locked.issues).not.toContainEqual(expect.objectContaining({ field: "题干" }));
+  });
+
+  it("distinguishes exact duplicates, code conflicts, and unnumbered suspects", () => {
+    const candidate = validateImportRow(row());
+    const comparable = { ...candidate.row, options: candidate.options, correctOptionIds: candidate.correctOptionIds };
+
+    expect(classifyImportDuplicate(comparable, comparable)).toBe("EXACT");
+    expect(classifyImportDuplicate(comparable, { ...comparable, stem: "不同题干" })).toBe("CONFLICT");
+    expect(classifyImportDuplicate({ ...comparable, externalQuestionCode: "" }, { ...comparable, externalQuestionCode: null })).toBe("SUSPECT");
+  });
+
+  it("blocks duplicates across worksheets even when source row numbers match", () => {
+    const first = validateImportRow(row({ sheetName: "题库一", rowNumber: 2, externalQuestionCode: "Q-1" }));
+    const duplicate = validateImportRow(row({ sheetName: "题库二", rowNumber: 2, externalQuestionCode: "Q-1" }));
+
+    expect(findBatchDuplicateRows([first, duplicate])).toEqual(new Map([["题库二!2", "题库一!2"]]));
   });
 });

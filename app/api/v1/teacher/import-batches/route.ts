@@ -6,11 +6,11 @@ import { apiErrorResponse, requireTeacher } from "@/lib/server/api";
 
 export async function GET(request: Request) {
   try {
-    await requireTeacher();
+    const user = await requireTeacher();
     const url = new URL(request.url);
     const { page, pageSize, skip } = normalizePagination({ page: url.searchParams.get("page") ?? undefined, pageSize: url.searchParams.get("pageSize") ?? undefined });
     const status = url.searchParams.get("status");
-    const where = { courseId: RADIO_COURSE_ID, ...(status && ["PREVIEW", "COMMITTED", "REVERTED", "FAILED"].includes(status) ? { status: status as "PREVIEW" | "COMMITTED" | "REVERTED" | "FAILED" } : {}) };
+    const where = { courseId: RADIO_COURSE_ID, importedById: user.id, ...(status && ["PREVIEW", "COMMITTED", "REVERTED", "FAILED"].includes(status) ? { status: status as "PREVIEW" | "COMMITTED" | "REVERTED" | "FAILED" } : {}) };
     const [items, total] = await Promise.all([
       prisma.importBatch.findMany({ where, orderBy: { createdAt: "desc" }, skip, take: pageSize, select: { id: true, fileName: true, status: true, totalRows: true, validRows: true, warningRows: true, errorRows: true, insertedRows: true, duplicateRows: true, createdAt: true, committedAt: true, revertedAt: true, expiresAt: true } }),
       prisma.importBatch.count({ where }),

@@ -4,7 +4,7 @@ import { Prisma } from "@/generated/prisma/client";
 import { prisma } from "@/lib/db";
 import { getImportBatchExpiry } from "@/lib/domain/import-batch";
 import { RADIO_COURSE_ID } from "@/lib/domain/course";
-import { validateImportRow } from "@/lib/domain/question-import";
+import { classifyImportDuplicate, findBatchDuplicateRows, importRowLocation, validateImportRow } from "@/lib/domain/question-import";
 import { assertRequestBodySize } from "@/lib/domain/request-body";
 import type { ImportQuestionRow, ValidatedQuestionRow } from "@/lib/domain/types";
 import { assertSameOrigin } from "@/lib/server/http";
@@ -53,6 +53,40 @@ export async function POST(request: Request) {
         const importRow: ImportQuestionRow = { rowNumber, sheetName: sheet.name, levelCode: value("levelCode"), sourceBankCode: value("sourceBankCode"), categoryCode: value("categoryCode"), knowledgePointName: value("knowledgePointName"), externalQuestionCode: value("externalQuestionCode"), stem, rawAnswer: value("rawAnswer"), declaredSelectionSpec: value("declaredSelectionSpec"), preserveOptionOrder, optionValues, enabled: !["否", "0", "false"].includes(value("enabled").toLowerCase()) };
         results.push(validateImportRow(importRow));
       }
+    }
+
+    const batchDuplicates = findBatchDuplicateRows(results);
+    for (const item of results) {
+      const firstRow = batchDuplicates.get(importRowLocation(item.row));
+      if (firstRow) item.issues.push({ severity: "error", field: "重复题目", message: `与本批次 ${firstRow} 重复` });
+    }
+
+    const codedRows = results.filter((item) => item.row.externalQuestionCode?.trim());
+    const existingQuestions = codedRows.length
+      ? await prisma.question.findMany({
+        where: {
+          courseId: RADIO_COURSE_ID,
+          level: { code: { in: [...new Set(codedRows.map((item) => item.row.levelCode.trim()))] } },
+          externalQuestionCode: { in: [...new Set(codedRows.map((item) => item.row.externalQuestionCode!.trim()))] },
+        },
+        include: { level: { select: { code: true } } },
+      })
+      : [];
+    const existingByCode = new Map(existingQuestions.map((question) => [`${question.level.code}|${question.externalQuestionCode}`, question]));
+    const unnumberedRows = results.filter((item) => !item.row.externalQuestionCode?.trim());
+    const existingForSuspects = unnumberedRows.length
+      ? await prisma.question.findMany({ where: { courseId: RADIO_COURSE_ID }, select: { externalQuestionCode: true, stem: true, options: true, correctOptionIds: true } })
+      : [];
+    for (const item of results) {
+      if (item.issues.some((issue) => issue.severity === "error")) continue;
+      const existing = item.row.externalQuestionCode?.trim()
+        ? existingByCode.get(`${item.row.levelCode.trim()}|${item.row.externalQuestionCode.trim()}`)
+        : existingForSuspects.find((question) => classifyImportDuplicate({ ...item.row, options: item.options, correctOptionIds: item.correctOptionIds }, question) === "SUSPECT");
+      if (!existing) continue;
+      const kind = classifyImportDuplicate({ ...item.row, options: item.options, correctOptionIds: item.correctOptionIds }, existing);
+      if (kind === "EXACT") item.issues.push({ severity: "warning", field: "重复题目", message: "与公共题库中的题目完全相同" });
+      if (kind === "CONFLICT") item.issues.push({ severity: "error", field: "题目编号", message: "题目编号已存在，但题目内容不同" });
+      if (kind === "SUSPECT") item.issues.push({ severity: "warning", field: "重复题目", message: "未填写题号，内容与公共题库题目相同，请人工确认" });
     }
 
     const validRows = results.filter((item) => item.issues.every((issue) => issue.severity !== "error")).length;

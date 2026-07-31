@@ -9,7 +9,7 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
     assertSameOrigin(request);
     const user = await requireTeacher();
     const { id } = await context.params;
-    const result = await revertImportBatch(id);
+    const result = await revertImportBatch(id, user.id);
     await writeAuditLog({ actorUserId: user.id, action: "IMPORT_REVERT", targetType: "ImportBatch", targetId: id, metadata: result });
     return NextResponse.json(result);
   } catch (error) {

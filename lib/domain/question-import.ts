@@ -6,6 +6,15 @@ import type {
   ValidationIssue,
 } from "@/lib/domain/types";
 
+export type ImportDuplicateKind = "EXACT" | "CONFLICT" | "SUSPECT";
+
+type ComparableQuestion = {
+  externalQuestionCode?: string | null;
+  stem: string;
+  options: unknown;
+  correctOptionIds: unknown;
+};
+
 const OPTION_IDS = ["A", "B", "C", "D", "E", "F", "G", "H"];
 const ANSWER_SEPARATORS = /[,，、|/\s]+/;
 const SPEC_PATTERN = /^(\d+)\s*选\s*(\d+)$/;
@@ -32,6 +41,47 @@ export function parseSelectionSpec(value?: string): { optionCount: number; corre
 
 export function inferQuestionType(correctOptionCount: number): QuestionType {
   return correctOptionCount === 1 ? "SINGLE_CHOICE" : "MULTIPLE_CHOICE";
+}
+
+export function normalizeQuestionContent(value: unknown): string {
+  if (typeof value === "string") return value.trim().replace(/\s+/g, " ");
+  if (Array.isArray(value)) return `[${value.map(normalizeQuestionContent).join(",")}]`;
+  if (value && typeof value === "object") {
+    return `{${Object.entries(value as Record<string, unknown>).sort(([left], [right]) => left.localeCompare(right)).map(([key, item]) => `${key}:${normalizeQuestionContent(item)}`).join(",")}}`;
+  }
+  return String(value ?? "");
+}
+
+export function importQuestionContentKey(question: Pick<ComparableQuestion, "stem" | "options" | "correctOptionIds">): string {
+  return [normalizeQuestionContent(question.stem), normalizeQuestionContent(question.options), normalizeQuestionContent(question.correctOptionIds)].join("|");
+}
+
+export function classifyImportDuplicate(candidate: ComparableQuestion, existing: ComparableQuestion): ImportDuplicateKind | null {
+  const candidateCode = candidate.externalQuestionCode?.trim();
+  const existingCode = existing.externalQuestionCode?.trim();
+  if (candidateCode && existingCode && candidateCode === existingCode) {
+    return importQuestionContentKey(candidate) === importQuestionContentKey(existing) ? "EXACT" : "CONFLICT";
+  }
+  return !candidateCode && importQuestionContentKey(candidate) === importQuestionContentKey(existing) ? "SUSPECT" : null;
+}
+
+export function importRowLocation(row: Pick<ImportQuestionRow, "rowNumber" | "sheetName">): string {
+  return row.sheetName ? `${row.sheetName}!${row.rowNumber}` : `第 ${row.rowNumber} 行`;
+}
+
+export function findBatchDuplicateRows(rows: ValidatedQuestionRow[]): Map<string, string> {
+  const firstRowByIdentity = new Map<string, string>();
+  const duplicates = new Map<string, string>();
+  for (const item of rows) {
+    if (item.issues.some((issue) => issue.severity === "error")) continue;
+    const code = item.row.externalQuestionCode?.trim();
+    const identity = code ? `code:${item.row.levelCode.trim()}|${code}` : `content:${importQuestionContentKey({ stem: item.row.stem, options: item.options, correctOptionIds: item.correctOptionIds })}`;
+    const location = importRowLocation(item.row);
+    const firstRow = firstRowByIdentity.get(identity);
+    if (firstRow) duplicates.set(location, firstRow);
+    else firstRowByIdentity.set(identity, location);
+  }
+  return duplicates;
 }
 
 export function validateImportRow(row: ImportQuestionRow): ValidatedQuestionRow {

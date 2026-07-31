@@ -177,11 +177,11 @@ describe("production database foundation", () => {
     expect(await prisma.importBatchRow.count({ where: { batchId: batch.id } })).toBe(5000);
   });
 
-  it("commits all five thousand validated rows and counts duplicates", async () => {
+  it("commits validated rows while explicitly counting exact duplicates", async () => {
     const teacher = await prisma.user.create({ data: { username: "teacher", displayName: "Teacher", passwordHash: "test", role: "TEACHER" } });
     const level = await prisma.level.create({ data: { code: "A", name: "A Level" } });
     const point = await prisma.knowledgePoint.create({ data: { code: "9.1.1", name: "Bulk Point", path: "/9/9.1/9.1.1", depth: 2 } });
-    await prisma.question.create({ data: { levelId: level.id, knowledgePointId: point.id, externalQuestionCode: "BULK-1", stem: "Existing", type: "SINGLE_CHOICE", optionCount: 4, correctOptionCount: 1, selectionSpec: "4选1", options: [{ id: "A", text: "A" }, { id: "B", text: "B" }, { id: "C", text: "C" }, { id: "D", text: "D" }], correctOptionIds: ["A"] } });
+    await prisma.question.create({ data: { levelId: level.id, knowledgePointId: point.id, externalQuestionCode: "BULK-1", stem: "Question 1", type: "SINGLE_CHOICE", optionCount: 4, correctOptionCount: 1, selectionSpec: "4选1", options: [{ id: "A", text: "A" }, { id: "B", text: "B" }, { id: "C", text: "C" }, { id: "D", text: "D" }], correctOptionIds: ["A"] } });
     const batch = await prisma.importBatch.create({ data: { fileName: "large.xlsx", importedById: teacher.id, totalRows: 5000, validRows: 5000, expiresAt: new Date(Date.now() + 60_000) } });
     await prisma.importBatchRow.createMany({ data: Array.from({ length: 5000 }, (_, index) => ({
       batchId: batch.id,
@@ -207,11 +207,47 @@ describe("production database foundation", () => {
       { batchId: batch.id, rowNumber: 4, payload: { stem: "Error" }, issues: [{ severity: "error", field: "答案", message: "答案无效" }], valid: false },
     ] });
 
-    const report = await getImportBatchReport(batch.id, { page: 1, pageSize: 20, issuesOnly: true });
+    const report = await getImportBatchReport(teacher.id, batch.id, { page: 1, pageSize: 20, issuesOnly: true });
 
     expect(report.items.map((row) => row.rowNumber)).toEqual([3, 4]);
     expect(report.total).toBe(2);
     expect(report.batch).toMatchObject({ id: batch.id, warningRows: 1, errorRows: 1 });
+  });
+
+  it("denies import batch reports to other teachers", async () => {
+    const [owner, other] = await Promise.all([
+      prisma.user.create({ data: { username: "import-owner", displayName: "Owner", passwordHash: "test", role: "TEACHER" } }),
+      prisma.user.create({ data: { username: "import-other", displayName: "Other", passwordHash: "test", role: "TEACHER" } }),
+    ]);
+    const batch = await prisma.importBatch.create({ data: { fileName: "private.xlsx", importedById: owner.id } });
+
+    await expect(getImportBatchReport(other.id, batch.id, { page: 1, pageSize: 20 })).rejects.toMatchObject({ status: 404 });
+  });
+
+  it("fails submission when a duplicate appears after preflight", async () => {
+    const teacher = await prisma.user.create({ data: { username: "race-teacher", displayName: "Teacher", passwordHash: "test", role: "TEACHER" } });
+    const level = await prisma.level.create({ data: { code: "A", name: "A Level" } });
+    const point = await prisma.knowledgePoint.create({ data: { code: "8.1.1", name: "Race Point", path: "/8/8.1/8.1.1", depth: 2 } });
+    const batch = await prisma.importBatch.create({ data: { fileName: "race.xlsx", importedById: teacher.id, totalRows: 1, validRows: 1, expiresAt: new Date(Date.now() + 60_000) } });
+    const payload = { rowNumber: 2, levelCode: "A", categoryCode: "8.1.1", knowledgePointName: "Race Point", externalQuestionCode: "RACE-1", stem: "Race question", rawAnswer: "A", declaredSelectionSpec: "2选1", optionValues: { A: "A", B: "B" }, enabled: true };
+    await prisma.importBatchRow.create({ data: { batchId: batch.id, rowNumber: 2, payload, issues: [], valid: true } });
+    await prisma.question.create({ data: { levelId: level.id, knowledgePointId: point.id, externalQuestionCode: "RACE-1", stem: "Conflicting concurrent question", type: "SINGLE_CHOICE", optionCount: 2, correctOptionCount: 1, selectionSpec: "2选1", options: [{ id: "A", text: "A" }, { id: "B", text: "B" }], correctOptionIds: ["A"] } });
+
+    await expect(commitImportBatch(teacher.id, batch.id)).rejects.toMatchObject({ status: 409 });
+    expect(await prisma.question.count({ where: { importBatchId: batch.id } })).toBe(0);
+  });
+
+  it("rejects duplicate rows within one submission batch", async () => {
+    const teacher = await prisma.user.create({ data: { username: "batch-duplicate-teacher", displayName: "Teacher", passwordHash: "test", role: "TEACHER" } });
+    const batch = await prisma.importBatch.create({ data: { fileName: "duplicates.xlsx", importedById: teacher.id, totalRows: 2, validRows: 2, expiresAt: new Date(Date.now() + 60_000) } });
+    const payload = { levelCode: "A", categoryCode: "9.1.1", knowledgePointName: "Bulk Point", externalQuestionCode: "BATCH-1", stem: "Same question", rawAnswer: "A", declaredSelectionSpec: "2选1", optionValues: { A: "A", B: "B" }, enabled: true };
+    await prisma.importBatchRow.createMany({ data: [
+      { batchId: batch.id, rowNumber: 2, payload: { ...payload, rowNumber: 2 }, issues: [], valid: true },
+      { batchId: batch.id, rowNumber: 3, payload: { ...payload, rowNumber: 3 }, issues: [], valid: true },
+    ] });
+
+    await expect(commitImportBatch(teacher.id, batch.id)).rejects.toMatchObject({ status: 409 });
+    expect(await prisma.question.count({ where: { importBatchId: batch.id } })).toBe(0);
   });
 
   it("creates, resumes, grades, and completes a practice session from immutable snapshots", async () => {
@@ -395,10 +431,10 @@ describe("production database foundation", () => {
     const session = await prisma.practiceSession.create({ data: { userId: student.id, mode: "LEVEL_COMPREHENSIVE", levelId: level.id, singleCountSnapshot: 1, multipleCountSnapshot: 0 } });
     await prisma.practiceSessionQuestion.create({ data: { sessionId: session.id, questionId: used.id, position: 0, snapshot: { questionId: used.id, levelId: level.id, knowledgePointId: point.id, stem: used.stem, type: used.type, optionCount: 2, correctOptionCount: 1, selectionSpec: "2选1", options: [{ id: "A", text: "A" }, { id: "B", text: "B" }], correctOptionIds: ["A"], levelCode: level.code, knowledgeName: point.name } } });
 
-    expect(await revertImportBatch(batch.id)).toEqual({ archived: 1, deleted: 1 });
+    expect(await revertImportBatch(batch.id, teacher.id)).toEqual({ archived: 1, deleted: 1 });
     expect(await prisma.question.findUnique({ where: { id: unused.id } })).toBeNull();
     expect(await prisma.question.findUniqueOrThrow({ where: { id: used.id } })).toMatchObject({ status: "ARCHIVED" });
     expect(await prisma.importBatch.findUniqueOrThrow({ where: { id: batch.id } })).toMatchObject({ status: "REVERTED" });
-    await expect(revertImportBatch(batch.id)).rejects.toMatchObject({ status: 409 });
+    await expect(revertImportBatch(batch.id, teacher.id)).rejects.toMatchObject({ status: 409 });
   });
 });
