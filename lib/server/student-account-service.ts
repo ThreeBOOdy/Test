@@ -411,12 +411,12 @@ export async function getStudentDetail(studentId: string) {
     mustChangePassword: student.mustChangePassword,
     studentStatus: student.studentStatus,
     registrationSource: student.registrationSource,
-    nationalId: student.nationalIdEncrypted ? decryptSensitiveValue(student.nationalIdEncrypted) : null,
+    nationalIdMasked: student.nationalIdLast4 ? `**************${student.nationalIdLast4}` : null,
     gender: student.gender,
     school: student.school,
     gradeId: student.gradeId,
     grade: student.grade,
-    phone: student.phoneEncrypted ? decryptSensitiveValue(student.phoneEncrypted) : null,
+    phoneMasked: student.phoneLast4 ? `***-***-${student.phoneLast4}` : null,
     submittedAt: student.submittedAt,
     reviewedAt: student.reviewedAt,
     reviewedById: student.reviewedById,
@@ -430,6 +430,26 @@ export async function getStudentDetail(studentId: string) {
   };
 }
 
+export async function revealStudentSensitiveField(input: { administratorId: string; studentId: string; field: "nationalId" | "phone"; source: string }) {
+  const student = await prisma.user.findFirst({
+    where: { id: input.studentId, role: "STUDENT" },
+    select: { nationalIdEncrypted: true, phoneEncrypted: true },
+  });
+  const encrypted = student?.[input.field === "nationalId" ? "nationalIdEncrypted" : "phoneEncrypted"];
+  const metadata = { field: input.field, source: input.source };
+  if (!encrypted) {
+    await prisma.auditLog.create({ data: { actorUserId: input.administratorId, action: "STUDENT_SENSITIVE_DATA_VIEW", targetType: "User", targetId: input.studentId, metadata: { ...metadata, result: "NOT_FOUND" } } });
+    throw new ApiError("敏感资料不存在", 404);
+  }
+  try {
+    const value = decryptSensitiveValue(encrypted);
+    await prisma.auditLog.create({ data: { actorUserId: input.administratorId, action: "STUDENT_SENSITIVE_DATA_VIEW", targetType: "User", targetId: input.studentId, metadata: { ...metadata, result: "SUCCESS" } } });
+    return { field: input.field, value };
+  } catch (error) {
+    await prisma.auditLog.create({ data: { actorUserId: input.administratorId, action: "STUDENT_SENSITIVE_DATA_VIEW", targetType: "User", targetId: input.studentId, metadata: { ...metadata, result: "DECRYPT_FAILED" } } });
+    throw error;
+  }
+}
 export async function updateStudentAccount(administratorId: string, studentId: string, rawInput: unknown) {
   const input = adminStudentUpdateSchema.parse(rawInput);
   return prisma.$transaction(async (tx) => {

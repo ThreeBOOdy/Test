@@ -5,9 +5,11 @@ import { cookies } from "next/headers";
 import { prisma } from "@/lib/db";
 import { getNextIdleExpiry, getSessionExpiry, isSessionExpired } from "@/lib/domain/session-policy";
 import { evaluateAccountAccess, type AccessCapability, type AccessErrorCode, type AppRole, type StudentStatus } from "@/lib/domain/student-access";
+import { verifyPassword } from "@/lib/server/password";
 import { getBusinessDate } from "@/lib/server/time";
 
 export const SESSION_COOKIE = "zhilian_session";
+export const SENSITIVE_DATA_REAUTH_WINDOW_MS = 5 * 60 * 1000;
 
 export type SessionUser = {
   id: string;
@@ -101,11 +103,38 @@ export async function findSessionUser(token: string, now = new Date()): Promise<
   return toSessionUser(session.user);
 }
 
+async function getCurrentSessionRecord() {
+  const store = await cookies();
+  const token = store.get(SESSION_COOKIE)?.value;
+  if (!token) return null;
+  return prisma.authSession.findUnique({
+    where: { tokenHash: hashSessionToken(token) },
+    include: { user: { select: { id: true, role: true, passwordHash: true } } },
+  });
+}
+
 export async function getCurrentUser() {
   const store = await cookies();
   const token = store.get(SESSION_COOKIE)?.value;
   if (!token) return null;
   return findSessionUser(token);
+}
+
+export async function reauthenticateCurrentAdministrator(password: string, now = new Date()) {
+  const session = await getCurrentSessionRecord();
+  if (!session || isSessionExpired(session, now) || session.user.role !== "ADMIN") return false;
+  if (!verifyPassword(password, session.user.passwordHash)) return false;
+  const updated = await prisma.authSession.updateMany({
+    where: { id: session.id, revokedAt: null, idleExpiresAt: { gt: now }, absoluteExpiresAt: { gt: now } },
+    data: { reverifiedAt: now },
+  });
+  return updated.count === 1;
+}
+
+export async function hasRecentCurrentAdministratorReauthentication(now = new Date()) {
+  const session = await getCurrentSessionRecord();
+  if (!session || isSessionExpired(session, now) || session.user.role !== "ADMIN" || !session.reverifiedAt) return false;
+  return session.reverifiedAt.getTime() >= now.getTime() - SENSITIVE_DATA_REAUTH_WINDOW_MS;
 }
 
 export function setSessionCookie(response: { cookies: { set: (name: string, value: string, options: Record<string, unknown>) => void } }, token: string) {

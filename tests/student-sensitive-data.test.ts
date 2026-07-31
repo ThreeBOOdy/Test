@@ -90,7 +90,7 @@ describe("student sensitive data protection", () => {
     const first = encryptSensitiveValue(nationalId);
     const second = encryptSensitiveValue(nationalId);
 
-    expect(first).toMatch(/^v1\.[A-Za-z0-9_-]+$/);
+    expect(first).toMatch(/^v2\.default\.[A-Za-z0-9_-]+$/);
     expect(second).not.toBe(first);
     expect(decryptSensitiveValue(first)).toBe(nationalId);
     expect(decryptSensitiveValue(second)).toBe(nationalId);
@@ -98,13 +98,29 @@ describe("student sensitive data protection", () => {
 
   it("rejects a tampered authentication tag", () => {
     const encrypted = encryptSensitiveValue("11010519491231002X");
-    const [version, payload] = encrypted.split(".");
-    const bytes = Buffer.from(payload, "base64url");
+    const [version, keyId, payload] = encrypted.split(".");
+    const bytes = Buffer.from(payload!, "base64url");
     bytes[bytes.length - 1] ^= 1;
 
-    expect(() => decryptSensitiveValue(`${version}.${bytes.toString("base64url")}`)).toThrowError("Sensitive value authentication failed");
+    expect(() => decryptSensitiveValue(`${version}.${keyId}.${bytes.toString("base64url")}`)).toThrowError("Sensitive value authentication failed");
   });
 
+  it("uses the current key ID for writes while retaining old key decryption", () => {
+    const oldKey = Buffer.alloc(32, 47).toString("base64");
+    vi.stubEnv("STUDENT_DATA_ENCRYPTION_KEY", oldKey);
+    vi.stubEnv("STUDENT_DATA_ENCRYPTION_KEY_ID", "old-key");
+    const oldCiphertext = encryptSensitiveValue("13800138000");
+
+    vi.stubEnv("STUDENT_DATA_ENCRYPTION_KEY", encryptionKey);
+    vi.stubEnv("STUDENT_DATA_ENCRYPTION_KEY_ID", "new-key");
+    vi.stubEnv("STUDENT_DATA_DECRYPTION_KEYS", JSON.stringify({ "old-key": oldKey }));
+    const newCiphertext = encryptSensitiveValue("13800138000");
+
+    expect(oldCiphertext).toMatch(/^v2\.old-key\./);
+    expect(newCiphertext).toMatch(/^v2\.new-key\./);
+    expect(decryptSensitiveValue(oldCiphertext)).toBe("13800138000");
+    expect(decryptSensitiveValue(newCiphertext)).toBe("13800138000");
+  });
   it("produces deterministic HMAC-SHA-256 output", () => {
     const value = "13800138000";
 

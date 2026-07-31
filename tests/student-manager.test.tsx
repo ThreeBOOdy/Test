@@ -27,7 +27,7 @@ describe("student account manager", () => {
 
   it("edits permitted profile fields while keeping the person username immutable", async () => {
     const fetchMock = vi.spyOn(globalThis, "fetch")
-      .mockResolvedValueOnce(new Response(JSON.stringify({ ...student, displayName: "原姓名", nationalId: "11010519491231002X", gradeId: "grade-junior-1", phone: "13800138000" }), { status: 200, headers: { "Content-Type": "application/json" } }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ ...student, displayName: "原姓名", nationalIdMasked: "**************002X", gradeId: "grade-junior-1", phoneMasked: "138****8000" }), { status: 200, headers: { "Content-Type": "application/json" } }))
       .mockResolvedValueOnce(new Response(JSON.stringify({ grades: [{ id: "grade-junior-1", name: "七年级" }, { id: "grade-junior-2", name: "八年级" }] }), { status: 200, headers: { "Content-Type": "application/json" } }))
       .mockResolvedValueOnce(new Response(JSON.stringify({ saved: true }), { status: 200, headers: { "Content-Type": "application/json" } }))
       .mockResolvedValueOnce(new Response(JSON.stringify({ items: [{ ...student, realName: "新姓名", school: "新学校", grade: { name: "八年级" }, nationalIdMasked: "**************002X", phoneMasked: "138****8000", isLongTerm: true }], pagination: { page: 1, pageSize: 20, total: 1, totalPages: 1 } }), { status: 200, headers: { "Content-Type": "application/json" } }));
@@ -48,7 +48,9 @@ describe("student account manager", () => {
     await waitFor(() => expect(fetchMock).toHaveBeenCalledWith("/api/v1/admin/students/student-1", expect.objectContaining({ method: "PUT" })));
     const request = fetchMock.mock.calls.find((call) => call[0] === "/api/v1/admin/students/student-1" && (call[1] as RequestInit | undefined)?.method === "PUT")?.[1] as RequestInit;
     const body = JSON.parse(String(request.body));
-    expect(body).toMatchObject({ displayName: "新姓名", nationalId: "11010519491231002X", school: "新学校", gradeId: "grade-junior-2", phone: "13800138000", enabled: true, isLongTerm: true });
+    expect(body).toMatchObject({ displayName: "新姓名", school: "新学校", gradeId: "grade-junior-2", enabled: true, isLongTerm: true });
+    expect(body).not.toHaveProperty("nationalId");
+    expect(body).not.toHaveProperty("phone");
     expect(body).not.toHaveProperty("username");
     expect(body).not.toHaveProperty("radioPersonId");
     expect(body).not.toHaveProperty("validFrom");

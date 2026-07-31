@@ -173,6 +173,7 @@ model AuthSession {
   lastSeenAt        DateTime
   idleExpiresAt     DateTime
   absoluteExpiresAt DateTime
+  reverifiedAt      DateTime?
   revokedAt         DateTime?
 
   @@index([userId, revokedAt])
@@ -546,6 +547,17 @@ model LoginAttempt {
   createdAt    DateTime @default(now())
 
   @@index([usernameHash, success, createdAt])
+  @@index([ipHash, success, createdAt])
+}
+
+model SensitiveDataReauthenticationAttempt {
+  id        String   @id @default(cuid())
+  userId    String
+  ipHash    String
+  success   Boolean
+  createdAt DateTime @default(now())
+
+  @@index([userId, success, createdAt])
   @@index([ipHash, success, createdAt])
 }
 
