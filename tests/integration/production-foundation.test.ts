@@ -347,6 +347,23 @@ describe("production database foundation", () => {
     expect(new Set(session.questions.map((question) => question.id))).toEqual(new Set(questions.slice(2).map((question) => question.id)));
   });
 
+  it("keeps each practice session's frozen option order after reload", async () => {
+    const user = await prisma.user.create({ data: { username: "option-order-user", displayName: "Option Order User", passwordHash: "test", role: "STUDENT" } });
+    const level = await prisma.level.create({ data: { code: "A", name: "A Level" } });
+    const point = await prisma.knowledgePoint.create({ data: { code: "9.2.2", name: "Option Order Point", path: "/9/9.2/9.2.2", depth: 2 } });
+    const options = ["A", "B", "C", "D"].map((id) => ({ id, text: `Option ${id}` }));
+    const randomized = await prisma.question.create({ data: { levelId: level.id, knowledgePointId: point.id, externalQuestionCode: "ORDER-RANDOM", stem: "Randomized", type: "SINGLE_CHOICE", optionCount: 4, correctOptionCount: 1, selectionSpec: "4选1", options, correctOptionIds: ["A"] } });
+    const preserved = await prisma.question.create({ data: { levelId: level.id, knowledgePointId: point.id, externalQuestionCode: "ORDER-PRESERVED", stem: "Preserved", type: "SINGLE_CHOICE", optionCount: 4, correctOptionCount: 1, selectionSpec: "4选1", preserveOptionOrder: true, options, correctOptionIds: ["A"] } });
+    await prisma.levelPracticeRule.create({ data: { levelId: level.id, singleCount: 2, multipleCount: 0 } });
+
+    const created = await createPracticeSession(user.id, { mode: "order", levelCode: "A" });
+    const reloaded = await getPracticeSession(user.id, created.id);
+
+    expect(reloaded?.questions.map((question) => ({ id: question.id, options: question.options }))).toEqual(created.questions.map((question) => ({ id: question.id, options: question.options })));
+    expect(created.questions.find((question) => question.id === preserved.id)?.options).toEqual(options);
+    expect(created.questions.find((question) => question.id === randomized.id)?.options.map((option) => option.id).sort()).toEqual(["A", "B", "C", "D"]);
+  });
+
   it("snapshots and grades a timed mock exam on final submission", async () => {
     const user = await prisma.user.create({ data: { username: "exam-user", displayName: "Exam User", passwordHash: "test", role: "STUDENT" } });
     const level = await prisma.level.create({ data: { code: "A", name: "A Level" } });
@@ -356,9 +373,11 @@ describe("production database foundation", () => {
     await prisma.examRule.create({ data: { levelId: level.id, singleCount: 1, multipleCount: 1, durationMinutes: 40, passingCount: 1 } });
 
     const session = await createPracticeSession(user.id, { mode: "exam", levelCode: "A" });
+    const reloaded = await getPracticeSession(user.id, session.id);
     const submission = await submitMockExam(user.id, session.id, [{ questionId: single.id, selectedOptionIds: ["A"] }, { questionId: multiple.id, selectedOptionIds: ["A"] }]);
 
     expect(session.exam).toMatchObject({ durationMinutes: 40, passingCount: 1 });
+    expect(reloaded?.questions.map((question) => ({ id: question.id, options: question.options }))).toEqual(session.questions.map((question) => ({ id: question.id, options: question.options })));
     expect(submission).toMatchObject({ correctCount: 1, total: 2, passingCount: 1, passed: true });
     expect(await prisma.practiceSession.findUniqueOrThrow({ where: { id: session.id } })).toMatchObject({ status: "COMPLETED", durationMinutesSnapshot: 40, passingCountSnapshot: 1, correctCount: 1 });
   });

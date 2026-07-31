@@ -114,9 +114,11 @@ model User {
   validUntil            DateTime?                  @db.Date
   isLongTerm            Boolean                    @default(false)
   profileIncomplete     Boolean                    @default(false)
+  activationRequired    Boolean                    @default(false)
   realName              String?
   radioPersonId         String?                    @unique
   radioPerson           RadioPerson?               @relation(fields: [radioPersonId], references: [id], onDelete: Restrict)
+  studentActivation     StudentActivation?
   authSessions          AuthSession[]
   sessions              PracticeSession[]
   wrongQuestions        WrongQuestion[]
@@ -132,6 +134,20 @@ model User {
   @@index([role, studentStatus, enabled])
   @@index([gradeId, studentStatus])
   @@index([reviewedById, reviewedAt])
+}
+
+model StudentActivation {
+  id                 String   @id @default(cuid())
+  userId             String   @unique
+  user               User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  version            Int      @default(1)
+  activationCodeHash String   @db.Text
+  expiresAt          DateTime
+  usedAt             DateTime?
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  @@index([expiresAt, usedAt])
 }
 
 model RadioPerson {
@@ -330,6 +346,7 @@ model Question {
   optionCount          Int
   correctOptionCount   Int
   selectionSpec        String
+  preserveOptionOrder  Boolean                   @default(false)
   options              Json
   correctOptionIds     Json
   status               QuestionStatus            @default(ACTIVE)

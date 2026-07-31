@@ -34,4 +34,12 @@ describe("question import validation", () => {
   it("keeps worksheet source in the validated row", () => {
     expect(validateImportRow(row({ sheetName: "模拟考试" })).row.sheetName).toBe("模拟考试");
   });
+
+  it("warns about position-dependent wording unless option order is locked", () => {
+    const risky = validateImportRow(row({ stem: "下列选项中，第一项正确的是？" }));
+    const locked = validateImportRow(row({ stem: "下列选项中，第一项正确的是？", preserveOptionOrder: true }));
+
+    expect(risky.issues).toContainEqual(expect.objectContaining({ severity: "warning", field: "题干" }));
+    expect(locked.issues).not.toContainEqual(expect.objectContaining({ field: "题干" }));
+  });
 });

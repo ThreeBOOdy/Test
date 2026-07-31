@@ -24,6 +24,7 @@ type QuestionRecord = {
   optionCount: number;
   correctOptionCount: number;
   selectionSpec: string;
+  preserveOptionOrder: boolean;
   options: unknown;
   correctOptionIds: unknown;
   status: "ACTIVE" | "DISABLED" | "ARCHIVED";
@@ -224,5 +225,5 @@ function sessionTitle(mode: PracticeMode, snapshots: QuestionSnapshot[]) {
 }
 
 function toDomainQuestion(record: Omit<QuestionRecord, "level" | "knowledgePoint"> | QuestionRecord): Question {
-  return { id: record.id, levelId: record.levelId, knowledgePointId: record.knowledgePointId, sourceBankCode: record.sourceBankCode ?? undefined, externalQuestionCode: record.externalQuestionCode ?? undefined, stem: record.stem, type: record.type, optionCount: record.optionCount, correctOptionCount: record.correctOptionCount, selectionSpec: record.selectionSpec, options: record.options as QuestionOption[], correctOptionIds: parseJsonStringArray(record.correctOptionIds, "correctOptionIds"), status: record.status };
+  return { id: record.id, levelId: record.levelId, knowledgePointId: record.knowledgePointId, sourceBankCode: record.sourceBankCode ?? undefined, externalQuestionCode: record.externalQuestionCode ?? undefined, stem: record.stem, type: record.type, optionCount: record.optionCount, correctOptionCount: record.correctOptionCount, selectionSpec: record.selectionSpec, preserveOptionOrder: record.preserveOptionOrder, options: record.options as QuestionOption[], correctOptionIds: parseJsonStringArray(record.correctOptionIds, "correctOptionIds"), status: record.status };
 }

@@ -16,6 +16,7 @@ export const questionInputSchema = z.object({
   sourceBankCode: z.string().trim().max(100).optional(),
   externalQuestionCode: z.string().trim().max(100).optional(),
   stem: z.string().trim().min(1).max(5000),
+  preserveOptionOrder: z.boolean().default(false),
   options: z.array(z.object({ id: z.string(), text: z.string() })).min(2).max(8),
   correctOptionIds: z.array(z.string()).min(1),
   status: z.enum(["ACTIVE", "DISABLED", "ARCHIVED"]).default("ACTIVE"),
@@ -43,7 +44,7 @@ export async function POST(request: Request) {
         data: {
           courseId: RADIO_COURSE_ID, levelId: input.levelId, knowledgePointId: input.knowledgePointId,
           sourceBankCode: input.sourceBankCode || null, externalQuestionCode: input.externalQuestionCode || null, stem: input.stem,
-          type: normalized.type, optionCount: normalized.optionCount, correctOptionCount: normalized.correctOptionCount, selectionSpec: normalized.selectionSpec,
+          type: normalized.type, optionCount: normalized.optionCount, correctOptionCount: normalized.correctOptionCount, selectionSpec: normalized.selectionSpec, preserveOptionOrder: input.preserveOptionOrder,
           options: normalized.options as Prisma.InputJsonValue, correctOptionIds: normalized.correctOptionIds as Prisma.InputJsonValue, status: input.status,
         },
       });

@@ -10,6 +10,7 @@ const OPTION_IDS = ["A", "B", "C", "D", "E", "F", "G", "H"];
 const ANSWER_SEPARATORS = /[,，、|/\s]+/;
 const SPEC_PATTERN = /^(\d+)\s*选\s*(\d+)$/;
 const MC_PATTERN = /MC(\d+)/i;
+const ORDER_DEPENDENCY_PATTERN = /(?:选项\s*[A-H]|答案\s*[A-H]|[A-H]\s*(?:选项|答案)|第\s*[一二三四五六七八九十\d]+\s*(?:项|个选项)|(?:第|最后|首|第一|第二|第三|第四)\s*(?:项|个选项)|以上(?:说法|选项))/i;
 
 export function normalizeAnswer(rawAnswer: string): string[] {
   const normalized = rawAnswer.trim().toUpperCase();
@@ -76,6 +77,10 @@ export function validateImportRow(row: ImportQuestionRow): ValidatedQuestionRow 
       field: "题目编号",
       message: `${row.externalQuestionCode} 暗示 ${mcMatch[1]} 个答案，但实际答案有 ${correctOptionCount} 个`,
     });
+  }
+
+  if (!row.preserveOptionOrder && ORDER_DEPENDENCY_PATTERN.test(row.stem)) {
+    issues.push({ severity: "warning", field: "题干", message: "题干可能依赖选项字母、序号或位置；默认会随机选项，请确认后勾选“保持选项顺序”" });
   }
 
   return { row, options, correctOptionIds, optionCount, correctOptionCount, selectionSpec, type, issues };

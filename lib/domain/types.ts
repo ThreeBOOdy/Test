@@ -18,6 +18,7 @@ export type Question = {
   optionCount: number;
   correctOptionCount: number;
   selectionSpec: string;
+  preserveOptionOrder?: boolean;
   options: QuestionOption[];
   correctOptionIds: string[];
   status: QuestionStatus;
@@ -64,6 +65,7 @@ export type ImportQuestionRow = {
   stem: string;
   rawAnswer: string;
   declaredSelectionSpec?: string;
+  preserveOptionOrder?: boolean;
   optionValues: Record<string, string | undefined>;
   enabled?: boolean;
 };
@@ -84,7 +86,7 @@ export type ValidatedQuestionRow = {
   type: QuestionType;
   issues: ValidationIssue[];
 };
-export type PublicQuestion = Omit<Question, "correctOptionIds" | "status"> & {
+export type PublicQuestion = Omit<Question, "correctOptionIds" | "status" | "correctOptionCount" | "selectionSpec"> & {
   knowledgeName: string;
   levelCode: string;
 };

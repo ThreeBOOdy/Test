@@ -20,7 +20,7 @@ export async function revertImportBatch(batchId: string, actorUserId?: string) {
     const archivedIds = await tx.question.findMany({ where: { courseId: RADIO_COURSE_ID, importBatchId: batchId, sessionQuestions: { some: {} } }, select: { id: true } });
     const archived = await tx.question.updateMany({ where: { id: { in: archivedIds.map((question) => question.id) }, courseId: RADIO_COURSE_ID }, data: { status: "ARCHIVED", version: { increment: 1 } } });
     if (archivedIds.length) {
-      const archivedQuestions = await tx.question.findMany({ where: { id: { in: archivedIds.map((question) => question.id) }, courseId: RADIO_COURSE_ID }, select: { id: true, version: true, levelId: true, knowledgePointId: true, sourceBankCode: true, externalQuestionCode: true, stem: true, options: true, correctOptionIds: true, status: true } });
+      const archivedQuestions = await tx.question.findMany({ where: { id: { in: archivedIds.map((question) => question.id) }, courseId: RADIO_COURSE_ID }, select: { id: true, version: true, levelId: true, knowledgePointId: true, sourceBankCode: true, externalQuestionCode: true, stem: true, preserveOptionOrder: true, options: true, correctOptionIds: true, status: true } });
       await tx.questionRevision.createMany({ data: archivedQuestions.map((question) => ({ courseId: RADIO_COURSE_ID, questionId: question.id, revision: question.version, snapshot: toQuestionSnapshot(question), changeSource: "IMPORT_REVERT_ARCHIVE", actorUserId })) });
     }
     const deleted = await tx.question.deleteMany({ where: { courseId: RADIO_COURSE_ID, importBatchId: batchId, sessionQuestions: { none: {} }, answers: { none: {} }, wrongQuestions: { none: {} } } });
@@ -105,6 +105,7 @@ export async function commitImportBatch(importedById: string, batchId: string) {
         optionCount: item.optionCount,
         correctOptionCount: item.correctOptionCount,
         selectionSpec: item.selectionSpec,
+        preserveOptionOrder: item.row.preserveOptionOrder ?? false,
         options: item.options as Prisma.InputJsonValue,
         correctOptionIds: item.correctOptionIds as Prisma.InputJsonValue,
         status: item.row.enabled === false ? "DISABLED" : "ACTIVE",
@@ -114,7 +115,7 @@ export async function commitImportBatch(importedById: string, batchId: string) {
 
     const inserted = questions.length ? (await tx.question.createMany({ data: questions, skipDuplicates: true })).count : 0;
     const skipped = questions.length - inserted;
-    const insertedQuestions = inserted ? await tx.question.findMany({ where: { courseId: RADIO_COURSE_ID, importBatchId: batch.id }, select: { id: true, version: true, levelId: true, knowledgePointId: true, sourceBankCode: true, externalQuestionCode: true, stem: true, options: true, correctOptionIds: true, status: true } }) : [];
+    const insertedQuestions = inserted ? await tx.question.findMany({ where: { courseId: RADIO_COURSE_ID, importBatchId: batch.id }, select: { id: true, version: true, levelId: true, knowledgePointId: true, sourceBankCode: true, externalQuestionCode: true, stem: true, preserveOptionOrder: true, options: true, correctOptionIds: true, status: true } }) : [];
     if (insertedQuestions.length) await tx.questionRevision.createMany({ data: insertedQuestions.map((question) => ({ courseId: RADIO_COURSE_ID, questionId: question.id, revision: question.version, snapshot: toQuestionSnapshot(question), changeSource: "IMPORT_COMMIT", actorUserId: importedById })) });
     await tx.importBatch.update({ where: { id: batch.id }, data: { insertedRows: inserted, duplicateRows: skipped } });
     await writeAuditLogInTransaction(tx, { actorUserId: importedById, action: "IMPORT_COMMIT", targetType: "ImportBatch", targetId: batch.id, metadata: { inserted, skipped } });

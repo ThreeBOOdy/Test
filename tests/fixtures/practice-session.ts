@@ -14,8 +14,6 @@ export function practiceSessionFixture(overrides: Partial<PublicPracticeSession>
         stem: "无线电波在真空中的传播速度约为多少？",
         type: "SINGLE_CHOICE",
         optionCount: 4,
-        correctOptionCount: 1,
-        selectionSpec: "4选1",
         options: [
           { id: "A", text: "每秒三十万千米" },
           { id: "B", text: "每秒三万千米" },
@@ -32,8 +30,6 @@ export function practiceSessionFixture(overrides: Partial<PublicPracticeSession>
         stem: "下列哪些做法有助于减少业余电台干扰？",
         type: "MULTIPLE_CHOICE",
         optionCount: 4,
-        correctOptionCount: 2,
-        selectionSpec: "4选2",
         options: [
           { id: "A", text: "使用合适的发射功率" },
           { id: "B", text: "检查设备接地与滤波" },

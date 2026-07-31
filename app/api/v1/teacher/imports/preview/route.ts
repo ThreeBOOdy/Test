@@ -11,7 +11,7 @@ import { assertSameOrigin } from "@/lib/server/http";
 import { ApiError, apiErrorResponse, requireTeacher } from "@/lib/server/api";
 
 const aliases: Record<string, string[]> = {
-  levelCode: ["等级", "级别", "level"], sourceBankCode: ["题库编号", "题库", "bank"], categoryCode: ["分类号", "知识点编号", "category"], knowledgePointName: ["知识点名称", "知识点", "categoryName"], externalQuestionCode: ["题目编号", "编号", "questionCode"], stem: ["问题", "题干", "题目"], rawAnswer: ["答案", "正确答案"], declaredSelectionSpec: ["选项规格", "规格"], enabled: ["是否启用", "启用"],
+  levelCode: ["等级", "级别", "level"], sourceBankCode: ["题库编号", "题库", "bank"], categoryCode: ["分类号", "知识点编号", "category"], knowledgePointName: ["知识点名称", "知识点", "categoryName"], externalQuestionCode: ["题目编号", "编号", "questionCode"], stem: ["问题", "题干", "题目"], rawAnswer: ["答案", "正确答案"], declaredSelectionSpec: ["选项规格", "规格"], preserveOptionOrder: ["保持选项顺序", "固定选项顺序", "preserveOptionOrder"], enabled: ["是否启用", "启用"],
 };
 
 export async function POST(request: Request) {
@@ -49,7 +49,8 @@ export async function POST(request: Request) {
           const column = headers.get(optionId);
           if (column) optionValues[optionId] = cellText(row.getCell(column).value).trim();
         }
-        const importRow: ImportQuestionRow = { rowNumber, sheetName: sheet.name, levelCode: value("levelCode"), sourceBankCode: value("sourceBankCode"), categoryCode: value("categoryCode"), knowledgePointName: value("knowledgePointName"), externalQuestionCode: value("externalQuestionCode"), stem, rawAnswer: value("rawAnswer"), declaredSelectionSpec: value("declaredSelectionSpec"), optionValues, enabled: !["否", "0", "false"].includes(value("enabled").toLowerCase()) };
+        const preserveOptionOrder = ["是", "1", "true", "yes", "y"].includes(value("preserveOptionOrder").toLowerCase());
+        const importRow: ImportQuestionRow = { rowNumber, sheetName: sheet.name, levelCode: value("levelCode"), sourceBankCode: value("sourceBankCode"), categoryCode: value("categoryCode"), knowledgePointName: value("knowledgePointName"), externalQuestionCode: value("externalQuestionCode"), stem, rawAnswer: value("rawAnswer"), declaredSelectionSpec: value("declaredSelectionSpec"), preserveOptionOrder, optionValues, enabled: !["否", "0", "false"].includes(value("enabled").toLowerCase()) };
         results.push(validateImportRow(importRow));
       }
     }

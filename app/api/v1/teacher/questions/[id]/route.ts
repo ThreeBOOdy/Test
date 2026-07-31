@@ -36,7 +36,7 @@ export async function PUT(request: Request, context: { params: Promise<{ id: str
       }
       const changed = await tx.question.updateMany({
         where: { id, courseId: RADIO_COURSE_ID, version: input.version },
-        data: { levelId: input.levelId, knowledgePointId: input.knowledgePointId, sourceBankCode: input.sourceBankCode || null, externalQuestionCode: input.externalQuestionCode || null, stem: input.stem, type: normalized.type, optionCount: normalized.optionCount, correctOptionCount: normalized.correctOptionCount, selectionSpec: normalized.selectionSpec, options: normalized.options as Prisma.InputJsonValue, correctOptionIds: normalized.correctOptionIds as Prisma.InputJsonValue, status: input.status, version: { increment: 1 } },
+        data: { levelId: input.levelId, knowledgePointId: input.knowledgePointId, sourceBankCode: input.sourceBankCode || null, externalQuestionCode: input.externalQuestionCode || null, stem: input.stem, type: normalized.type, optionCount: normalized.optionCount, correctOptionCount: normalized.correctOptionCount, selectionSpec: normalized.selectionSpec, preserveOptionOrder: input.preserveOptionOrder, options: normalized.options as Prisma.InputJsonValue, correctOptionIds: normalized.correctOptionIds as Prisma.InputJsonValue, status: input.status, version: { increment: 1 } },
       });
       if (changed.count !== 1) throw new ApiError(STALE_VERSION_MESSAGE, 409);
       const updated = await tx.question.findFirstOrThrow({ where: { id, courseId: RADIO_COURSE_ID } });
