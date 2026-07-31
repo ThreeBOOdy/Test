@@ -7,13 +7,25 @@ import { RADIO_COURSE_ID } from "../lib/domain/course";
 const mocks = vi.hoisted(() => ({
   requireTeacher: vi.fn(),
   writeAuditLog: vi.fn(),
+  writeAuditLogInTransaction: vi.fn(),
   levelFindFirst: vi.fn(),
   knowledgePointFindFirst: vi.fn(),
   questionFindFirst: vi.fn(),
   questionCreate: vi.fn(),
+  questionRevisionCreate: vi.fn(),
   questionCount: vi.fn(),
+  questionFindMany: vi.fn(),
   levelRuleUpsert: vi.fn(),
+  levelRuleFindUnique: vi.fn(),
+  levelRuleCreate: vi.fn(),
+  levelRuleUpdateMany: vi.fn(),
   knowledgeRuleDeleteMany: vi.fn(),
+  knowledgeRuleFindUnique: vi.fn(),
+  knowledgeRuleCreate: vi.fn(),
+  knowledgeRuleUpdateMany: vi.fn(),
+  examRuleFindUnique: vi.fn(),
+  examRuleCreate: vi.fn(),
+  examRuleUpdateMany: vi.fn(),
   knowledgeRuleUpsert: vi.fn(),
   examRuleUpsert: vi.fn(),
   importBatchCreate: vi.fn(),
@@ -24,20 +36,22 @@ vi.mock("@/lib/server/api", async () => {
   const actual = await vi.importActual<typeof import("@/lib/server/api")>("@/lib/server/api");
   return { ...actual, requireTeacher: mocks.requireTeacher };
 });
-vi.mock("@/lib/server/audit", () => ({ writeAuditLog: mocks.writeAuditLog }));
+vi.mock("@/lib/server/audit", () => ({ writeAuditLog: mocks.writeAuditLog, writeAuditLogInTransaction: mocks.writeAuditLogInTransaction }));
 vi.mock("@/lib/db", () => {
   const transaction = {
-    levelPracticeRule: { upsert: mocks.levelRuleUpsert },
-    knowledgePracticeRule: { deleteMany: mocks.knowledgeRuleDeleteMany, upsert: mocks.knowledgeRuleUpsert },
-    examRule: { upsert: mocks.examRuleUpsert },
+    levelPracticeRule: { upsert: mocks.levelRuleUpsert, findUnique: mocks.levelRuleFindUnique, create: mocks.levelRuleCreate, updateMany: mocks.levelRuleUpdateMany },
+    knowledgePracticeRule: { deleteMany: mocks.knowledgeRuleDeleteMany, upsert: mocks.knowledgeRuleUpsert, findUnique: mocks.knowledgeRuleFindUnique, create: mocks.knowledgeRuleCreate, updateMany: mocks.knowledgeRuleUpdateMany },
+    examRule: { upsert: mocks.examRuleUpsert, findUnique: mocks.examRuleFindUnique, create: mocks.examRuleCreate, updateMany: mocks.examRuleUpdateMany },
     importBatch: { create: mocks.importBatchCreate },
     importBatchRow: { createMany: mocks.importBatchRowCreateMany },
+    questionRevision: { create: mocks.questionRevisionCreate },
+    question: { findFirst: mocks.questionFindFirst, create: mocks.questionCreate },
   };
   return {
     prisma: {
       level: { findFirst: mocks.levelFindFirst },
       knowledgePoint: { findFirst: mocks.knowledgePointFindFirst },
-      question: { findFirst: mocks.questionFindFirst, create: mocks.questionCreate, count: mocks.questionCount },
+      question: { findFirst: mocks.questionFindFirst, findMany: mocks.questionFindMany, create: mocks.questionCreate, count: mocks.questionCount },
       $transaction: vi.fn((callback: (tx: typeof transaction) => unknown) => callback(transaction)),
     },
   };
@@ -54,8 +68,21 @@ describe("radio course boundary", () => {
     mocks.levelFindFirst.mockResolvedValue({ id: "level-radio", enabled: true });
     mocks.knowledgePointFindFirst.mockResolvedValue({ id: "point-radio", enabled: true, _count: { children: 0 } });
     mocks.questionFindFirst.mockResolvedValue(null);
-    mocks.questionCreate.mockResolvedValue({ id: "question-radio" });
+    mocks.questionFindMany.mockResolvedValue([]);
+    mocks.questionCreate.mockResolvedValue({ id: "question-radio", version: 1, levelId: "level-radio", knowledgePointId: "point-radio", sourceBankCode: null, externalQuestionCode: "Q-1", stem: "题目", preserveOptionOrder: false, options: [{ id: "A", text: "A" }, { id: "B", text: "B" }], correctOptionIds: ["A"], status: "ACTIVE" });
+    mocks.questionRevisionCreate.mockResolvedValue({ id: "revision-radio" });
+    mocks.writeAuditLogInTransaction.mockResolvedValue(undefined);
     mocks.questionCount.mockResolvedValue(10);
+    mocks.levelRuleFindUnique.mockResolvedValue(null);
+    mocks.levelRuleCreate.mockResolvedValue({ id: "level-rule-radio" });
+    mocks.levelRuleUpdateMany.mockResolvedValue({ count: 1 });
+    mocks.knowledgeRuleFindUnique.mockResolvedValue(null);
+    mocks.knowledgeRuleCreate.mockResolvedValue({ id: "knowledge-rule-radio" });
+    mocks.knowledgeRuleUpdateMany.mockResolvedValue({ count: 1 });
+    mocks.knowledgeRuleDeleteMany.mockResolvedValue({ count: 1 });
+    mocks.examRuleFindUnique.mockResolvedValue(null);
+    mocks.examRuleCreate.mockResolvedValue({ id: "exam-rule-radio" });
+    mocks.examRuleUpdateMany.mockResolvedValue({ count: 1 });
     mocks.importBatchCreate.mockResolvedValue({ id: "batch-radio", status: "PREVIEW" });
     mocks.importBatchRowCreateMany.mockResolvedValue({ count: 1 });
   });
@@ -72,7 +99,7 @@ describe("radio course boundary", () => {
       status: "ACTIVE",
     }));
 
-    expect(response.status).toBe(201);
+    expect(response.status, await response.text()).toBe(201);
     expect(mocks.questionCreate).toHaveBeenCalledWith({ data: expect.objectContaining({ courseId: RADIO_COURSE_ID }) });
   });
 
@@ -86,10 +113,9 @@ describe("radio course boundary", () => {
 
     const body = await response.json();
     expect(response.status, JSON.stringify(body)).toBe(200);
-    expect(mocks.levelRuleUpsert).toHaveBeenCalledWith(expect.objectContaining({
-      where: { courseId_levelId: { courseId: RADIO_COURSE_ID, levelId: "level-radio" } },
-      create: expect.objectContaining({ courseId: RADIO_COURSE_ID }),
-    }));
+    expect(mocks.levelRuleCreate).toHaveBeenCalledWith({
+      data: expect.objectContaining({ courseId: RADIO_COURSE_ID, levelId: "level-radio" }),
+    });
   });
 
   it("ignores a forged course when creating an import batch", async () => {
