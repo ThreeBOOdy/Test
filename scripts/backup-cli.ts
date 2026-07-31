@@ -18,6 +18,7 @@ import {
   validateRestoreEvidence,
   writeBackupManifest,
 } from "./backup-core";
+import { appendRestoreDrillRecord, createRestoreDrillRecord, validateIsolatedRestoreTarget } from "./restore-drill-core";
 
 type Options = Record<string, string | boolean>;
 
@@ -73,6 +74,10 @@ function backupRoot(options: Options) {
 
 function logFile(options: Options) {
   return resolveFromProject(option(options, "log-file", process.env.BACKUP_LOG_FILE ?? "logs/backup-operations.jsonl"));
+}
+
+function drillLogFile(options: Options) {
+  return resolveFromProject(option(options, "drill-log-file", process.env.BACKUP_RESTORE_DRILL_LOG_FILE ?? "logs/restore-drills.jsonl"));
 }
 
 function composeFile(options: Options) {
@@ -160,7 +165,8 @@ async function runCommand(command: string, args: string[], input?: PassThrough) 
 }
 
 function dockerComposeArgs(options: Options, ...args: string[]) {
-  return ["compose", "-f", composeFile(options), ...args];
+  const project = typeof options["compose-project"] === "string" ? options["compose-project"] : process.env.BACKUP_RESTORE_COMPOSE_PROJECT;
+  return ["compose", "-f", composeFile(options), ...(project ? ["--project-name", project] : []), ...args];
 }
 
 async function queryDatabase(options: Options, sql: string) {
@@ -280,31 +286,61 @@ function parseCount(value: string, label: string) {
   return count;
 }
 
-function decryptStudentSensitiveSample(value: string, key: Buffer) {
-  const [version, encodedPayload, extra] = value.split(".");
-  if (version !== "v1" || !encodedPayload || extra !== undefined) {
-    throw new Error("Unsupported restored sensitive value format");
+function sensitiveDataKeyring() {
+  const currentKeyId = process.env.STUDENT_DATA_ENCRYPTION_KEY_ID?.trim() || "default";
+  const currentKey = process.env.STUDENT_DATA_ENCRYPTION_KEY;
+  if (!currentKey) throw new Error("STUDENT_DATA_ENCRYPTION_KEY is required to validate restored sensitive fields");
+  const decodeKey = (value: string, label: string) => {
+    const key = Buffer.from(value, "base64");
+    if (key.length !== 32 || key.toString("base64") !== value) throw new Error(`${label} must be a Base64-encoded 32-byte key`);
+    return key;
+  };
+  const keys = new Map([[currentKeyId, decodeKey(currentKey, "STUDENT_DATA_ENCRYPTION_KEY")]]);
+  const additional = process.env.STUDENT_DATA_DECRYPTION_KEYS?.trim();
+  if (!additional) return keys;
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(additional);
+  } catch {
+    throw new Error("STUDENT_DATA_DECRYPTION_KEYS must be a JSON object of Base64-encoded 32-byte keys");
   }
-  const payload = Buffer.from(encodedPayload, "base64url");
-  if (payload.length < 28) {
-    throw new Error("Restored sensitive value authentication failed");
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+    throw new Error("STUDENT_DATA_DECRYPTION_KEYS must be a JSON object of Base64-encoded 32-byte keys");
   }
+  for (const [keyId, encoded] of Object.entries(parsed)) {
+    if (!/^[A-Za-z0-9_.-]{1,80}$/.test(keyId) || typeof encoded !== "string") {
+      throw new Error("STUDENT_DATA_DECRYPTION_KEYS must be a JSON object of Base64-encoded 32-byte keys");
+    }
+    keys.set(keyId, decodeKey(encoded, "STUDENT_DATA_DECRYPTION_KEYS"));
+  }
+  return keys;
+}
+
+function decryptStudentSensitiveSample(value: string, keys: Map<string, Buffer>) {
+  const parts = value.split(".");
+  const [version, keyId, encodedPayload] = parts;
+  const isLegacy = version === "v1" && parts.length === 2;
+  const isVersionTwo = version === "v2" && Boolean(keyId) && Boolean(encodedPayload) && parts.length === 3;
+  if (!isLegacy && !isVersionTwo) throw new Error("Unsupported restored sensitive value format");
+  const payloadValue = isLegacy ? keyId : encodedPayload;
+  if (!payloadValue) throw new Error("Unsupported restored sensitive value format");
+  const payload = Buffer.from(payloadValue, "base64url");
+  if (payload.length < 28) throw new Error("Restored sensitive value authentication failed");
   const iv = payload.subarray(0, 12);
   const ciphertext = payload.subarray(12, -16);
   const authTag = payload.subarray(-16);
-  try {
-    const decipher = crypto.createDecipheriv("aes-256-gcm", key, iv, { authTagLength: 16 });
-    decipher.setAAD(Buffer.from("v1"));
-    decipher.setAuthTag(authTag);
-    const plaintext = Buffer.concat([decipher.update(ciphertext), decipher.final()]);
-    if (plaintext.length === 0) {
-      throw new Error("empty plaintext");
-    }
-  } catch {
-    throw new Error("Restored sensitive value authentication failed");
+  const candidateKeys = isLegacy ? [...keys.values()] : [keys.get(keyId!)].filter((key): key is Buffer => Boolean(key));
+  for (const key of candidateKeys) {
+    try {
+      const decipher = crypto.createDecipheriv("aes-256-gcm", key, iv, { authTagLength: 16 });
+      decipher.setAAD(Buffer.from(isLegacy ? "v1" : `v2.${keyId}`));
+      decipher.setAuthTag(authTag);
+      const plaintext = Buffer.concat([decipher.update(ciphertext), decipher.final()]);
+      if (plaintext.length > 0) return isLegacy ? "legacy" : keyId!;
+    } catch {}
   }
+  throw new Error("Restored sensitive value authentication failed");
 }
-
 async function validateRestoredDatabase(options: Options, manifest: ReturnType<typeof verifyManifestArtifact>["manifest"]) {
   const migrationVersion = await queryDatabase(
     options,
@@ -336,22 +372,14 @@ async function validateRestoredDatabase(options: Options, manifest: ReturnType<t
     "SELECT COALESCE(nationalIdEncrypted, ''), COALESCE(phoneEncrypted, '') FROM `User` WHERE nationalIdEncrypted IS NOT NULL OR phoneEncrypted IS NOT NULL LIMIT 1",
   );
   let sensitiveFields: "verified" | "not-present" = "not-present";
+  let sensitiveFieldKeyIds: string[] | undefined;
   if (sensitiveRow) {
-    const encodedKey = process.env.STUDENT_DATA_ENCRYPTION_KEY;
-    if (!encodedKey) {
-      throw new Error("STUDENT_DATA_ENCRYPTION_KEY is required to validate restored sensitive fields");
-    }
-    const key = Buffer.from(encodedKey, "base64");
-    if (key.length !== 32 || key.toString("base64") !== encodedKey) {
-      throw new Error("STUDENT_DATA_ENCRYPTION_KEY must be a Base64-encoded 32-byte key");
-    }
+    const keys = sensitiveDataKeyring();
     try {
-      for (const value of sensitiveRow.split("\t").filter(Boolean)) {
-        decryptStudentSensitiveSample(value, key);
-      }
+      sensitiveFieldKeyIds = [...new Set(sensitiveRow.split("\t").filter(Boolean).map((value) => decryptStudentSensitiveSample(value, keys)))];
       sensitiveFields = "verified";
     } finally {
-      key.fill(0);
+      for (const key of keys.values()) key.fill(0);
     }
   }
   return validateRestoreEvidence(manifest, {
@@ -360,6 +388,7 @@ async function validateRestoredDatabase(options: Options, manifest: ReturnType<t
     activeLoginAccounts,
     enabledRadioCourses,
     sensitiveFields,
+    ...(sensitiveFieldKeyIds ? { sensitiveFieldKeyIds } : {}),
   });
 }
 
@@ -405,7 +434,7 @@ async function verifyRestoredApplication(options: Options) {
   const createSession = await smokeFetch(new URL("/api/v1/practice-sessions", baseUrl), {
     method: "POST",
     headers: { "content-type": "application/json", cookie, origin },
-    body: JSON.stringify({ mode: "level", levelCode }),
+    body: JSON.stringify({ mode: "exam", levelCode }),
   });
   if (!createSession.ok) {
     throw new Error(`Restored application practice smoke check returned HTTP ${createSession.status}`);
@@ -422,17 +451,57 @@ async function verifyRestoredApplication(options: Options) {
     throw new Error("Restored application practice smoke check returned no answerable question");
   }
 
-  const answer = await smokeFetch(new URL(`/api/v1/practice-sessions/${encodeURIComponent(sessionId)}/answers`, baseUrl), {
+  const submit = await smokeFetch(new URL(`/api/v1/practice-sessions/${encodeURIComponent(sessionId)}/submit`, baseUrl), {
     method: "POST",
     headers: { "content-type": "application/json", cookie, origin },
-    body: JSON.stringify({ questionId, selectedOptionIds: [optionId] }),
+    body: JSON.stringify({ answers: [{ questionId, selectedOptionIds: [optionId] }] }),
   });
-  if (!answer.ok) {
-    throw new Error(`Restored application answer smoke check returned HTTP ${answer.status}`);
+  if (!submit.ok) {
+    throw new Error(`Restored application exam submission smoke check returned HTTP ${submit.status}`);
   }
-  return { status: "verified" as const, origin, levelCode, sessionId };
+  return { status: "verified" as const, origin, levelCode, sessionId, publicQuestionId: questionId, checks: ["ready", "login", "public-question-snapshot", "practice-start", "answer", "submit"] };
 }
 
+async function runRestoreDrill(options: Options) {
+  const startedAt = new Date();
+  const manifestPath = typeof options.manifest === "string" ? resolveFromProject(options.manifest) : "unconfigured";
+  const attemptedTarget = {
+    id: process.env.BACKUP_RESTORE_TARGET_ID?.trim() || "unconfigured",
+    environment: process.env.BACKUP_RESTORE_ENVIRONMENT?.trim() || "unconfigured",
+    databaseName: typeof options["database-name"] === "string" ? options["database-name"] : process.env.BACKUP_DATABASE_NAME ?? "practice",
+    composeProject: typeof options["compose-project"] === "string" ? options["compose-project"] : process.env.BACKUP_RESTORE_COMPOSE_PROJECT?.trim() || "unconfigured",
+  };
+  let target = attemptedTarget;
+  let restoreResult: Awaited<ReturnType<typeof restoreBackup>> | undefined;
+  let operationError: unknown;
+  try {
+    const validatedTarget = validateIsolatedRestoreTarget({
+      isolationConfirmed: process.env.BACKUP_RESTORE_ISOLATED,
+      environment: process.env.BACKUP_RESTORE_ENVIRONMENT,
+      targetId: process.env.BACKUP_RESTORE_TARGET_ID,
+      isolationRoot: option(options, "isolation-root", process.env.BACKUP_RESTORE_ISOLATION_ROOT),
+      composeFile: resolveFromProject(option(options, "compose-file", process.env.BACKUP_COMPOSE_FILE ?? "docker-compose.prod.yml")),
+      databaseName: databaseName(options),
+      composeProject: typeof options["compose-project"] === "string" ? options["compose-project"] : process.env.BACKUP_RESTORE_COMPOSE_PROJECT,
+    });
+    target = validatedTarget;
+    await runCommand("docker", dockerComposeArgs(options, "up", "-d"));
+    restoreResult = await restoreBackup(options);
+    return { target, restore: restoreResult };
+  } catch (error) {
+    operationError = error;
+    throw error;
+  } finally {
+    appendRestoreDrillRecord(drillLogFile(options), createRestoreDrillRecord({
+      backupId: path.basename(manifestPath),
+      startedAt,
+      completedAt: new Date(),
+      target,
+      checks: operationError ? undefined : restoreResult,
+      error: operationError,
+    }));
+  }
+}
 async function restoreBackup(options: Options) {
   const root = backupRoot(options);
   const manifestPath = resolveFromProject(option(options, "manifest"));
@@ -482,7 +551,7 @@ async function restoreBackup(options: Options) {
     }
     await runCommand("docker", dockerComposeArgs(options, "stop", applicationService(options)));
     appStopped = true;
-    const importCommand = `exec mysql -u practice -p"$MYSQL_PASSWORD" ${shellQuote(verified.manifest.databaseName)} < ${shellQuote(temporaryRestoreFile)}`;
+    const importCommand = `exec mysql -u practice -p"$MYSQL_PASSWORD" ${shellQuote(databaseName(options))} < ${shellQuote(temporaryRestoreFile)}`;
     await runCommand(
       "docker",
       dockerComposeArgs(options, "exec", "-T", databaseService(options), "sh", "-c", importCommand),
@@ -507,7 +576,7 @@ async function restoreBackup(options: Options) {
     }
     if (appStopped && databaseValidated) {
       try {
-        await runCommand("docker", dockerComposeArgs(options, "start", applicationService(options)));
+        await runCommand("docker", dockerComposeArgs(options, "up", "-d"));
       } catch (error) {
         finalizationErrors.push(error instanceof Error ? error : new Error("Failed to restart application after restore"));
       }
@@ -569,9 +638,10 @@ async function execute(command: string | undefined, options: Options) {
       }
     }
     case "restore":
-      return restoreBackup(options);
+    case "restore-drill":
+      return runRestoreDrill(options);
     default:
-      throw new Error("Usage: backup-cli.ts <backup|cleanup|offline-copy|verify|restore> [options]");
+      throw new Error("Usage: backup-cli.ts <backup|cleanup|offline-copy|verify|restore|restore-drill> [options]");
   }
 }
 

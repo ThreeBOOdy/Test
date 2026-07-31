@@ -18,6 +18,7 @@
     "backup:offline": "tsx scripts/backup-cli.ts offline-copy",
     "backup:verify": "tsx scripts/backup-cli.ts verify",
     "backup:restore": "tsx scripts/backup-cli.ts restore",
+    "backup:restore-drill": "tsx scripts/backup-cli.ts restore-drill",
     "security:cleanup": "tsx scripts/security-maintenance.ts",
     "security:rotate-student-data": "tsx scripts/rotate-student-data-keys.ts",
     "db:generate": "prisma generate",

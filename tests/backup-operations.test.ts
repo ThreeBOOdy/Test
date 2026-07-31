@@ -4,6 +4,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { Readable } from "node:stream";
+import { appendRestoreDrillRecord, createRestoreDrillRecord, validateIsolatedRestoreTarget } from "@/scripts/restore-drill-core";
 import { afterEach, describe, expect, it } from "vitest";
 
 import {
@@ -409,5 +410,91 @@ describe("restore validation", () => {
         sensitiveFields: "not-present",
       }),
     ).toThrow(/no practice questions/i);
+  });
+});
+
+describe("isolated restore drills", () => {
+  it("requires an explicitly isolated target and records a successful drill", () => {
+    const directory = createTemporaryDirectory();
+    const isolationRoot = path.join(directory, "isolated-restore");
+    const composeFile = path.join(isolationRoot, "docker-compose.restore.yml");
+    fs.mkdirSync(isolationRoot, { recursive: true });
+    fs.writeFileSync(composeFile, "services: {}\n");
+
+    const target = validateIsolatedRestoreTarget({
+      isolationConfirmed: "true",
+      environment: "isolated",
+      targetId: "monthly-drill-01",
+      isolationRoot,
+      composeFile,
+      databaseName: "practice_restore_drill",
+      composeProject: "practice-restore-drill",
+    });
+    const record = createRestoreDrillRecord({
+      backupId: "practice-20260731T000000Z.backup.manifest.json",
+      startedAt: new Date("2026-07-31T00:00:00.000Z"),
+      completedAt: new Date("2026-07-31T00:00:03.000Z"),
+      target,
+      checks: { migrationVersion: "20260730153500_enforce_radio_course_activation" },
+    });
+    const recordFile = path.join(directory, "logs", "restore-drills.jsonl");
+    appendRestoreDrillRecord(recordFile, record);
+
+    expect(record).toMatchObject({ status: "succeeded", durationMs: 3000, findings: [], target: { environment: "isolated" } });
+    expect(JSON.parse(fs.readFileSync(recordFile, "utf8"))).toMatchObject({ backupId: record.backupId, status: "succeeded" });
+  });
+
+  it("persists a failure reason and finding when a drill fails", () => {
+    const target = {
+      id: "monthly-drill-01",
+      environment: "isolated" as const,
+      databaseName: "practice_restore_drill",
+      composeProject: "practice-restore-drill",
+    };
+    const record = createRestoreDrillRecord({
+      backupId: "practice-20260731T000000Z.backup.manifest.json",
+      startedAt: new Date("2026-07-31T00:00:00.000Z"),
+      completedAt: new Date("2026-07-31T00:00:01.000Z"),
+      target,
+      error: new Error("application readiness failed"),
+    });
+
+    expect(record).toMatchObject({
+      status: "failed",
+      durationMs: 1000,
+      failureReason: "application readiness failed",
+      findings: ["application readiness failed"],
+    });
+  });
+  it("imports restored data into the validated isolated database and starts the complete stack", () => {
+    const cli = fs.readFileSync(path.join(process.cwd(), "scripts", "backup-cli.ts"), "utf8");
+
+    expect(cli).toContain('shellQuote(databaseName(options))} < ${shellQuote(temporaryRestoreFile)}');
+    expect(cli).toContain('dockerComposeArgs(options, "up", "-d")');
+    expect(cli).not.toContain('shellQuote(verified.manifest.databaseName)} < ${shellQuote(temporaryRestoreFile)}');
+  });
+  it("keeps the legacy restore wrapper on the isolated restore-drill command", () => {
+    const wrapper = fs.readFileSync(path.join(process.cwd(), "scripts", "restore.ps1"), "utf8");
+
+    expect(wrapper).toContain("restore-drill");
+    expect(wrapper).toContain("--isolation-root");
+    expect(wrapper).toContain("BACKUP_RESTORE_ISOLATED");
+  });
+  it("rejects a restore drill that could target a non-isolated database", () => {
+    const directory = createTemporaryDirectory();
+    const isolationRoot = path.join(directory, "isolated-restore");
+    const composeFile = path.join(isolationRoot, "docker-compose.restore.yml");
+    fs.mkdirSync(isolationRoot, { recursive: true });
+    fs.writeFileSync(composeFile, "services: {}\n");
+
+    expect(() => validateIsolatedRestoreTarget({
+      isolationConfirmed: "true",
+      environment: "isolated",
+      targetId: "monthly-drill-01",
+      isolationRoot,
+      composeFile,
+      databaseName: "practice",
+      composeProject: "practice-restore-drill",
+    })).toThrow(/database name must identify an isolated restore target/i);
   });
 });

@@ -47,6 +47,7 @@ export type RestoreEvidence = {
   activeLoginAccounts: number;
   enabledRadioCourses: number;
   sensitiveFields: "verified" | "not-present";
+  sensitiveFieldKeyIds?: string[];
 };
 
 type EncryptionHeader = {

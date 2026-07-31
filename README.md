@@ -676,9 +676,10 @@ $env:BACKUP_MANIFEST_AUTH_KEY = <从外部密钥管理系统读取的另一份 B
 
 Windows 任务计划程序或其他调度器应每日运行 `backup.ps1`，保留其非零退出码，并采集 `logs/backup-operations.jsonl`。若离线介质并非每天挂载，可省略 `-OfflineDirectory`，并在介质接入窗口单独运行离线复制脚本。
 
+
 ### 恢复
 
-恢复前确认目标数据库可以被覆盖，并先在隔离环境执行。恢复脚本先验证清单 HMAC、SHA-256 和 AES-GCM 认证标签，将认证完成的明文暂存在数据库容器的受限内存文件系统 `/dev/shm`，并预留至少加密文件大小加 16 MiB 的可用空间，然后才停止应用并导入 MySQL；恢复结束即删除暂存文件，不会把明文写入持久存储。可通过 `BACKUP_RESTORE_TMP_DIRECTORY` 指定其他受保护的容器内临时文件系统：
+恢复前确认目标数据库可以被覆盖，并先在隔离环境执行。`restore.ps1` 和 `restore-drill.ps1` 共用相同的隔离目标保护与演练记录，不能在普通部署上执行恢复。恢复脚本先验证清单 HMAC、SHA-256 和 AES-GCM 认证标签，将认证完成的明文暂存在数据库容器的受限内存文件系统 `/dev/shm`，并预留至少加密文件大小加 16 MiB 的可用空间，然后才停止应用并导入 MySQL；恢复结束即删除暂存文件，不会把明文写入持久存储。可通过 `BACKUP_RESTORE_TMP_DIRECTORY` 指定其他受保护的容器内临时文件系统：
 
 ```powershell
 .\scripts\restore.ps1 `
@@ -693,6 +694,27 @@ Windows 任务计划程序或其他调度器应每日运行 `backup.ps1`，保�
 部署目录没有 Git 元数据时，调度器必须注入 `APP_COMMIT`。也可通过 `BACKUP_DIRECTORY`、`BACKUP_OFFLINE_DIRECTORY`、`BACKUP_LOG_FILE`、`BACKUP_RETENTION_DAILY`、`BACKUP_RETENTION_WEEKLY` 和 `BACKUP_RETENTION_MONTHLY` 设置默认值。
 
 至少每月在隔离环境执行恢复演练，核对清单中的迁移版本、关键表数量、敏感字段解密抽样以及登录和练习核心链路，并将演练时间、备份文件、耗时和结果写入运维记录。加密文件生成成功不等于已经验证可恢复。
+
+### 自动化隔离恢复演练
+
+使用 `restore-drill.ps1` 执行演练。该命令只接受明确标识为隔离环境的目标：运行前必须由受控调度器注入 `BACKUP_RESTORE_ISOLATED=true`、`BACKUP_RESTORE_ENVIRONMENT=isolated` 和唯一的 `BACKUP_RESTORE_TARGET_ID`；`-IsolationRoot` 必须是隔离部署目录，`-ComposeFile` 必须位于该目录中，`-ComposeProject` 与 `-DatabaseName` 都必须含有 `restore`、`drill` 或 `isolated` 标识。任何一项不符都会在启动容器、停止应用或导入数据库之前失败。
+
+```powershell
+$env:BACKUP_RESTORE_ISOLATED = "true"
+$env:BACKUP_RESTORE_ENVIRONMENT = "isolated"
+$env:BACKUP_RESTORE_TARGET_ID = "monthly-restore-drill-01"
+.\scripts\restore-drill.ps1 `
+  -ManifestFile E:\PracticeBackups\practice-YYYYMMDDTHHMMSSZ.backup.manifest.json `
+  -BackupDirectory E:\PracticeBackups `
+  -IsolationRoot E:\PracticeRestoreDrill `
+  -ComposeFile E:\PracticeRestoreDrill\docker-compose.restore.yml `
+  -ComposeProject practice-restore-drill `
+  -DatabaseName practice_restore_drill
+```
+
+演练会启动隔离编排目标，然后认证并导入备份，验证迁移版本、核心表计数、登录账号、`RADIO` 课程和敏感字段解密；应用通过就绪检查后，使用专用冒烟学生真实登录、读取练习题目、开启模拟考试并提交答案完成交卷。每次执行都会将备份标识、开始/结束时间、耗时、隔离目标、校验结果、失败原因和发现的问题写入 `logs/restore-drills.jsonl`（或 `BACKUP_RESTORE_DRILL_LOG_FILE`）。最近一次成功演练可由运维记录系统查询该 JSONL 中最后一条 `status=succeeded` 的记录。
+
+平台运维负责人至少每月检查最近成功记录；演练失败时，当班运维负责隔离目标和容器日志，数据库管理员负责备份、迁移和数据核验，应用负责人负责登录或练习链路故障。失败记录不得被改写为成功；修复后使用同一份或更新备份重新演练，并保留失败记录供复盘。
 
 ## 安全说明
 
