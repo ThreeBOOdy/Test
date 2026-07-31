@@ -17,8 +17,9 @@ type ExamSubmitResult = { results: Record<string, PublicAnswerResult>; correctCo
 
 export function PracticeRunner({ session }: { session: PublicPracticeSession }) {
   const isExam = session.mode === "MOCK_EXAM";
-  const [index, setIndex] = useState(() => getInitialQuestionIndex(session.questions, session.initialResults));
-  const [drafts, setDrafts] = useState<Record<string, string[]>>({});
+  const initialDrafts = session.draft?.answers ?? {};
+  const [index, setIndex] = useState(() => session.draft?.currentIndex ?? getInitialQuestionIndex(session.questions, session.initialResults));
+  const [drafts, setDrafts] = useState<Record<string, string[]>>(initialDrafts);
   const [results, setResults] = useState<Record<string, PublicAnswerResult>>(session.initialResults);
   const [summaryVisible, setSummaryVisible] = useState(() => Object.keys(session.initialResults).length === session.questions.length);
   const [error, setError] = useState("");
@@ -26,6 +27,11 @@ export function PracticeRunner({ session }: { session: PublicPracticeSession }) 
   const [remainingSeconds, setRemainingSeconds] = useState(() => session.exam ? Math.max(0, Math.ceil((new Date(session.exam.expiresAt).getTime() - Date.now()) / 1000)) : 0);
   const autoSubmitted = useRef(false);
   const answerRequestKeys = useRef<Record<string, string>>({});
+  const draftVersion = useRef(session.draft?.version ?? 0);
+  const draftAnswers = useRef<Record<string, string[]>>(initialDrafts);
+  const pendingDraft = useRef<{ answers: Record<string, string[]>; currentIndex: number } | null>(null);
+  const draftRequestInFlight = useRef(false);
+  const draftRetryTimer = useRef<number | null>(null);
   const question = session.questions[index];
   const result = results[question.id];
   const selected = useMemo(() => result?.selectedOptionIds ?? drafts[question.id] ?? [], [drafts, question.id, result?.selectedOptionIds]);
@@ -36,15 +42,58 @@ export function PracticeRunner({ session }: { session: PublicPracticeSession }) 
   const correctCount = Object.values(results).filter((item) => item.isCorrect).length;
 
   const moveTo = useCallback((nextIndex: number) => {
-    setIndex(Math.min(session.questions.length - 1, Math.max(0, nextIndex)));
+    const boundedIndex = Math.min(session.questions.length - 1, Math.max(0, nextIndex));
+    setIndex(boundedIndex);
     setError("");
   }, [session.questions.length]);
+
+  const flushDraftSave = useCallback(async () => {
+    if (!isExam || draftRequestInFlight.current || !pendingDraft.current || summaryVisible) return;
+    draftRequestInFlight.current = true;
+    const payload = pendingDraft.current;
+    pendingDraft.current = null;
+    try {
+      const response = await fetch(`/api/v1/practice-sessions/${session.id}/draft`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ...payload, version: draftVersion.current }) });
+      const data = await response.json() as { version?: number; message?: string };
+      if (!response.ok) {
+        if (response.status === 409) setError(data.message ?? "考试草稿已被更新，请刷新页面恢复最新内容");
+        else { pendingDraft.current = payload; setError(data.message ?? "草稿保存失败，正在重试"); }
+        return;
+      }
+      draftVersion.current = data.version ?? draftVersion.current + 1;
+    } catch {
+      pendingDraft.current = payload;
+      setError("网络暂时不可用，草稿正在自动重试");
+    } finally {
+      draftRequestInFlight.current = false;
+      if (pendingDraft.current && !summaryVisible && draftRetryTimer.current === null) {
+        draftRetryTimer.current = window.setTimeout(() => { draftRetryTimer.current = null; void flushDraftSave(); }, 1000);
+      }
+    }
+  }, [isExam, session.id, summaryVisible]);
+
+  useEffect(() => {
+    if (!isExam || summaryVisible) return;
+    pendingDraft.current = { answers: draftAnswers.current, currentIndex: index };
+    void flushDraftSave();
+  }, [flushDraftSave, index, isExam, summaryVisible]);
+
+  const queueDraftSave = useCallback((answers: Record<string, string[]>, currentIndex: number) => {
+    if (!isExam || summaryVisible) return;
+    draftAnswers.current = answers;
+    pendingDraft.current = { answers, currentIndex };
+    void flushDraftSave();
+  }, [flushDraftSave, isExam, summaryVisible]);
 
   const toggleOption = useCallback((optionId: string) => {
     if (result || pending) return;
     setError("");
-    setDrafts((current) => ({ ...current, [question.id]: toggleDraftSelection(current[question.id] ?? [], optionId, question.type) }));
-  }, [pending, question.id, question.type, result]);
+    setDrafts((current) => {
+      const next = { ...current, [question.id]: toggleDraftSelection(current[question.id] ?? [], optionId, question.type) };
+      if (isExam) queueDraftSave(next, index);
+      return next;
+    });
+  }, [index, isExam, pending, queueDraftSave, question.id, question.type, result]);
 
   const submitAnswer = useCallback(async () => {
     if (isExam || result || pending) return;
@@ -66,7 +115,7 @@ export function PracticeRunner({ session }: { session: PublicPracticeSession }) 
     if (!isExam || pending || summaryVisible) return;
     setPending(true); setError("");
     try {
-      const answers = session.questions.map((item) => ({ questionId: item.id, selectedOptionIds: drafts[item.id] ?? [] }));
+      const answers = session.questions.map((item) => ({ questionId: item.id, selectedOptionIds: draftAnswers.current[item.id] ?? [] }));
       const response = await fetch(`/api/v1/practice-sessions/${session.id}/submit`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ answers }) });
       const data = await response.json() as ExamSubmitResult;
       if (!response.ok) { setError(data.message ?? "交卷失败，请稍后重试"); return; }
@@ -74,7 +123,20 @@ export function PracticeRunner({ session }: { session: PublicPracticeSession }) 
       setSummaryVisible(true);
     } catch { setError("交卷失败，请稍后重试"); }
     finally { setPending(false); }
-  }, [drafts, isExam, pending, session.id, session.questions, summaryVisible]);
+  }, [isExam, pending, session.id, session.questions, summaryVisible]);
+
+  useEffect(() => {
+    if (!isExam || summaryVisible) return;
+    const persistOnHide = () => {
+      if (document.visibilityState !== "hidden" || !pendingDraft.current || draftRequestInFlight.current) return;
+      const payload = pendingDraft.current;
+      pendingDraft.current = null;
+      void fetch(`/api/v1/practice-sessions/${session.id}/draft`, { method: "PUT", keepalive: true, headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ...payload, version: draftVersion.current }) });
+    };
+    document.addEventListener("visibilitychange", persistOnHide);
+    window.addEventListener("pagehide", persistOnHide);
+    return () => { document.removeEventListener("visibilitychange", persistOnHide); window.removeEventListener("pagehide", persistOnHide); };
+  }, [isExam, session.id, summaryVisible]);
 
   useEffect(() => {
     if (!session.exam || summaryVisible) return;

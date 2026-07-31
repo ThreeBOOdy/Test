@@ -3,7 +3,7 @@ import { PrismaMariaDb } from "@prisma/adapter-mariadb";
 import { Prisma, PrismaClient } from "../../generated/prisma/client";
 import { assertDatabaseName } from "../../lib/domain/database-url";
 import { commitImportBatch, getImportBatchReport, revertImportBatch } from "../../lib/server/import-service";
-import { createPracticeSession, getPracticeSession, submitMockExam, submitPracticeAnswer } from "../../lib/server/practice-service";
+import { createPracticeSession, getPracticeSession, saveExamDraft, submitMockExam, submitPracticeAnswer } from "../../lib/server/practice-service";
 import { createSession, findSessionUser, revokeSession, revokeUserSessions } from "../../lib/server/session";
 import { RADIO_COURSE_ID } from "../../lib/domain/course";
 
@@ -485,5 +485,42 @@ describe("production database foundation", () => {
     expect(await prisma.practiceAnswer.count({ where: { sessionId: session.id } })).toBe(1);
     expect(answer.selectedOptionIds).toEqual(expect.arrayContaining([expect.stringMatching(/^[AB]$/)]));
     expect(await prisma.wrongQuestion.findUnique({ where: { courseId_userId_questionId: { courseId: RADIO_COURSE_ID, userId: user.id, questionId: question.id } } })).toEqual(answer.isCorrect ? null : expect.objectContaining({ wrongCount: 1, mastered: false }));
+  });
+
+  it("persists and resumes versioned mock exam drafts without exposing grading data", async () => {
+    const { user, level, point, question } = await createBaseRecords();
+    const second = await prisma.question.create({ data: { levelId: level.id, knowledgePointId: point.id, externalQuestionCode: "Q-2", stem: "Second", type: "SINGLE_CHOICE", optionCount: 2, correctOptionCount: 1, selectionSpec: "2选1", options: [{ id: "A", text: "A" }, { id: "B", text: "B" }], correctOptionIds: ["B"] } });
+    await prisma.examRule.create({ data: { levelId: level.id, singleCount: 2, multipleCount: 0, durationMinutes: 40, passingCount: 1 } });
+    const session = await createPracticeSession(user.id, { mode: "exam", levelCode: level.code });
+
+    const saved = await saveExamDraft(user.id, session.id, { answers: { [question.id]: ["A"] }, currentIndex: 1, version: 0 });
+    expect(saved).toMatchObject({ answers: { [question.id]: ["A"] }, currentIndex: 1, version: 1 });
+    await expect(saveExamDraft(user.id, session.id, { answers: { [question.id]: ["B"] }, currentIndex: 0, version: 0 })).rejects.toMatchObject({ status: 409 });
+
+    const resumed = await getPracticeSession(user.id, session.id);
+    expect(resumed?.draft).toMatchObject({ answers: { [question.id]: ["A"] }, currentIndex: 1, version: 1 });
+    expect(resumed?.questions[0]).not.toHaveProperty("correctOptionIds");
+    expect(resumed?.initialResults).toEqual({});
+    expect(second.id).toBeTruthy();
+  });
+
+  it("rejects draft writes after mock exam settlement and removes the draft", async () => {
+    const { user, level, question } = await createBaseRecords();
+    await prisma.examRule.create({ data: { levelId: level.id, singleCount: 1, multipleCount: 0, durationMinutes: 40, passingCount: 1 } });
+    const session = await createPracticeSession(user.id, { mode: "exam", levelCode: level.code });
+    await saveExamDraft(user.id, session.id, { answers: { [question.id]: ["A"] }, currentIndex: 0, version: 0 });
+    await submitMockExam(user.id, session.id, [{ questionId: question.id, selectedOptionIds: ["A"] }]);
+
+    expect(await prisma.examDraft.findUnique({ where: { courseId_sessionId: { courseId: RADIO_COURSE_ID, sessionId: session.id } } })).toBeNull();
+    await expect(saveExamDraft(user.id, session.id, { answers: {}, currentIndex: 0, version: 1 })).rejects.toMatchObject({ status: 409 });
+  });
+
+  it("rejects draft writes after an abandoned mock exam", async () => {
+    const { user, level, question } = await createBaseRecords();
+    await prisma.examRule.create({ data: { levelId: level.id, singleCount: 1, multipleCount: 0, durationMinutes: 40, passingCount: 1 } });
+    const session = await createPracticeSession(user.id, { mode: "exam", levelCode: level.code });
+    await prisma.practiceSession.update({ where: { id: session.id }, data: { status: "ABANDONED" } });
+
+    await expect(saveExamDraft(user.id, session.id, { answers: { [question.id]: ["A"] }, currentIndex: 0, version: 0 })).rejects.toMatchObject({ status: 409 });
   });
 });

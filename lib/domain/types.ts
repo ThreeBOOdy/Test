@@ -99,6 +99,13 @@ export type PublicAnswerResult = {
   correctCount: number;
 };
 
+export type PublicExamDraft = {
+  answers: Record<string, string[]>;
+  currentIndex: number;
+  version: number;
+  updatedAt: string;
+};
+
 export type PublicPracticeSession = {
   id: string;
   mode: PracticeMode;
@@ -106,6 +113,7 @@ export type PublicPracticeSession = {
   total: number;
   questions: PublicQuestion[];
   initialResults: Record<string, PublicAnswerResult>;
+  draft?: PublicExamDraft;
   exam?: {
     durationMinutes: number;
     passingCount: number;

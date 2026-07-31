@@ -81,7 +81,7 @@ describe("PracticeRunner", () => {
   it("submits mock exam answers together and shows the pass result", async () => {
     const user = userEvent.setup();
     const question = practiceSessionFixture().questions[0];
-    vi.mocked(fetch).mockResolvedValue(new Response(JSON.stringify({ results: { [question.id]: { isCorrect: true, correctOptionIds: ["A"], selectedOptionIds: ["A"], answeredCount: 1, correctCount: 1 } }, correctCount: 1, total: 1, passingCount: 1, passed: true }), { status: 200, headers: { "Content-Type": "application/json" } }));
+    vi.mocked(fetch).mockImplementation(async (input) => new Response(JSON.stringify(input.toString().endsWith("/submit") ? { results: { [question.id]: { isCorrect: true, correctOptionIds: ["A"], selectedOptionIds: ["A"], answeredCount: 1, correctCount: 1 } }, correctCount: 1, total: 1, passingCount: 1, passed: true } : { version: 1, answers: { [question.id]: ["A"] }, currentIndex: 0, updatedAt: new Date().toISOString() }), { status: 200, headers: { "Content-Type": "application/json" } }));
     render(<PracticeRunner session={practiceSessionFixture({ mode: "MOCK_EXAM", title: "A级 · 模拟考试", questions: [question], total: 1, exam: { durationMinutes: 40, passingCount: 1, expiresAt: new Date(Date.now() + 40 * 60_000).toISOString() } })} />);
 
     await user.click(screen.getByRole("radio", { name: /每秒三十万千米/ }));
@@ -90,5 +90,13 @@ describe("PracticeRunner", () => {
     await waitFor(() => expect(fetch).toHaveBeenCalledWith("/api/v1/practice-sessions/session-1/submit", expect.objectContaining({ method: "POST" })));
     expect(await screen.findByRole("heading", { name: "模拟考试完成" })).toBeInTheDocument();
     expect(screen.getByText("考试合格")).toBeInTheDocument();
+  });
+
+  it("restores the latest exam draft and position", () => {
+    const question = practiceSessionFixture().questions[0];
+    render(<PracticeRunner session={practiceSessionFixture({ mode: "MOCK_EXAM", questions: [question], total: 1, draft: { answers: { [question.id]: ["A"] }, currentIndex: 0, version: 3, updatedAt: new Date().toISOString() }, exam: { durationMinutes: 40, passingCount: 1, expiresAt: new Date(Date.now() + 40 * 60_000).toISOString() } })} />);
+    expect(screen.getByRole("radio", { name: /每秒三十万千米/ })).toBeChecked();
+    expect(screen.getByText("第 1 / 1 题")).toBeInTheDocument();
+    expect(screen.queryByText("标准答案：A")).not.toBeInTheDocument();
   });
 });

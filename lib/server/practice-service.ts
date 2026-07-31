@@ -114,31 +114,34 @@ export async function getPracticeSession(userId: string, sessionId: string): Pro
 }
 
 export async function saveExamDraft(userId: string, sessionId: string, input: { answers: Record<string, string[]>; currentIndex: number; version: number }) {
-  const session = await prisma.practiceSession.findFirst({ where: { id: sessionId, courseId: RADIO_COURSE_ID, userId }, include: { questions: true, answers: true, examDraft: true } });
-  if (!session) throw new ApiError("模拟考试不存在", 404);
-  if (session.mode !== "MOCK_EXAM") throw new ApiError("当前会话不是模拟考试", 409);
-  if (session.status !== "IN_PROGRESS" || session.answers.length) throw new ApiError("模拟考试已经结束", 409);
-  if (!Number.isInteger(input.currentIndex) || input.currentIndex < 0 || input.currentIndex >= session.questions.length) throw new ApiError("当前题号无效");
-  const questionIds = new Set(session.questions.map((question) => question.questionId));
-  for (const [questionId, selectedOptionIds] of Object.entries(input.answers)) {
-    const sessionQuestion = session.questions.find((question) => question.questionId === questionId);
-    if (!questionIds.has(questionId) || !sessionQuestion) throw new ApiError("草稿中包含无效题目");
-    if (!Array.isArray(selectedOptionIds) || selectedOptionIds.some((optionId) => typeof optionId !== "string")) throw new ApiError("草稿答案格式无效");
-    validateSelection(sessionQuestion.snapshot as unknown as QuestionSnapshot, selectedOptionIds, true);
-  }
-  const currentVersion = session.examDraft?.version ?? 0;
-  if (input.version !== currentVersion) throw new ApiError("考试草稿版本已更新，请重新加载", 409);
-  let saved;
-  if (session.examDraft) {
-    saved = await prisma.examDraft.updateMany({ where: { courseId: RADIO_COURSE_ID, sessionId, version: input.version }, data: { answers: input.answers as Prisma.InputJsonValue, currentIndex: input.currentIndex, version: { increment: 1 } } });
-  } else {
-    try { await prisma.examDraft.create({ data: { courseId: RADIO_COURSE_ID, sessionId, answers: input.answers as Prisma.InputJsonValue, currentIndex: input.currentIndex, version: 1 } }); saved = { count: 1 }; } catch (error) { if (!(error instanceof Prisma.PrismaClientKnownRequestError) || error.code !== "P2002") throw error; saved = { count: 0 }; }
-  }
-  if (saved.count !== 1) throw new ApiError("考试草稿版本已更新，请重新加载", 409);
-  const draft = await prisma.examDraft.findUniqueOrThrow({ where: { courseId_sessionId: { courseId: RADIO_COURSE_ID, sessionId } } });
-  return toPublicDraft(draft.answers, draft.currentIndex, draft.version, draft.updatedAt);
+  return prisma.$transaction(async (tx) => {
+    const locked = await tx.practiceSession.updateMany({ where: { id: sessionId, courseId: RADIO_COURSE_ID, userId, status: "IN_PROGRESS" }, data: { currentIndex: { increment: 0 } } });
+    if (locked.count !== 1) throw new ApiError("模拟考试已经结束", 409);
+    const session = await tx.practiceSession.findFirst({ where: { id: sessionId, courseId: RADIO_COURSE_ID, userId }, include: { questions: true, answers: true, examDraft: true } });
+    if (!session) throw new ApiError("模拟考试不存在", 404);
+    if (session.mode !== "MOCK_EXAM") throw new ApiError("当前会话不是模拟考试", 409);
+    if (session.answers.length) throw new ApiError("模拟考试已经结束", 409);
+    if (!Number.isInteger(input.currentIndex) || input.currentIndex < 0 || input.currentIndex >= session.questions.length) throw new ApiError("当前题号无效");
+    const questionIds = new Set(session.questions.map((question) => question.questionId));
+    for (const [questionId, selectedOptionIds] of Object.entries(input.answers)) {
+      const sessionQuestion = session.questions.find((question) => question.questionId === questionId);
+      if (!questionIds.has(questionId) || !sessionQuestion) throw new ApiError("草稿中包含无效题目");
+      if (!Array.isArray(selectedOptionIds) || selectedOptionIds.some((optionId) => typeof optionId !== "string")) throw new ApiError("草稿答案格式无效");
+      validateSelection(sessionQuestion.snapshot as unknown as QuestionSnapshot, selectedOptionIds, true);
+    }
+    const currentVersion = session.examDraft?.version ?? 0;
+    if (input.version !== currentVersion) throw new ApiError("考试草稿版本已更新，请重新加载", 409);
+    let saved;
+    if (session.examDraft) {
+      saved = await tx.examDraft.updateMany({ where: { courseId: RADIO_COURSE_ID, sessionId, version: input.version }, data: { answers: input.answers as Prisma.InputJsonValue, currentIndex: input.currentIndex, version: { increment: 1 } } });
+    } else {
+      try { await tx.examDraft.create({ data: { courseId: RADIO_COURSE_ID, sessionId, answers: input.answers as Prisma.InputJsonValue, currentIndex: input.currentIndex, version: 1 } }); saved = { count: 1 }; } catch (error) { if (!(error instanceof Prisma.PrismaClientKnownRequestError) || error.code !== "P2002") throw error; saved = { count: 0 }; }
+    }
+    if (saved.count !== 1) throw new ApiError("考试草稿版本已更新，请重新加载", 409);
+    const draft = await tx.examDraft.findUniqueOrThrow({ where: { courseId_sessionId: { courseId: RADIO_COURSE_ID, sessionId } } });
+    return toPublicDraft(draft.answers, draft.currentIndex, draft.version, draft.updatedAt);
+  });
 }
-
 export async function submitPracticeAnswer(userId: string, sessionId: string, questionId: string, selectedOptionIds: string[], idempotencyKey: string) {
   try {
     return await prisma.$transaction(async (tx) => {
