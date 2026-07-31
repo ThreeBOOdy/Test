@@ -208,8 +208,8 @@ test.describe.serial("production business flows", () => {
       await batch.getByRole("button", { name: "撤销" }).click();
       const revertResponse = await revertResponsePromise;
       expect(revertResponse.ok()).toBe(true);
-      expect(await revertResponse.json()).toEqual({ deleted: 101, archived: 0 });
-      await expect(page.getByText("已删除 101 道未使用题目，归档 0 道已使用题目")).toBeVisible({ timeout: 15_000 });
+      expect(await revertResponse.json()).toEqual({ archived: 101 });
+      await expect(page.getByText("已归档 101 道题目，未物理删除任何公开题目")).toBeVisible({ timeout: 15_000 });
       await expect(batch).toContainText("REVERTED");
       await expect(batch.getByRole("button", { name: "撤销" })).toHaveCount(0);
     } finally {

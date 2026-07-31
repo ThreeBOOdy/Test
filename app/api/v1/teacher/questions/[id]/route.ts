@@ -26,6 +26,7 @@ export async function PUT(request: Request, context: { params: Promise<{ id: str
       prisma.knowledgePoint.findFirst({ where: { id: input.knowledgePointId, courseId: RADIO_COURSE_ID }, include: { _count: { select: { children: true } } } }),
     ]);
     if (!question) throw new ApiError("题目不存在", 404);
+    if (question.status === "ARCHIVED") throw new ApiError("归档题目必须通过修订历史恢复", 409);
     if (!level || (!level.enabled && input.levelId !== question.levelId)) throw new ApiError("等级不存在或已停用", 404);
     if (!point || (!point.enabled && input.knowledgePointId !== question.knowledgePointId)) throw new ApiError("知识点不存在或已停用", 404);
     if (point._count.children > 0) throw new ApiError("题目必须归属末级知识点");

@@ -20,7 +20,7 @@ export function ImportBatchList({ batches }: { batches: Batch[] }) {
   const [message, setMessage] = useState("");
 
   async function revert(id: string) {
-    if (!window.confirm("确认撤销这个导入批次？已被练习使用的题目会被归档。")) return;
+    if (!window.confirm("确认撤销这个导入批次？该批次的所有题目都会归档，历史记录将继续保留。")) return;
     setPendingId(id);
     setMessage("");
     const response = await fetch(`/api/v1/teacher/import-batches/${id}/revert`, { method: "POST" });
@@ -30,7 +30,7 @@ export function ImportBatchList({ batches }: { batches: Batch[] }) {
       setMessage(data.message ?? "撤销失败");
       return;
     }
-    setMessage(`已删除 ${data.deleted} 道未使用题目，归档 ${data.archived} 道已使用题目`);
+    setMessage(`已归档 ${data.archived} 道题目，未物理删除任何公开题目`);
     router.refresh();
   }
 

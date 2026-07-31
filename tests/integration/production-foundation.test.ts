@@ -26,6 +26,7 @@ beforeEach(async () => {
   await prisma.practiceSessionQuestion.deleteMany();
   await prisma.practiceSession.deleteMany();
   await prisma.wrongQuestion.deleteMany();
+  await prisma.questionRevision.deleteMany();
   await prisma.question.deleteMany();
   await prisma.importBatchRow.deleteMany();
   await prisma.importBatch.deleteMany();

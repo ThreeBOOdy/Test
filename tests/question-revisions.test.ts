@@ -9,6 +9,7 @@ describe("question revisions", () => {
       sourceBankCode: "bank",
       externalQuestionCode: "Q-1",
       stem: "原始题干",
+      preserveOptionOrder: false,
       options: [{ id: "A", text: "正确" }, { id: "B", text: "错误" }],
       correctOptionIds: ["A"],
       status: "ACTIVE",

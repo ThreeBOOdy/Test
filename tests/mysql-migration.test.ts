@@ -129,6 +129,13 @@ describe("MySQL project configuration", () => {
     expect(migration).toContain("FOREIGN KEY (`courseId`, `questionId`) REFERENCES `Question`");
     expect(migration).not.toMatch(/DELETE FROM `Question`|DROP TABLE `Question`/);
   });
+
+  it("prevents deleting questions that have retained revisions", () => {
+    const migration = fs.readFileSync(path.resolve("prisma/migrations/20260731110000_archive_only_question_lifecycle/migration.sql"), "utf8");
+
+    expect(migration).toContain("ON DELETE RESTRICT");
+    expect(migration).not.toMatch(/DELETE FROM `Question`|DROP TABLE `Question`/);
+  });
   it("uses MySQL-native aggregate and duration SQL", () => {
     const reportsPage = fs.readFileSync(path.resolve("app/teacher/reports/page.tsx"), "utf8");
     const studentsPage = fs.readFileSync(path.resolve("app/teacher/students/page.tsx"), "utf8");

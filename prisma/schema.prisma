@@ -371,7 +371,7 @@ model QuestionRevision {
   id            String   @id @default(cuid())
   courseId      String   @default("course-radio")
   questionId    String
-  question      Question @relation(fields: [courseId, questionId], references: [courseId, id], onDelete: Cascade)
+  question      Question @relation(fields: [courseId, questionId], references: [courseId, id], onDelete: Restrict)
   revision      Int
   snapshot      Json
   changeSource  String

@@ -78,6 +78,16 @@ describe("teacher optimistic concurrency routes", () => {
     expect(mocks.questionRevisionCreate).not.toHaveBeenCalled();
   });
 
+  it("requires archived questions to be restored through revision history", async () => {
+    mocks.questionFindFirst.mockResolvedValue({ ...question, status: "ARCHIVED" });
+
+    const response = await updateQuestion(questionRequest(1), { params: Promise.resolve({ id: "question-1" }) });
+
+    expect(response.status).toBe(409);
+    expect(await response.json()).toMatchObject({ message: "归档题目必须通过修订历史恢复" });
+    expect(mocks.questionUpdateMany).not.toHaveBeenCalled();
+  });
+
   it("accepts the first knowledge point edit and rejects a concurrent stale edit", async () => {
     mocks.knowledgePointUpdateMany.mockImplementation((args) => args.where.id ? Promise.resolve({ count: mocks.knowledgePointUpdateMany.mock.calls.filter(([call]) => call.where.id).length === 1 ? 1 : 0 }) : Promise.resolve({ count: 0 }));
     const request = () => new Request("http://localhost/api/v1/teacher/knowledge-points/point-1", { method: "PUT", headers, body: JSON.stringify({ name: "知识点", sortOrder: 0, enabled: true, version: 1 }) });
