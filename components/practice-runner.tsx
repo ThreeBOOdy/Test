@@ -13,7 +13,7 @@ import { getInitialQuestionIndex, toggleDraftSelection } from "@/lib/domain/prac
 import type { PublicAnswerResult, PublicPracticeSession } from "@/lib/domain/types";
 import { cn } from "@/lib/utils";
 
-type ExamSubmitResult = { results: Record<string, PublicAnswerResult>; correctCount: number; passingCount: number; passed: boolean; message?: string };
+type ExamSubmitResult = { correctCount: number; total: number; passingCount: number; passed: boolean; completedAt: string; message?: string };
 
 export function PracticeRunner({ session }: { session: PublicPracticeSession }) {
   const isExam = session.mode === "MOCK_EXAM";
@@ -21,7 +21,8 @@ export function PracticeRunner({ session }: { session: PublicPracticeSession }) 
   const [index, setIndex] = useState(() => session.draft?.currentIndex ?? getInitialQuestionIndex(session.questions, session.initialResults));
   const [drafts, setDrafts] = useState<Record<string, string[]>>(initialDrafts);
   const [results, setResults] = useState<Record<string, PublicAnswerResult>>(session.initialResults);
-  const [summaryVisible, setSummaryVisible] = useState(() => Object.keys(session.initialResults).length === session.questions.length);
+  const [examResult, setExamResult] = useState(session.examResult);
+  const [summaryVisible, setSummaryVisible] = useState(() => Boolean(session.examResult) || Object.keys(session.initialResults).length === session.questions.length);
   const [error, setError] = useState("");
   const [pending, setPending] = useState(false);
   const [remainingSeconds, setRemainingSeconds] = useState(() => session.exam ? Math.max(0, Math.ceil((new Date(session.exam.expiresAt).getTime() - Date.now()) / 1000)) : 0);
@@ -119,11 +120,21 @@ export function PracticeRunner({ session }: { session: PublicPracticeSession }) 
       const response = await fetch(`/api/v1/practice-sessions/${session.id}/submit`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ answers }) });
       const data = await response.json() as ExamSubmitResult;
       if (!response.ok) { setError(data.message ?? "交卷失败，请稍后重试"); return; }
-      setResults(data.results);
+      setExamResult(data);
       setSummaryVisible(true);
     } catch { setError("交卷失败，请稍后重试"); }
     finally { setPending(false); }
   }, [isExam, pending, session.id, session.questions, summaryVisible]);
+
+  const abandonExam = useCallback(async () => {
+    if (!isExam || pending || summaryVisible) return;
+    setPending(true);
+    try {
+      await fetch(`/api/v1/practice-sessions/${session.id}/abandon`, { method: "POST" });
+    } finally {
+      window.location.href = "/student";
+    }
+  }, [isExam, pending, session.id, summaryVisible]);
 
   useEffect(() => {
     if (!isExam || summaryVisible) return;
@@ -175,11 +186,11 @@ export function PracticeRunner({ session }: { session: PublicPracticeSession }) 
 
   const studentFacingTitle = isExam ? "模拟考试" : "当前练习";
 
-  if (summaryVisible) return <PracticeSummary title={studentFacingTitle} correct={correctCount} total={session.total} passingCount={session.exam?.passingCount} />;
+  if (summaryVisible) return <PracticeSummary title={studentFacingTitle} correct={isExam ? examResult?.correctCount ?? 0 : correctCount} total={isExam ? examResult?.total ?? session.total : session.total} passingCount={isExam ? examResult?.passingCount : session.exam?.passingCount} />;
 
   const progressCount = isExam ? draftedCount : answeredCount;
   return <div className="practice-reading safe-bottom mx-auto max-w-7xl">
-    <div className="mb-5 flex items-center justify-between gap-4"><Link href="/student" className="flex min-h-10 items-center gap-2 rounded-xl px-3 text-sm font-semibold text-slate-400 transition hover:bg-white/[.04] hover:text-slate-100"><ArrowLeft className="size-4" />退出{isExam ? "考试" : "训练"}</Link><div className={cn("flex items-center gap-2 rounded-full border border-white/8 bg-white/[.035] px-3 py-2 text-sm font-semibold", isExam && remainingSeconds <= 300 ? "text-rose-300" : "text-cyan-100/75")}><Clock3 className="size-4" />{isExam ? `剩余 ${formatDuration(remainingSeconds)}` : "训练频道已连接"}</div></div>
+    <div className="mb-5 flex items-center justify-between gap-4">{isExam ? <button type="button" onClick={() => void abandonExam()} className="flex min-h-10 items-center gap-2 rounded-xl px-3 text-sm font-semibold text-slate-400 transition hover:bg-white/[.04] hover:text-slate-100"><ArrowLeft className="size-4" />放弃考试</button> : <Link href="/student" className="flex min-h-10 items-center gap-2 rounded-xl px-3 text-sm font-semibold text-slate-400 transition hover:bg-white/[.04] hover:text-slate-100"><ArrowLeft className="size-4" />退出训练</Link>}<div className={cn("flex items-center gap-2 rounded-full border border-white/8 bg-white/[.035] px-3 py-2 text-sm font-semibold", isExam && remainingSeconds <= 300 ? "text-rose-300" : "text-cyan-100/75")}><Clock3 className="size-4" />{isExam ? `剩余 ${formatDuration(remainingSeconds)}` : "训练频道已连接"}</div></div>
     <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_280px]">
       <Card variant="receiver" className="practice-console overflow-hidden text-slate-50"><div className="border-b border-cyan-200/10 bg-[#08121e]/95 px-5 py-5 sm:px-7"><div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between"><div><div className="font-radio flex items-center gap-2 text-[10px] font-bold tracking-[.14em] text-cyan-300"><Radio className="size-3.5" />{studentFacingTitle}</div><div className="mt-1.5 text-base font-bold text-slate-100">第 {index + 1} / {session.total} 题</div></div><div className="w-full sm:max-w-64"><div className="font-radio mb-2 flex justify-between text-[10px] text-slate-400"><span>{isExam ? "答题进度" : "训练进度"}</span><span>{progressCount} / {session.total}</span></div><SpectrumProgress answered={progressCount} total={session.total} /></div></div></div>
         <CardContent className="bg-[linear-gradient(145deg,rgba(13,27,42,.98),rgba(7,15,25,.98))] p-5 sm:p-8"><div className="rounded-2xl border border-cyan-200/10 bg-black/10 p-4 sm:p-5"><div className="font-radio text-[10px] font-bold tracking-[.14em] text-amber-300/80">QUESTION {String(index + 1).padStart(2, "0")}</div><h1 className="practice-question mt-3 text-[1.35rem] font-bold leading-[1.75] text-white sm:text-[1.7rem]">{question.stem}</h1><p className="mt-3 text-sm leading-7 text-slate-400">请选择你认为正确的答案。</p></div><div className="mt-5 flex flex-col gap-3">{question.options.map((option, optionIndex) => <AnswerOption key={option.id} index={optionIndex} option={option} type={question.type} selected={selectedSet.has(option.id)} disabled={Boolean(result)} correct={result?.correctOptionIds.includes(option.id)} wrongSelected={Boolean(result && result.selectedOptionIds.includes(option.id) && !result.correctOptionIds.includes(option.id))} onToggle={() => toggleOption(option.id)} />)}</div>{error ? <div role="alert" className="mt-4 rounded-xl border border-rose-300/20 bg-rose-400/10 px-4 py-3 text-sm font-semibold text-rose-100">{error}</div> : null}{result && !isExam ? <div className={cn("mt-5 flex items-start gap-3 rounded-2xl border p-4", result.isCorrect ? "border-emerald-300/20 bg-emerald-400/10 text-emerald-100" : "border-rose-300/20 bg-rose-400/10 text-rose-100")}>{result.isCorrect ? <CheckCircle2 className="mt-0.5 size-5 shrink-0" /> : <CircleX className="mt-0.5 size-5 shrink-0" />}<div><div className="font-bold">{result.isCorrect ? "回答正确" : "回答错误"}</div><div className="mt-1 text-sm leading-6">标准答案：{result.correctOptionIds.join("、")}</div></div></div> : null}<div className="mt-7 hidden items-center justify-between gap-3 border-t border-white/[.07] pt-5 sm:flex"><Button variant="outline" onClick={() => moveTo(index - 1)} disabled={index === 0}><ArrowLeft className="size-4" />上一题</Button><span className="font-radio text-[10px] text-slate-500">数字键选择 · ← → 切题</span>{isExam ? index === session.total - 1 ? <Button onClick={() => void submitExam()} disabled={pending}><Send className="size-4" />{pending ? "交卷中…" : "提交试卷"}</Button> : <Button onClick={() => moveTo(index + 1)}>下一题<ArrowRight className="size-4" /></Button> : result ? completed ? <Button onClick={() => setSummaryVisible(true)}>查看结果<ArrowRight className="size-4" /></Button> : <Button onClick={() => moveTo(index + 1)}>下一题<ArrowRight className="size-4" /></Button> : <Button onClick={() => void submitAnswer()} disabled={pending}>{pending ? "提交中…" : "提交答案"}</Button>}</div></CardContent>

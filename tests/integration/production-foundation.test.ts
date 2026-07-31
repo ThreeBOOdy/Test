@@ -3,7 +3,7 @@ import { PrismaMariaDb } from "@prisma/adapter-mariadb";
 import { Prisma, PrismaClient } from "../../generated/prisma/client";
 import { assertDatabaseName } from "../../lib/domain/database-url";
 import { commitImportBatch, getImportBatchReport, revertImportBatch } from "../../lib/server/import-service";
-import { createPracticeSession, getPracticeSession, saveExamDraft, submitMockExam, submitPracticeAnswer } from "../../lib/server/practice-service";
+import { abandonMockExam, createPracticeSession, getPracticeSession, saveExamDraft, settleExpiredMockExams, submitMockExam, submitPracticeAnswer } from "../../lib/server/practice-service";
 import { createSession, findSessionUser, revokeSession, revokeUserSessions } from "../../lib/server/session";
 import { RADIO_COURSE_ID } from "../../lib/domain/course";
 
@@ -417,6 +417,37 @@ describe("production database foundation", () => {
     expect(reloaded?.questions.map((question) => ({ id: question.id, options: question.options }))).toEqual(session.questions.map((question) => ({ id: question.id, options: question.options })));
     expect(submission).toMatchObject({ correctCount: 1, total: 2, passingCount: 1, passed: true });
     expect(await prisma.practiceSession.findUniqueOrThrow({ where: { id: session.id } })).toMatchObject({ status: "COMPLETED", durationMinutesSnapshot: 40, passingCountSnapshot: 1, correctCount: 1 });
+  });
+
+  it("settles expired mock exams from drafts without exposing answer keys", async () => {
+    const { user, level, question } = await createBaseRecords();
+    await prisma.examRule.create({ data: { levelId: level.id, singleCount: 1, multipleCount: 0, durationMinutes: 40, passingCount: 1 } });
+    const session = await createPracticeSession(user.id, { mode: "exam", levelCode: level.code });
+    await saveExamDraft(user.id, session.id, { answers: { [question.id]: ["A"] }, currentIndex: 0, version: 0 });
+    await prisma.practiceSession.update({ where: { id: session.id }, data: { expiresAt: new Date(Date.now() - 1_000) } });
+
+    const [firstScan, secondScan] = await Promise.all([settleExpiredMockExams(), settleExpiredMockExams()]);
+    const reloaded = await getPracticeSession(user.id, session.id);
+    const replay = await submitMockExam(user.id, session.id, []);
+
+    expect(firstScan + secondScan).toBeGreaterThanOrEqual(1);
+    expect(reloaded?.initialResults).toEqual({});
+    expect(reloaded?.examResult).toMatchObject({ correctCount: 1, total: 1, passed: true });
+    expect(JSON.stringify(reloaded)).not.toContain("correctOptionIds");
+    expect(replay).toEqual(reloaded?.examResult);
+    expect(await prisma.practiceAnswer.count({ where: { courseId: RADIO_COURSE_ID, sessionId: session.id } })).toBe(1);
+  });
+
+  it("abandons an active mock exam without grading it or updating wrong questions", async () => {
+    const { user, level, question } = await createBaseRecords();
+    await prisma.examRule.create({ data: { levelId: level.id, singleCount: 1, multipleCount: 0, durationMinutes: 40, passingCount: 1 } });
+    const session = await createPracticeSession(user.id, { mode: "exam", levelCode: level.code });
+    await saveExamDraft(user.id, session.id, { answers: { [question.id]: ["B"] }, currentIndex: 0, version: 0 });
+
+    await expect(abandonMockExam(user.id, session.id)).resolves.toEqual({ abandoned: true });
+    expect(await prisma.practiceSession.findUniqueOrThrow({ where: { id: session.id } })).toMatchObject({ status: "ABANDONED", correctCount: 0 });
+    expect(await prisma.practiceAnswer.count({ where: { courseId: RADIO_COURSE_ID, sessionId: session.id } })).toBe(0);
+    expect(await prisma.wrongQuestion.count({ where: { courseId: RADIO_COURSE_ID, userId: user.id, questionId: question.id } })).toBe(0);
   });
 
   it("deletes unused imported questions, archives referenced ones, and prevents repeated revert", async () => {

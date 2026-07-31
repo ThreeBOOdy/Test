@@ -6,7 +6,7 @@ import { parseJsonStringArray } from "@/lib/domain/json-string-array";
 import { selectPracticeQuestions, selectPrioritizedRandomQuestions, shuffle, sortQuestionsByBankNumber } from "@/lib/domain/practice-engine";
 import { createQuestionSnapshot, gradeQuestionSnapshot, toPublicQuestionSnapshot, type QuestionSnapshot } from "@/lib/domain/practice-snapshot";
 import { advanceWrongQuestionMastery } from "@/lib/domain/wrong-question-mastery";
-import type { ExamRule, PracticeMode, PublicAnswerResult, PublicPracticeSession, Question, QuestionOption } from "@/lib/domain/types";
+import type { ExamRule, PracticeMode, PublicAnswerResult, PublicExamResult, PublicPracticeSession, Question, QuestionOption } from "@/lib/domain/types";
 import { RADIO_COURSE_ID } from "@/lib/domain/course";
 
 type CreatePracticeRequest =
@@ -98,6 +98,7 @@ async function persistPracticeSession(userId: string, mode: PracticeMode, levelI
 }
 
 export async function getPracticeSession(userId: string, sessionId: string): Promise<PublicPracticeSession | null> {
+  await settleExpiredMockExamForSession(userId, sessionId);
   const session = await prisma.practiceSession.findFirst({ where: { id: sessionId, courseId: RADIO_COURSE_ID, userId }, include: { questions: { orderBy: { position: "asc" } }, answers: { where: { courseId: RADIO_COURSE_ID } }, examDraft: true } });
   if (!session) return null;
   const snapshots = session.questions.map((item) => item.snapshot as unknown as QuestionSnapshot);
@@ -110,12 +111,15 @@ export async function getPracticeSession(userId: string, sessionId: string): Pro
     ? { durationMinutes: session.durationMinutesSnapshot, passingCount: session.passingCountSnapshot, expiresAt: session.expiresAt }
     : undefined;
   const draft = session.mode === "MOCK_EXAM" && session.examDraft ? toPublicDraft(session.examDraft.answers, session.examDraft.currentIndex, session.examDraft.version, session.examDraft.updatedAt) : undefined;
-  return toPublicSession(session, snapshots, results, exam, draft);
+  const examResult = session.mode === "MOCK_EXAM" && session.status === "COMPLETED" && session.completedAt
+    ? toPublicExamResult(session.correctCount, session.questions.length, session.passingCountSnapshot ?? session.questions.length, session.completedAt)
+    : undefined;
+  return toPublicSession(session, snapshots, results, exam, draft, examResult);
 }
 
 export async function saveExamDraft(userId: string, sessionId: string, input: { answers: Record<string, string[]>; currentIndex: number; version: number }) {
   return prisma.$transaction(async (tx) => {
-    const locked = await tx.practiceSession.updateMany({ where: { id: sessionId, courseId: RADIO_COURSE_ID, userId, status: "IN_PROGRESS" }, data: { currentIndex: { increment: 0 } } });
+    const locked = await tx.practiceSession.updateMany({ where: { id: sessionId, courseId: RADIO_COURSE_ID, userId, status: "IN_PROGRESS", OR: [{ expiresAt: null }, { expiresAt: { gt: new Date() } }] }, data: { currentIndex: { increment: 0 } } });
     if (locked.count !== 1) throw new ApiError("模拟考试已经结束", 409);
     const session = await tx.practiceSession.findFirst({ where: { id: sessionId, courseId: RADIO_COURSE_ID, userId }, include: { questions: true, answers: true, examDraft: true } });
     if (!session) throw new ApiError("模拟考试不存在", 404);
@@ -178,32 +182,79 @@ export async function submitPracticeAnswer(userId: string, sessionId: string, qu
 }
 
 export async function submitMockExam(userId: string, sessionId: string, submittedAnswers: { questionId: string; selectedOptionIds: string[] }[]) {
+  return settleMockExam(userId, sessionId, submittedAnswers, new Date());
+}
+
+export async function settleExpiredMockExams(now = new Date()) {
+  const expired = await prisma.practiceSession.findMany({
+    where: { courseId: RADIO_COURSE_ID, mode: "MOCK_EXAM", status: "IN_PROGRESS", expiresAt: { lte: now } },
+    select: { id: true, userId: true },
+  });
+  const settlements = await Promise.allSettled(expired.map((session) => settleMockExam(session.userId, session.id, undefined, now)));
+  return settlements.filter((settlement) => settlement.status === "fulfilled").length;
+}
+
+export async function abandonMockExam(userId: string, sessionId: string) {
+  const now = new Date();
+  const session = await prisma.practiceSession.findFirst({ where: { id: sessionId, courseId: RADIO_COURSE_ID, userId }, select: { mode: true, status: true, expiresAt: true } });
+  if (!session) throw new ApiError("模拟考试不存在", 404);
+  if (session.mode !== "MOCK_EXAM") throw new ApiError("当前会话不是模拟考试", 409);
+  if (session.status === "COMPLETED") return { abandoned: false, result: await getCompletedExamResult(userId, sessionId) };
+  if (session.status === "ABANDONED") return { abandoned: true };
+  if (session.expiresAt && session.expiresAt <= now) return { abandoned: false, result: await settleMockExam(userId, sessionId, undefined, now) };
+
+  const abandoned = await prisma.$transaction(async (tx) => {
+    const update = await tx.practiceSession.updateMany({ where: { id: sessionId, courseId: RADIO_COURSE_ID, userId, mode: "MOCK_EXAM", status: "IN_PROGRESS", expiresAt: { gt: now } }, data: { status: "ABANDONED", completedAt: now } });
+    if (update.count !== 1) return false;
+    await tx.examDraft.deleteMany({ where: { courseId: RADIO_COURSE_ID, sessionId } });
+    return true;
+  });
+  if (abandoned) return { abandoned: true };
+  return { abandoned: false, result: await settleMockExam(userId, sessionId, undefined, now) };
+}
+
+async function settleExpiredMockExamForSession(userId: string, sessionId: string) {
+  const session = await prisma.practiceSession.findFirst({ where: { id: sessionId, courseId: RADIO_COURSE_ID, userId, mode: "MOCK_EXAM", status: "IN_PROGRESS", expiresAt: { lte: new Date() } }, select: { id: true } });
+  if (session) await settleMockExam(userId, sessionId, undefined, new Date());
+}
+
+async function settleMockExam(userId: string, sessionId: string, submittedAnswers: { questionId: string; selectedOptionIds: string[] }[] | undefined, now: Date): Promise<PublicExamResult> {
   return prisma.$transaction(async (tx) => {
+    const claimed = await tx.practiceSession.updateMany({ where: { id: sessionId, courseId: RADIO_COURSE_ID, userId, mode: "MOCK_EXAM", status: "IN_PROGRESS" }, data: { status: "COMPLETED" } });
     const session = await tx.practiceSession.findFirst({ where: { id: sessionId, courseId: RADIO_COURSE_ID, userId }, include: { questions: { orderBy: { position: "asc" } }, answers: { where: { courseId: RADIO_COURSE_ID } }, examDraft: true } });
     if (!session) throw new ApiError("模拟考试不存在", 404);
     if (session.mode !== "MOCK_EXAM") throw new ApiError("当前会话不是模拟考试", 409);
-    if (session.status !== "IN_PROGRESS" || session.answers.length) throw new ApiError("模拟考试已经交卷", 409);
-    const answerMap = new Map(submittedAnswers.map((answer) => [answer.questionId, answer.selectedOptionIds]));
-    if (answerMap.size !== submittedAnswers.length) throw new ApiError("答卷中包含重复题目");
+    if (claimed.count !== 1) {
+      if (session.status === "COMPLETED" && session.completedAt) return toPublicExamResult(session.correctCount, session.questions.length, session.passingCountSnapshot ?? session.questions.length, session.completedAt);
+      throw new ApiError("模拟考试已经结束", 409);
+    }
+    const useDraftAnswers = !submittedAnswers || (session.expiresAt !== null && session.expiresAt <= now);
+    const draftAnswers = session.examDraft ? parseExamDraftAnswers(session.examDraft.answers) : {};
+    const effectiveAnswers = useDraftAnswers ? Object.entries(draftAnswers).map(([questionId, selectedOptionIds]) => ({ questionId, selectedOptionIds })) : submittedAnswers;
+    const answerMap = new Map(effectiveAnswers.map((answer) => [answer.questionId, answer.selectedOptionIds]));
+    if (answerMap.size !== effectiveAnswers.length) throw new ApiError("答卷中包含重复题目");
     const sessionQuestionIds = new Set(session.questions.map((item) => item.questionId));
-    if (submittedAnswers.some((answer) => !sessionQuestionIds.has(answer.questionId))) throw new ApiError("答卷中包含无效题目");
+    if (effectiveAnswers.some((answer) => !sessionQuestionIds.has(answer.questionId))) throw new ApiError("答卷中包含无效题目");
 
     const graded = session.questions.map((item) => {
       const snapshot = item.snapshot as unknown as QuestionSnapshot;
       const selectedOptionIds = answerMap.get(item.questionId) ?? [];
       validateSelection(snapshot, selectedOptionIds, true);
-      return { questionId: item.questionId, snapshot, selectedOptionIds, isCorrect: gradeQuestionSnapshot(snapshot, selectedOptionIds) };
+      return { questionId: item.questionId, selectedOptionIds, isCorrect: gradeQuestionSnapshot(snapshot, selectedOptionIds) };
     });
     await tx.practiceAnswer.createMany({ data: graded.map((answer) => ({ courseId: RADIO_COURSE_ID, sessionId, questionId: answer.questionId, selectedOptionIds: answer.selectedOptionIds as Prisma.InputJsonValue, isCorrect: answer.isCorrect })) });
     const correctCount = graded.filter((answer) => answer.isCorrect).length;
-    const completedAt = new Date();
-    await tx.practiceSession.update({ where: { id: sessionId }, data: { status: "COMPLETED", currentIndex: graded.length, correctCount, completedAt } });
+    await tx.practiceSession.update({ where: { id: sessionId }, data: { status: "COMPLETED", currentIndex: graded.length, correctCount, completedAt: now } });
     await settleWrongQuestionMastery(tx, userId, sessionId);
     await tx.examDraft.deleteMany({ where: { courseId: RADIO_COURSE_ID, sessionId } });
-    const results = Object.fromEntries(graded.map((answer) => [answer.questionId, { isCorrect: answer.isCorrect, correctOptionIds: answer.snapshot.correctOptionIds, selectedOptionIds: answer.selectedOptionIds, answeredCount: graded.length, correctCount } satisfies PublicAnswerResult]));
-    const passingCount = session.passingCountSnapshot ?? graded.length;
-    return { results, correctCount, total: graded.length, passingCount, passed: correctCount >= passingCount, completedAt: completedAt.toISOString() };
+    return toPublicExamResult(correctCount, graded.length, session.passingCountSnapshot ?? graded.length, now);
   });
+}
+
+async function getCompletedExamResult(userId: string, sessionId: string): Promise<PublicExamResult> {
+  const session = await prisma.practiceSession.findFirst({ where: { id: sessionId, courseId: RADIO_COURSE_ID, userId, mode: "MOCK_EXAM", status: "COMPLETED" }, include: { questions: true } });
+  if (!session || !session.completedAt) throw new ApiError("模拟考试已经结束", 409);
+  return toPublicExamResult(session.correctCount, session.questions.length, session.passingCountSnapshot ?? session.questions.length, session.completedAt);
 }
 
 async function findQuestionRecords(levelId: string, knowledgePointId?: string, knowledgePath?: string) {
@@ -246,13 +297,21 @@ function createSnapshots(records: QuestionRecord[], questions: Question[]) {
   });
 }
 
-function toPublicSession(session: { id: string; mode: PracticeMode }, snapshots: QuestionSnapshot[], results: Record<string, PublicAnswerResult>, exam?: { durationMinutes: number; passingCount: number; expiresAt: Date }, draft?: PublicPracticeSession["draft"]): PublicPracticeSession {
-  return { id: session.id, mode: session.mode, title: sessionTitle(session.mode, snapshots), total: snapshots.length, questions: snapshots.map(toPublicQuestionSnapshot), initialResults: results, ...(exam ? { exam: { durationMinutes: exam.durationMinutes, passingCount: exam.passingCount, expiresAt: exam.expiresAt.toISOString() } } : {}), ...(draft ? { draft } : {}) };
+function toPublicSession(session: { id: string; mode: PracticeMode; status: "IN_PROGRESS" | "COMPLETED" | "ABANDONED" }, snapshots: QuestionSnapshot[], results: Record<string, PublicAnswerResult>, exam?: { durationMinutes: number; passingCount: number; expiresAt: Date }, draft?: PublicPracticeSession["draft"], examResult?: PublicExamResult): PublicPracticeSession {
+  return { id: session.id, mode: session.mode, status: session.status, title: sessionTitle(session.mode, snapshots), total: snapshots.length, questions: snapshots.map(toPublicQuestionSnapshot), initialResults: session.mode === "MOCK_EXAM" ? {} : results, ...(exam ? { exam: { durationMinutes: exam.durationMinutes, passingCount: exam.passingCount, expiresAt: exam.expiresAt.toISOString() } } : {}), ...(draft ? { draft } : {}), ...(examResult ? { examResult } : {}) };
 }
 
 function toPublicDraft(answers: unknown, currentIndex: number, version: number, updatedAt: Date): NonNullable<PublicPracticeSession["draft"]> {
+  return { answers: parseExamDraftAnswers(answers), currentIndex, version, updatedAt: updatedAt.toISOString() };
+}
+
+function parseExamDraftAnswers(answers: unknown): Record<string, string[]> {
   if (!answers || typeof answers !== "object" || Array.isArray(answers)) throw new ApiError("考试草稿数据损坏", 500);
-  return { answers: Object.fromEntries(Object.entries(answers).map(([questionId, selectedOptionIds]) => [questionId, parseJsonStringArray(selectedOptionIds, "draft.answers")])), currentIndex, version, updatedAt: updatedAt.toISOString() };
+  return Object.fromEntries(Object.entries(answers).map(([questionId, selectedOptionIds]) => [questionId, parseJsonStringArray(selectedOptionIds, "draft.answers")]));
+}
+
+function toPublicExamResult(correctCount: number, total: number, passingCount: number, completedAt: Date): PublicExamResult {
+  return { correctCount, total, passingCount, passed: correctCount >= passingCount, completedAt: completedAt.toISOString() };
 }
 
 function validateSelection(snapshot: QuestionSnapshot, selectedOptionIds: string[], allowEmpty: boolean) {

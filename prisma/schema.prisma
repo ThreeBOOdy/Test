@@ -412,6 +412,7 @@ model PracticeSession {
 
   @@unique([courseId, id])
   @@index([userId, status, startedAt])
+  @@index([mode, status, expiresAt])
 }
 
 model ExamDraft {

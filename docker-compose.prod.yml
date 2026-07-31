@@ -69,6 +69,20 @@ services:
       timeout: 5s
       retries: 10
 
+  exam-settlement-worker:
+    build:
+      context: .
+      target: builder
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: ${DATABASE_URL}
+      NODE_ENV: production
+    command: ["npx", "tsx", "scripts/exam-settlement-worker.ts"]
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    networks:
+      - backend
   proxy:
     image: public.ecr.aws/docker/library/caddy:2-alpine
     restart: unless-stopped

@@ -106,9 +106,18 @@ export type PublicExamDraft = {
   updatedAt: string;
 };
 
+export type PublicExamResult = {
+  correctCount: number;
+  total: number;
+  passingCount: number;
+  passed: boolean;
+  completedAt: string;
+};
+
 export type PublicPracticeSession = {
   id: string;
   mode: PracticeMode;
+  status: "IN_PROGRESS" | "COMPLETED" | "ABANDONED";
   title: string;
   total: number;
   questions: PublicQuestion[];
@@ -119,4 +128,5 @@ export type PublicPracticeSession = {
     passingCount: number;
     expiresAt: string;
   };
+  examResult?: PublicExamResult;
 };

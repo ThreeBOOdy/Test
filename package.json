@@ -11,6 +11,7 @@
     "test": "vitest run",
     "test:integration": "vitest run --config vitest.integration.config.ts",
     "test:e2e": "playwright test",
+    "exam:settlement-worker": "tsx scripts/exam-settlement-worker.ts",
     "test:watch": "vitest",
     "backup": "tsx scripts/backup-cli.ts backup",
     "backup:cleanup": "tsx scripts/backup-cli.ts cleanup",
