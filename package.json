@@ -23,7 +23,8 @@
     "security:rotate-student-data": "tsx scripts/rotate-student-data-keys.ts",
     "db:generate": "prisma generate",
     "db:migrate": "prisma migrate dev",
-    "db:seed": "tsx prisma/seed.ts"
+    "db:seed": "tsx prisma/seed.ts",
+    "data-retention:cleanup": "tsx scripts/data-retention-maintenance.ts"
   },
   "dependencies": {
     "@prisma/adapter-mariadb": "7.9.0",

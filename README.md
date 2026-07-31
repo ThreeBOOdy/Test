@@ -676,6 +676,9 @@ $env:BACKUP_MANIFEST_AUTH_KEY = <从外部密钥管理系统读取的另一份 B
 
 Windows 任务计划程序或其他调度器应每日运行 `backup.ps1`，保留其非零退出码，并采集 `logs/backup-operations.jsonl`。若离线介质并非每天挂载，可省略 `-OfflineDirectory`，并在介质接入窗口单独运行离线复制脚本。
 
+### 临时数据清理
+
+Windows 任务计划程序还应每天运行 `.\scripts\data-retention.ps1`，保留 JSON 输出和非零退出码。该任务会分别清理过期会话、激活凭据、学生和题库导入预检，以及已结算考试草稿；每个类别都会写入成功或失败审计，单类失败不会阻断其他类别或下次重试。具体保留期限、审计字段和禁止清理的永久数据见 `docs/operations/data-retention.md`。
 
 ### 恢复
 
