@@ -337,10 +337,45 @@ export async function rejectRegistration(administratorId: string, studentId: str
   });
 }
 
-export async function listStudents(input: { status?: "PENDING" | "ACTIVE" | "REJECTED"; search?: string } = {}) {
+function positiveInteger(value: number | undefined, fallback: number, maximum = Number.MAX_SAFE_INTEGER) {
+  return Number.isInteger(value) && value! > 0 ? Math.min(value!, maximum) : fallback;
+}
+
+export async function listStudents(input: { page?: number; pageSize?: number; status?: "PENDING" | "ACTIVE" | "REJECTED"; search?: string } = {}) {
+  const page = positiveInteger(input.page, 1);
+  const pageSize = positiveInteger(input.pageSize, 20, 100);
   const search = input.search?.trim();
-  const students = await prisma.user.findMany({ where: { role: "STUDENT", ...(input.status ? { studentStatus: input.status } : {}), ...(search ? { OR: [{ username: { contains: search } }, { displayName: { contains: search } }, { school: { contains: search } }, { phoneLast4: { contains: search } }] } : {}) }, include: { grade: true }, orderBy: [{ submittedAt: "asc" }, { createdAt: "asc" }] });
-  return students.map((student) => ({ id: student.id, username: student.username, realName: student.realName ?? student.displayName, displayName: student.displayName, gender: student.gender, school: student.school, grade: student.grade, nationalIdMasked: student.nationalIdLast4 ? `${"*".repeat(14)}${student.nationalIdLast4}` : null, phoneMasked: student.phoneLast4 ? `***-***-${student.phoneLast4}` : null, registrationSource: student.registrationSource, studentStatus: student.studentStatus, enabled: student.enabled, validFrom: dateOnly(student.validFrom), validUntil: dateOnly(student.validUntil), isLongTerm: student.isLongTerm, createdAt: student.createdAt.toISOString() }));
+  const where = {
+    role: "STUDENT" as const,
+    ...(input.status ? { studentStatus: input.status } : {}),
+    ...(search ? { OR: [{ username: { contains: search } }, { displayName: { contains: search } }, { realName: { contains: search } }, { school: { contains: search } }, { phoneLast4: { contains: search } }] } : {}),
+  };
+  return prisma.$transaction(async (tx) => {
+    const total = await tx.user.count({ where });
+    const totalPages = Math.max(1, Math.ceil(total / pageSize));
+    const currentPage = Math.min(page, totalPages);
+    const students = await tx.user.findMany({ where, include: { grade: true }, orderBy: [{ submittedAt: "asc" }, { createdAt: "asc" }, { id: "asc" }], skip: (currentPage - 1) * pageSize, take: pageSize });
+    return {
+      items: students.map((student) => ({
+        id: student.id,
+        username: student.username,
+        realName: student.realName ?? student.displayName,
+        gender: student.gender,
+        school: student.school,
+        grade: student.grade ? { name: student.grade.name } : null,
+        nationalIdMasked: student.nationalIdLast4 ? `**************${student.nationalIdLast4}` : null,
+        phoneMasked: student.phoneLast4 ? `***-***-${student.phoneLast4}` : null,
+        registrationSource: student.registrationSource,
+        studentStatus: student.studentStatus,
+        enabled: student.enabled,
+        activationRequired: student.activationRequired,
+        validFrom: dateOnly(student.validFrom),
+        validUntil: dateOnly(student.validUntil),
+        isLongTerm: student.isLongTerm,
+      })),
+      pagination: { page: currentPage, pageSize, total, totalPages },
+    };
+  });
 }
 
 export async function listRegistrationReviews(input: { page?: number; pageSize?: number; status?: "PENDING" | "ACTIVE" | "REJECTED"; search?: string } = {}) {

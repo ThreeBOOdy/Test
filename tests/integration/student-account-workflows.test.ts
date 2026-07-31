@@ -7,6 +7,7 @@ import {
   approveRegistrations,
   getStudentDetail,
   listRegistrationReviews,
+  listStudents,
   getRegistrationStatus,
   registerStudent,
   rejectRegistration,
@@ -175,6 +176,58 @@ describe("student account workflows", () => {
     expect(result.items[0]?.realName).toBe("分页学生21");
   });
 
+  it("paginates administrator student accounts with masked sensitive fields", async () => {
+    const { grade } = await setup();
+    for (let index = 1; index <= 21; index += 1) {
+      const id = `admin-list-person-${index}`;
+      await prisma.radioPerson.create({ data: { id, username: `admin-list-${index}`, name: `管理分页学生${index}`, profile: "测试人物" } });
+      await prisma.user.create({ data: {
+        username: `admin-list-${index}`,
+        displayName: `管理分页学生${index}`,
+        realName: `管理分页学生${index}`,
+        passwordHash: "stored-password-hash",
+        role: "STUDENT",
+        studentStatus: "ACTIVE",
+        registrationSource: "EXCEL_IMPORT",
+        nationalIdEncrypted: "stored-national-id",
+        nationalIdHash: `national-${index}`,
+        nationalIdLast4: String(index).padStart(4, "0"),
+        school: "分页学校",
+        gradeId: grade.id,
+        phoneEncrypted: "stored-phone",
+        phoneHash: `phone-${index}`,
+        phoneLast4: String(index).padStart(4, "0"),
+        validFrom: new Date("2026-07-31T00:00:00.000Z"),
+        validUntil: new Date("2027-07-31T00:00:00.000Z"),
+        radioPersonId: id,
+        activationRequired: index === 21,
+      } });
+    }
+
+    const result = await listStudents({ page: 2, pageSize: 500, status: "ACTIVE", search: "管理分页学生" });
+
+    expect(result.pagination).toEqual({ page: 1, pageSize: 100, total: 21, totalPages: 1 });
+    expect(result.items).toHaveLength(21);
+    expect(result.items[20]).toMatchObject({ realName: "管理分页学生21", username: "admin-list-21", registrationSource: "EXCEL_IMPORT", studentStatus: "ACTIVE", activationRequired: true, nationalIdMasked: "**************0021", phoneMasked: "***-***-0021" });
+    expect(result.items[0]).not.toHaveProperty("passwordHash");
+    expect(result.items[0]).not.toHaveProperty("nationalIdEncrypted");
+    expect(result.items[0]).not.toHaveProperty("phoneEncrypted");
+  });
+
+  it("defaults administrator student lists to twenty results and honors page filters", async () => {
+    const { grade } = await setup();
+    for (let index = 1; index <= 21; index += 1) {
+      const id = `admin-page-person-${index}`;
+      await prisma.radioPerson.create({ data: { id, username: `admin-page-${index}`, name: `筛选学生${index}`, profile: "测试人物" } });
+      await prisma.user.create({ data: { username: `admin-page-${index}`, displayName: `筛选学生${index}`, realName: `筛选学生${index}`, passwordHash: "stored-password-hash", role: "STUDENT", studentStatus: "ACTIVE", registrationSource: "EXCEL_IMPORT", school: "筛选学校", gradeId: grade.id, radioPersonId: id } });
+    }
+
+    const result = await listStudents({ page: 2, status: "ACTIVE", search: "筛选学生" });
+
+    expect(result.pagination).toEqual({ page: 2, pageSize: 20, total: 21, totalPages: 2 });
+    expect(result.items).toHaveLength(1);
+    expect(result.items[0]?.realName).toBe("筛选学生21");
+  });
   it("rolls back every approval when a batch contains a stale application", async () => {
     const { grade, administrator } = await setup();
     const first = await registerStudent({ ...profile, gradeId: grade.id });
