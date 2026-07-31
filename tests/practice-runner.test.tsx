@@ -32,6 +32,7 @@ describe("PracticeRunner", () => {
     expect(screen.getByRole("radio", { name: /每秒三十万千米/ })).toBeChecked();
     fireEvent.keyDown(window, { key: "Enter" });
     await waitFor(() => expect(fetch).toHaveBeenCalledTimes(1));
+    expect(JSON.parse(String(vi.mocked(fetch).mock.calls[0]?.[1]?.body))).toMatchObject({ questionId: "question-1", selectedOptionIds: ["A"], idempotencyKey: expect.any(String) });
   });
 
   it("keeps a draft while navigating", async () => {
@@ -69,6 +70,7 @@ describe("PracticeRunner", () => {
     await user.click(screen.getAllByRole("button", { name: "提交答案" })[0]);
 
     expect(await screen.findByText("回答正确", { exact: true })).toBeInTheDocument();
+    expect(screen.queryByText(/解析功能将在教师审核后开放/)).not.toBeInTheDocument();
     expect(screen.getAllByRole("button", { name: "查看结果" })[0]).toBeInTheDocument();
     expect(screen.queryByRole("heading", { name: "训练完成" })).not.toBeInTheDocument();
 

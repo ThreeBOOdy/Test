@@ -111,23 +111,37 @@ export async function getPracticeSession(userId: string, sessionId: string): Pro
   return toPublicSession(session, snapshots, results, exam);
 }
 
-export async function submitPracticeAnswer(userId: string, sessionId: string, questionId: string, selectedOptionIds: string[]) {
-  return prisma.$transaction(async (tx) => {
-    const sessionQuestion = await tx.practiceSessionQuestion.findUnique({ where: { courseId_sessionId_questionId: { courseId: RADIO_COURSE_ID, sessionId, questionId } }, include: { session: true } });
-    if (!sessionQuestion || sessionQuestion.session.courseId !== RADIO_COURSE_ID || sessionQuestion.session.userId !== userId) throw new ApiError("题目不属于当前练习", 404);
-    if (sessionQuestion.session.mode === "MOCK_EXAM") throw new ApiError("模拟考试请统一交卷", 409);
-    if (sessionQuestion.session.status !== "IN_PROGRESS") throw new ApiError("练习已经结束", 409);
-    const existing = await tx.practiceAnswer.findUnique({ where: { courseId_sessionId_questionId: { courseId: RADIO_COURSE_ID, sessionId, questionId } } });
-    if (existing) throw new ApiError("本题已经提交，不能重复修改", 409);
-    const snapshot = sessionQuestion.snapshot as unknown as QuestionSnapshot;
-    validateSelection(snapshot, selectedOptionIds, false);
-    const isCorrect = gradeQuestionSnapshot(snapshot, selectedOptionIds);
-    await tx.practiceAnswer.create({ data: { courseId: RADIO_COURSE_ID, sessionId, questionId, selectedOptionIds: selectedOptionIds as Prisma.InputJsonValue, isCorrect } });
-    await updateWrongQuestion(tx, userId, questionId, isCorrect);
-    const [answeredCount, correctCount, total] = await Promise.all([tx.practiceAnswer.count({ where: { courseId: RADIO_COURSE_ID, sessionId } }), tx.practiceAnswer.count({ where: { courseId: RADIO_COURSE_ID, sessionId, isCorrect: true } }), tx.practiceSessionQuestion.count({ where: { courseId: RADIO_COURSE_ID, sessionId } })]);
-    await tx.practiceSession.update({ where: { id: sessionId }, data: { currentIndex: answeredCount, correctCount, ...(answeredCount === total ? { status: "COMPLETED", completedAt: new Date() } : {}) } });
-    return { isCorrect, correctOptionIds: snapshot.correctOptionIds, selectedOptionIds, answeredCount, correctCount };
-  });
+export async function submitPracticeAnswer(userId: string, sessionId: string, questionId: string, selectedOptionIds: string[], idempotencyKey: string) {
+  try {
+    return await prisma.$transaction(async (tx) => {
+      const sessionQuestion = await tx.practiceSessionQuestion.findUnique({ where: { courseId_sessionId_questionId: { courseId: RADIO_COURSE_ID, sessionId, questionId } }, include: { session: true } });
+      if (!sessionQuestion || sessionQuestion.session.courseId !== RADIO_COURSE_ID || sessionQuestion.session.userId !== userId) throw new ApiError("题目不属于当前练习", 404);
+      if (sessionQuestion.session.mode === "MOCK_EXAM") throw new ApiError("模拟考试请统一交卷", 409);
+      const existing = await tx.practiceAnswer.findUnique({ where: { courseId_sessionId_questionId: { courseId: RADIO_COURSE_ID, sessionId, questionId } } });
+      const existingKey = await tx.practiceAnswer.findFirst({ where: { courseId: RADIO_COURSE_ID, sessionId, idempotencyKey } });
+      if (existingKey && existingKey.questionId !== questionId) throw new ApiError("答题请求标识已用于其他题目", 409);
+      if (existing) return replayOrRejectPracticeAnswer(existing, snapshotFromSessionQuestion(sessionQuestion), selectedOptionIds);
+      if (sessionQuestion.session.status !== "IN_PROGRESS") throw new ApiError("练习已经结束", 409);
+      const snapshot = sessionQuestion.snapshot as unknown as QuestionSnapshot;
+      validateSelection(snapshot, selectedOptionIds, false);
+      const isCorrect = gradeQuestionSnapshot(snapshot, selectedOptionIds);
+      const answeredBefore = await tx.practiceAnswer.count({ where: { courseId: RADIO_COURSE_ID, sessionId } });
+      const correctBefore = await tx.practiceAnswer.count({ where: { courseId: RADIO_COURSE_ID, sessionId, isCorrect: true } });
+      const answeredCount = answeredBefore + 1;
+      const correctCount = correctBefore + Number(isCorrect);
+      await tx.practiceAnswer.create({ data: { courseId: RADIO_COURSE_ID, sessionId, questionId, selectedOptionIds: selectedOptionIds as Prisma.InputJsonValue, idempotencyKey, isCorrect, answeredCountAtSubmission: answeredCount, correctCountAtSubmission: correctCount } });
+      await updateWrongQuestion(tx, userId, questionId, isCorrect);
+      const total = await tx.practiceSessionQuestion.count({ where: { courseId: RADIO_COURSE_ID, sessionId } });
+      await tx.practiceSession.update({ where: { id: sessionId }, data: { currentIndex: answeredCount, correctCount, ...(answeredCount === total ? { status: "COMPLETED", completedAt: new Date() } : {}) } });
+      return { isCorrect, correctOptionIds: snapshot.correctOptionIds, selectedOptionIds, answeredCount, correctCount };
+    });
+  } catch (error) {
+    if (!(error instanceof Prisma.PrismaClientKnownRequestError) || error.code !== "P2002") throw error;
+    const existing = await prisma.practiceAnswer.findUnique({ where: { courseId_sessionId_questionId: { courseId: RADIO_COURSE_ID, sessionId, questionId } } });
+    const sessionQuestion = await prisma.practiceSessionQuestion.findUnique({ where: { courseId_sessionId_questionId: { courseId: RADIO_COURSE_ID, sessionId, questionId } }, include: { session: true } });
+    if (!existing || !sessionQuestion || sessionQuestion.session.userId !== userId) throw error;
+    return replayOrRejectPracticeAnswer(existing, snapshotFromSessionQuestion(sessionQuestion), selectedOptionIds);
+  }
 }
 
 export async function submitMockExam(userId: string, sessionId: string, submittedAnswers: { questionId: string; selectedOptionIds: string[] }[]) {
@@ -207,6 +221,21 @@ function validateSelection(snapshot: QuestionSnapshot, selectedOptionIds: string
   if (snapshot.type === "SINGLE_CHOICE" && selectedOptionIds.length > 1) throw new ApiError("单选题只能选择一个答案");
   const validOptions = new Set(snapshot.options.map((option) => option.id));
   if (new Set(selectedOptionIds).size !== selectedOptionIds.length || selectedOptionIds.some((optionId) => !validOptions.has(optionId))) throw new ApiError("答案中包含无效选项");
+}
+
+function replayOrRejectPracticeAnswer(existing: { selectedOptionIds: unknown; isCorrect: boolean; answeredCountAtSubmission: number | null; correctCountAtSubmission: number | null }, snapshot: QuestionSnapshot, selectedOptionIds: string[]): PublicAnswerResult {
+  const acceptedOptionIds = parseJsonStringArray(existing.selectedOptionIds, "selectedOptionIds");
+  if (!hasSameOptionIds(acceptedOptionIds, selectedOptionIds)) throw new ApiError("本题答案已接受，不能覆盖", 409);
+  if (existing.answeredCountAtSubmission === null || existing.correctCountAtSubmission === null) throw new ApiError("本题答案缺少可重放的结算结果", 409);
+  return { isCorrect: existing.isCorrect, correctOptionIds: snapshot.correctOptionIds, selectedOptionIds: acceptedOptionIds, answeredCount: existing.answeredCountAtSubmission, correctCount: existing.correctCountAtSubmission };
+}
+
+function snapshotFromSessionQuestion(sessionQuestion: { snapshot: unknown }) {
+  return sessionQuestion.snapshot as QuestionSnapshot;
+}
+
+function hasSameOptionIds(left: string[], right: string[]) {
+  return left.length === right.length && new Set(left).size === left.length && left.every((optionId) => right.includes(optionId));
 }
 
 async function updateWrongQuestion(tx: Prisma.TransactionClient, userId: string, questionId: string, isCorrect: boolean) {

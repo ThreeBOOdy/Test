@@ -126,7 +126,7 @@ describe("production database foundation", () => {
     const snapshot = { questionId: question.id, levelId: level.id, knowledgePointId: point.id, stem: longStem, type: "SINGLE_CHOICE" as const, optionCount: 2, correctOptionCount: 1, selectionSpec: "2选1", options: [{ id: "A", text: "A" }, { id: "B", text: "B" }], correctOptionIds: ["A"], levelCode: "A", knowledgeName: "Point" };
     const session = await prisma.practiceSession.create({ data: { userId: user.id, mode: "LEVEL_COMPREHENSIVE", levelId: level.id, singleCountSnapshot: 1, multipleCountSnapshot: 0 } });
     await prisma.practiceSessionQuestion.create({ data: { sessionId: session.id, questionId: question.id, position: 0, snapshot } });
-    await submitPracticeAnswer(user.id, session.id, question.id, ["A"]);
+    await submitPracticeAnswer(user.id, session.id, question.id, ["A"], "base-answer-key");
 
     const answer = await prisma.practiceAnswer.findUniqueOrThrow({ where: { courseId_sessionId_questionId: { courseId: RADIO_COURSE_ID, sessionId: session.id, questionId: question.id } } });
     expect(answer.selectedOptionIds).toEqual(["A"]);
@@ -263,7 +263,7 @@ describe("production database foundation", () => {
     const resumed = await getPracticeSession(user.id, created.id);
     expect(resumed?.questions[0].stem).toBe("Original");
 
-    const result = await submitPracticeAnswer(user.id, created.id, question.id, ["A"]);
+    const result = await submitPracticeAnswer(user.id, created.id, question.id, ["A"], "snapshot-answer-key");
     expect(result.isCorrect).toBe(true);
     expect(await prisma.practiceSession.findUniqueOrThrow({ where: { id: created.id } })).toMatchObject({ status: "COMPLETED", currentIndex: 1, correctCount: 1 });
   });
@@ -348,8 +348,8 @@ describe("production database foundation", () => {
     expect(session.total).toBe(20);
     expect((await prisma.practiceSession.findUniqueOrThrow({ where: { id: session.id } })).levelId).toBeNull();
     const [correctQuestion, incorrectQuestion] = session.questions;
-    await submitPracticeAnswer(user.id, session.id, correctQuestion.id, ["A"]);
-    await submitPracticeAnswer(user.id, session.id, incorrectQuestion.id, ["B"]);
+    await submitPracticeAnswer(user.id, session.id, correctQuestion.id, ["A"], "wrong-correct-key");
+    await submitPracticeAnswer(user.id, session.id, incorrectQuestion.id, ["B"], "wrong-incorrect-key");
     expect(await prisma.wrongQuestion.findUniqueOrThrow({ where: { courseId_userId_questionId: { courseId: RADIO_COURSE_ID, userId: user.id, questionId: correctQuestion.id } } })).toMatchObject({ mastered: true, wrongCount: 1 });
     expect(await prisma.wrongQuestion.findUniqueOrThrow({ where: { courseId_userId_questionId: { courseId: RADIO_COURSE_ID, userId: user.id, questionId: incorrectQuestion.id } } })).toMatchObject({ mastered: false, wrongCount: 2 });
   });
@@ -437,5 +437,53 @@ describe("production database foundation", () => {
     expect(await prisma.question.findUniqueOrThrow({ where: { id: used.id } })).toMatchObject({ status: "ARCHIVED" });
     expect(await prisma.importBatch.findUniqueOrThrow({ where: { id: batch.id } })).toMatchObject({ status: "REVERTED" });
     await expect(revertImportBatch(batch.id, teacher.id)).rejects.toMatchObject({ status: 409 });
+  });
+
+  it("replays a same-key practice answer without duplicate settlement and rejects replacement", async () => {
+    const { user, level, question } = await createBaseRecords();
+    await prisma.levelPracticeRule.create({ data: { levelId: level.id, singleCount: 1, multipleCount: 0 } });
+    const session = await createPracticeSession(user.id, { mode: "level", levelCode: level.code });
+
+    const accepted = await submitPracticeAnswer(user.id, session.id, question.id, ["A"], "retry-key");
+    const replayed = await submitPracticeAnswer(user.id, session.id, question.id, ["A"], "retry-key-retry");
+
+    expect(replayed).toEqual(accepted);
+    await expect(submitPracticeAnswer(user.id, session.id, question.id, ["B"], "replacement-key")).rejects.toMatchObject({ status: 409, message: "本题答案已接受，不能覆盖" });
+    expect(await prisma.practiceAnswer.count({ where: { sessionId: session.id } })).toBe(1);
+    expect(await prisma.wrongQuestion.count({ where: { userId: user.id, questionId: question.id } })).toBe(0);
+    await expect(prisma.practiceSession.findUniqueOrThrow({ where: { id: session.id } })).resolves.toMatchObject({ currentIndex: 1, correctCount: 1, status: "COMPLETED" });
+  });
+
+  it("settles concurrent retries of the same answer once", async () => {
+    const { user, level, question } = await createBaseRecords();
+    await prisma.levelPracticeRule.create({ data: { levelId: level.id, singleCount: 1, multipleCount: 0 } });
+    const session = await createPracticeSession(user.id, { mode: "level", levelCode: level.code });
+
+    const results = await Promise.all([
+      submitPracticeAnswer(user.id, session.id, question.id, ["A"], "concurrent-retry-key"),
+      submitPracticeAnswer(user.id, session.id, question.id, ["A"], "concurrent-retry-key"),
+    ]);
+
+    expect(results[1]).toEqual(results[0]);
+    expect(await prisma.practiceAnswer.count({ where: { sessionId: session.id } })).toBe(1);
+    expect(await prisma.practiceSession.findUniqueOrThrow({ where: { id: session.id } })).toMatchObject({ currentIndex: 1, correctCount: 1, status: "COMPLETED" });
+  });
+
+  it("accepts at most one answer when different answers race", async () => {
+    const { user, level, question } = await createBaseRecords();
+    await prisma.levelPracticeRule.create({ data: { levelId: level.id, singleCount: 1, multipleCount: 0 } });
+    const session = await createPracticeSession(user.id, { mode: "level", levelCode: level.code });
+
+    const results = await Promise.allSettled([
+      submitPracticeAnswer(user.id, session.id, question.id, ["A"], "concurrent-a"),
+      submitPracticeAnswer(user.id, session.id, question.id, ["B"], "concurrent-b"),
+    ]);
+
+    expect(results.filter((result) => result.status === "fulfilled")).toHaveLength(1);
+    expect(results.filter((result) => result.status === "rejected")).toHaveLength(1);
+    const answer = await prisma.practiceAnswer.findUniqueOrThrow({ where: { courseId_sessionId_questionId: { courseId: RADIO_COURSE_ID, sessionId: session.id, questionId: question.id } } });
+    expect(await prisma.practiceAnswer.count({ where: { sessionId: session.id } })).toBe(1);
+    expect(answer.selectedOptionIds).toEqual(expect.arrayContaining([expect.stringMatching(/^[AB]$/)]));
+    expect(await prisma.wrongQuestion.findUnique({ where: { courseId_userId_questionId: { courseId: RADIO_COURSE_ID, userId: user.id, questionId: question.id } } })).toEqual(answer.isCorrect ? null : expect.objectContaining({ wrongCount: 1, mastered: false }));
   });
 });
