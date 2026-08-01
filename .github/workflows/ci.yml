@@ -26,6 +26,8 @@ jobs:
       DATABASE_URL: mysql://practice:practice@127.0.0.1:3306/practice_ci_integration
       AUTH_SECRET: ci-auth-secret-with-at-least-thirty-two-characters
       COOKIE_SECURE: "true"
+      STUDENT_DATA_ENCRYPTION_KEY: "0ptzm8KdMeITq37BJPfH/3hQxzQErgDhfz+QfQWhxQ0="
+      STUDENT_DATA_HASH_KEY: "VWGwlcq/a14E/rFffjzAjlZab6NlPqILQxgF225Evns="
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -37,7 +39,7 @@ jobs:
       - run: npm test
       - run: npx prisma db execute --file scripts/mysql-ci-init.sql
         env:
-          DATABASE_URL: mysql://root:root-practice@127.0.0.1:3306/mysql
+          DATABASE_URL: mysql://root:root-practice@127.0.0.1:3306/practice_ci_integration
       - run: npx prisma migrate deploy
         env:
           DATABASE_URL: mysql://practice:practice@127.0.0.1:3306/practice_ci_integration
