@@ -72,7 +72,7 @@ export async function commitImportBatch(importedById: string, batchId: string) {
 
     const validated = batch.rows.map((stored) => validateImportRow(stored.payload as unknown as ImportQuestionRow));
     const batchDuplicates = findBatchDuplicateRows(validated);
-    if (batchDuplicates.size) throw new ApiError(`本批次有 ${batchDuplicates.size} 行重复题目，不能确认导入`);
+    if (batchDuplicates.size) throw new ApiError(`本批次有 ${batchDuplicates.size} 行重复题目，不能确认导入`, 409);
     const invalid = validated.filter((item) => item.issues.some((issue) => issue.severity === "error"));
     if (invalid.length) throw new ApiError(`仍有 ${invalid.length} 行错误，不能确认导入`);
 

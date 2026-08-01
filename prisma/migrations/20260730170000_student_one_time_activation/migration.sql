@@ -14,7 +14,7 @@ CREATE TABLE `StudentActivation` (
     UNIQUE INDEX `StudentActivation_userId_key`(`userId`),
     INDEX `StudentActivation_expiresAt_usedAt_idx`(`expiresAt`, `usedAt`),
     PRIMARY KEY (`id`)
-) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci;
 
 ALTER TABLE `StudentActivation`
     ADD CONSTRAINT `StudentActivation_userId_fkey`

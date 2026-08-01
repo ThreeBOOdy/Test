@@ -351,7 +351,7 @@ describe("production database foundation", () => {
     const [correctQuestion, incorrectQuestion] = session.questions;
     await submitPracticeAnswer(user.id, session.id, correctQuestion.id, ["A"], "wrong-correct-key");
     await submitPracticeAnswer(user.id, session.id, incorrectQuestion.id, ["B"], "wrong-incorrect-key");
-    expect(await prisma.wrongQuestion.findUniqueOrThrow({ where: { courseId_userId_questionId: { courseId: RADIO_COURSE_ID, userId: user.id, questionId: correctQuestion.id } } })).toMatchObject({ mastered: true, wrongCount: 1 });
+    expect(await prisma.wrongQuestion.findUniqueOrThrow({ where: { courseId_userId_questionId: { courseId: RADIO_COURSE_ID, userId: user.id, questionId: correctQuestion.id } } })).toMatchObject({ mastered: false, correctSessionCount: 0, wrongCount: 1 });
     expect(await prisma.wrongQuestion.findUniqueOrThrow({ where: { courseId_userId_questionId: { courseId: RADIO_COURSE_ID, userId: user.id, questionId: incorrectQuestion.id } } })).toMatchObject({ mastered: false, wrongCount: 2 });
   });
 
@@ -483,8 +483,8 @@ describe("production database foundation", () => {
     const session = await prisma.practiceSession.create({ data: { userId: student.id, mode: "LEVEL_COMPREHENSIVE", levelId: level.id, singleCountSnapshot: 1, multipleCountSnapshot: 0 } });
     await prisma.practiceSessionQuestion.create({ data: { sessionId: session.id, questionId: used.id, position: 0, snapshot: { questionId: used.id, levelId: level.id, knowledgePointId: point.id, stem: used.stem, type: used.type, optionCount: 2, correctOptionCount: 1, selectionSpec: "2选1", options: [{ id: "A", text: "A" }, { id: "B", text: "B" }], correctOptionIds: ["A"], levelCode: level.code, knowledgeName: point.name } } });
 
-    expect(await revertImportBatch(batch.id, teacher.id)).toEqual({ archived: 1, deleted: 1 });
-    expect(await prisma.question.findUnique({ where: { id: unused.id } })).toBeNull();
+    expect(await revertImportBatch(batch.id, teacher.id)).toEqual({ archived: 2 });
+    expect(await prisma.question.findUnique({ where: { id: unused.id } })).toMatchObject({ status: "ARCHIVED" });
     expect(await prisma.question.findUniqueOrThrow({ where: { id: used.id } })).toMatchObject({ status: "ARCHIVED" });
     expect(await prisma.importBatch.findUniqueOrThrow({ where: { id: batch.id } })).toMatchObject({ status: "REVERTED" });
     await expect(revertImportBatch(batch.id, teacher.id)).rejects.toMatchObject({ status: 409 });

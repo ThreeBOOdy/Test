@@ -24,6 +24,21 @@ beforeAll(async () => {
   await seedLegacyCourseData(connection);
   await connection.importFile({ file: path.resolve("prisma/migrations/20260730120000_radio_course_boundary/migration.sql") });
   await connection.importFile({ file: path.resolve("prisma/migrations/20260730153500_enforce_radio_course_activation/migration.sql") });
+  await connection.importFile({ file: path.resolve("prisma/migrations/20260730160000_stateful_sessions_and_password_policy/migration.sql") });
+  await connection.importFile({ file: path.resolve("prisma/migrations/20260730180000_question_revisions_and_concurrency/migration.sql") });
+  await connection.importFile({ file: path.resolve("prisma/migrations/20260731100000_randomize_and_freeze_option_order/migration.sql") });
+  for (const name of [
+    "20260731110000_archive_only_question_lifecycle",
+    "20260731120000_protect_sensitive_data_and_rotate_keys",
+    "20260731121500_idempotent_practice_answers",
+    "20260731130000_persist_versioned_exam_drafts",
+    "20260731130000_three_session_wrong_question_mastery",
+    "20260731140000_server_timed_exam_settlement",
+    "20260731150000_learning_statistics_settlement_source",
+    "20260731151500_tiered_data_retention",
+  ]) {
+    await connection.importFile({ file: path.resolve(`prisma/migrations/${name}/migration.sql`) });
+  }
 });
 
 afterAll(async () => {

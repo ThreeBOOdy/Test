@@ -24,6 +24,8 @@ beforeEach(async () => {
   await prisma.practiceSession.deleteMany();
   await prisma.importBatchRow.deleteMany();
   await prisma.importBatch.deleteMany();
+  await prisma.sensitiveDataReauthenticationAttempt.deleteMany();
+  await prisma.studentReviewRecord.deleteMany();
   await prisma.auditLog.deleteMany();
   await prisma.questionRevision.deleteMany();
   await prisma.question.deleteMany();
@@ -71,7 +73,7 @@ describe("temporary data retention", () => {
       createUser("import-owner"),
     ]);
     const oldSessionDate = new Date("2026-06-30T00:00:00.000Z");
-    const currentSessionDate = new Date("2026-07-02T00:00:00.000Z");
+    const currentSessionDate = new Date("2026-07-30T00:00:00.000Z");
     const expiredPreviewDate = new Date("2026-07-30T23:59:59.000Z");
     const currentPreviewDate = new Date("2026-08-01T00:00:00.000Z");
 

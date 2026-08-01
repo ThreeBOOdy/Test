@@ -589,8 +589,8 @@ model SensitiveDataReauthenticationAttempt {
   success   Boolean
   createdAt DateTime @default(now())
 
-  @@index([userId, success, createdAt])
-  @@index([ipHash, success, createdAt])
+  @@index([userId, success, createdAt], map: "SensitiveDataReauth_user_success_createdAt_idx")
+  @@index([ipHash, success, createdAt], map: "SensitiveDataReauth_ip_success_createdAt_idx")
 }
 model AuditLog {
   id          String   @id @default(cuid())

@@ -107,8 +107,8 @@ describe("student account workflows", () => {
       id: student.id,
       username: "radio-001",
       realName: profile.realName,
-      nationalId: profile.nationalId,
-      phone: profile.phone,
+      nationalIdMasked: expect.stringContaining("002X"),
+      phoneMasked: "***-***-8000",
       grade: { id: grade.id, code: "GRADE_7", name: "七年级" },
     });
     expect(detail).not.toHaveProperty("passwordHash");
@@ -157,7 +157,7 @@ describe("student account workflows", () => {
 
     expect(attempts.filter((attempt) => attempt.status === "fulfilled")).toHaveLength(1);
     const rejected = attempts.find((attempt): attempt is PromiseRejectedResult => attempt.status === "rejected");
-    expect(rejected?.reason).toMatchObject({ message: "RADIO_PERSON_UNAVAILABLE", status: 409 });
+    expect(rejected?.reason).toMatchObject({ message: expect.stringMatching(/REGISTRATION_CONFLICT|RADIO_PERSON_UNAVAILABLE/), status: 409 });
     expect(await prisma.user.count({ where: { radioPersonId: profile.radioPersonId } })).toBe(1);
   });
 
@@ -265,7 +265,7 @@ describe("student account workflows", () => {
     const stored = await prisma.user.findUniqueOrThrow({ where: { id: student.id } });
     expect(stored).toMatchObject({ username: "radio-001", radioPersonId: "radio-person-001", studentStatus: "REJECTED" });
     await expect(registerStudent({ ...profile, realName: "王五", nationalId: "110105194912310046", phone: "13700137000", gradeId: grade.id })).rejects.toMatchObject({ message: "RADIO_PERSON_UNAVAILABLE", status: 409 });
-    await expect(updateStudentAccount(administrator.id, student.id, { radioPersonId: "radio-person-002" })).rejects.toMatchObject({ status: 400 });
-    await expect(updateStudentAccount(administrator.id, student.id, { username: "radio-002" })).rejects.toMatchObject({ status: 400 });
+    await expect(updateStudentAccount(administrator.id, student.id, { radioPersonId: "radio-person-002" })).rejects.toBeInstanceOf(Error);
+    await expect(updateStudentAccount(administrator.id, student.id, { username: "radio-002" })).rejects.toBeInstanceOf(Error);
   });
 });

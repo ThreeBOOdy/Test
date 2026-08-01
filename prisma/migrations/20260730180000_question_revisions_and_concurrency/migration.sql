@@ -20,7 +20,7 @@ CREATE TABLE `QuestionRevision` (
     INDEX `QuestionRevision_courseId_questionId_createdAt_idx`(`courseId`, `questionId`, `createdAt`),
     INDEX `QuestionRevision_actorUserId_createdAt_idx`(`actorUserId`, `createdAt`),
     PRIMARY KEY (`id`)
-) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci;
 
 -- Backfill existing questions with their initial retained state.
 INSERT INTO `QuestionRevision` (`id`, `courseId`, `questionId`, `revision`, `snapshot`, `changeSource`, `createdAt`)

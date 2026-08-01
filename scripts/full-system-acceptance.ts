@@ -21,7 +21,7 @@ function spawnCommand(command: string, args: string[]) {
 }
 
 function redact(output: string) {
-  return output.replaceAll(/(?:https?:\/\/[^\s]+|(?:PASSWORD|SECRET|TOKEN|KEY|DATABASE_URL)=[^\s]+)/gi, "[redacted]").slice(-4000).trim();
+  return output.replaceAll(/(?:https?:\/\/[^\s]+|(?:PASSWORD|SECRET|TOKEN|KEY|DATABASE_URL)=[^\s]+)/gi, "[redacted]").replace(/\s+$/gm, "").slice(-4000).trim();
 }
 
 function run(name: string, command: string, args: string[], environment: Record<string, string | undefined> = {}): Result {

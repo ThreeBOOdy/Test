@@ -7,7 +7,7 @@ CREATE TABLE `RadioPerson` (
     `resourceStatus` ENUM('AVAILABLE', 'UNAVAILABLE') NOT NULL DEFAULT 'AVAILABLE',
     `statusNote` VARCHAR(500) NULL,
     `createdAt` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
-    `updatedAt` DATETIME(3) NOT NULL,
+    `updatedAt` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
 
     UNIQUE INDEX `RadioPerson_username_key`(`username`),
     INDEX `RadioPerson_resourceStatus_name_idx`(`resourceStatus`, `name`),
@@ -136,7 +136,9 @@ INSERT INTO `RadioPerson` (`id`, `username`, `name`, `profile`) VALUES
 ('radio-person-118', 'radio-118', '无线电贡献者 118', '无线电人物目录第 118 位贡献者，用于学生完成实名资料后选择独立且不可变的练习身份。'),
 ('radio-person-119', 'radio-119', '无线电贡献者 119', '无线电人物目录第 119 位贡献者，用于学生完成实名资料后选择独立且不可变的练习身份。'),
 ('radio-person-120', 'radio-120', '无线电贡献者 120', '无线电人物目录第 120 位贡献者，用于学生完成实名资料后选择独立且不可变的练习身份。')
-ON DUPLICATE KEY UPDATE `id` = `RadioPerson`.`id`;
+ON DUPLICATE KEY UPDATE
+    `id` = `RadioPerson`.`id`,
+    `updatedAt` = CURRENT_TIMESTAMP(3);
 
 -- AlterTable
 ALTER TABLE `User` ADD COLUMN `realName` VARCHAR(191) NULL,
