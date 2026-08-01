@@ -13,3 +13,6 @@
 - [x] 停用教师后，其已提交题目、修订历史、导入批次和审计记录继续保留。
 - [x] 创建、停用和重置操作与审计日志在同一事务中成功或失败。
 
+**验收证据（2026-08-01）：**
+- 测试：tests/teacher-account-route.test.ts、tests/teacher-account-service.test.ts；提交 3964d3a、feb0e11。
+- 验收门禁（2026-08-01）：`npm.cmd run acceptance` 在全新隔离库 practice_ci_integration/practice_ci_migration/practice_acceptance_e2e 上返回 0；lint、领域/API/UI 测试、两库全新迁移、种子、MySQL 集成测试、Playwright E2E、生产构建与 TypeScript 检查、隔离恢复演练全部 passed。

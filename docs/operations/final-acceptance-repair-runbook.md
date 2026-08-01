@@ -411,3 +411,40 @@ npm.cmd run acceptance
 ```
 
 注意：Windows 下若让 Playwright 自行托管 `next dev`，进程可能不退出；建议外部启动 `npm.cmd run dev -- --port 3100` 并设 `PLAYWRIGHT_REUSE_SERVER=true`。恢复演练还需补齐全部 `BACKUP_*` 变量后执行 `npm.cmd run backup:restore-drill`。
+## 17. 2026-08-01 全部票据验收完成记录
+
+### 最终状态
+
+- `npm.cmd run acceptance` 在三个全新隔离库（`practice_ci_integration`、`practice_ci_migration`、`practice_acceptance_e2e`）上返回退出码 **0**，报告 `docs/operations/full-system-acceptance-report.md` 中 10 项检查全部 `passed`，包括此前保持 `blocked` 的隔离恢复演练。
+- 26 张票据已在 `.scratch/current-source-complete-review/issues/*.md` 全部标记为 `completed` 并勾选全部验收项，每张票据附测试/提交证据。
+
+### 本轮新增修复
+
+- `scripts/backup-cli.ts`：恢复演练 smoke 增加 `waitForRestoredAppReady`（90 秒内每 3 秒轮询 `/api/health/ready`）。修复恢复后应用容器刚重启、一次性 fetch 连接被拒导致的 `fetch failed`；不削弱任何 smoke 断言。
+- `tmp/restore-drill-isolated/drill-compose.yml`：本地隔离恢复目标，包含专用 `db`（端口 3308、库名 `practice_restore_drill`）与生产式 `app`（`zhixue-acceptance-app` 镜像，`next start`，端口 3200）；密钥使用 `${AUTH_SECRET}` 等环境插值，不落盘。
+- `tmp/enrich-e2e-questions.ts`：演示种子仅 12 道 A 级单选题、不足以支撑考试规则要求的 32 道；向备份源库补充 A 级单选题至 40 道（模拟真实题库规模）后重新备份。
+- 构建镜像 `zhixue-acceptance-app`（当前代码，Dockerfile `--target runner`），用于恢复演练的 app 服务。
+
+### 隔离恢复演练实际执行证据（2026-08-01）
+
+- 加密备份：`backups/practice-20260801T062723Z.backup`（435 KB）＋清单；认证解密与清单校验通过。
+- 恢复目标：compose 项目 `drill-local-20260801`、数据库 `practice_restore_drill`（专用名称校验通过），未触碰开发/验收源库。
+- 数据库校验：迁移版本 `20260731151500_tiered_data_retention` 与清单一致；`User=4`、`Course=1`、`Question=189`、`PracticeSession=4`；启用账号 4；RADIO 启用课程 1；敏感字段（nationalId/phone）按密钥 ID `default` 解密 `verified`。
+- 应用 smoke：`ready`、`login`、`public-question-snapshot`、`practice-start`、`answer`、`submit` 六项全部通过（`logs/restore-drills.jsonl` 记录 `status: succeeded`）。
+
+### 最终验收证据（2026-08-01T07:37:50Z – 07:42:05Z）
+
+- Prisma schema validation：passed。
+- Lint：passed。
+- 领域/API/UI 测试：passed。
+- 集成库 / E2E 库全新迁移：passed（20 个迁移全部 applied）。
+- E2E 库种子：passed。
+- MySQL 集成测试：passed。
+- Playwright 端到端测试：passed（3/3）。
+- 生产构建与 TypeScript 检查：passed。
+- 隔离恢复演练：passed（16.1 s）。
+- `npm.cmd run acceptance` 退出码：0。
+
+### 仍属部署环境阶段检查项（非代码验收阻断）
+
+验收报告第 28 节映射中 28.2/28.3/28.4 标记为 `partial` 的条目（生产数据库与日志明文扫描、受管设备证书体验、关闭浏览器后到点交卷与 worker 停机补交的真实环境观察）需在目标内网部署环境中复核，已在报告和票据 26 证据中注明；不影响本分支代码与自动化验收结论。

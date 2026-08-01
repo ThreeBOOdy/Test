@@ -402,6 +402,24 @@ async function smokeFetch(url: URL, init?: RequestInit) {
   }
 }
 
+async function waitForRestoredAppReady(url: URL) {
+  const deadline = Date.now() + 90_000;
+  let lastError: unknown;
+  while (Date.now() < deadline) {
+    try {
+      const response = await smokeFetch(url);
+      if (response.ok) {
+        return;
+      }
+      lastError = new Error(`Restored application readiness check returned HTTP ${response.status}`);
+    } catch (error) {
+      lastError = error;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 3_000));
+  }
+  throw lastError instanceof Error ? lastError : new Error("Restored application did not become ready in time");
+}
+
 async function verifyRestoredApplication(options: Options) {
   const baseUrlValue = option(options, "base-url", process.env.BACKUP_RESTORE_BASE_URL);
   const username = option(options, "smoke-username", process.env.BACKUP_RESTORE_SMOKE_USERNAME);
@@ -410,10 +428,7 @@ async function verifyRestoredApplication(options: Options) {
   const baseUrl = new URL(baseUrlValue);
   const origin = baseUrl.origin;
 
-  const readiness = await smokeFetch(new URL("/api/health/ready", baseUrl));
-  if (!readiness.ok) {
-    throw new Error(`Restored application readiness check returned HTTP ${readiness.status}`);
-  }
+  await waitForRestoredAppReady(new URL("/api/health/ready", baseUrl));
 
   const login = await smokeFetch(new URL("/api/v1/auth/login", baseUrl), {
     method: "POST",

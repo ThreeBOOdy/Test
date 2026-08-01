@@ -12,6 +12,7 @@ mysql-data/
 .patch-input.txt
 test.patch-probe
 .tools/
+.codex-tools/
 *.tsbuildinfo
 tmp/
 backups/

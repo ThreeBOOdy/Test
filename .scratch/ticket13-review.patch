@@ -1,0 +1,294 @@
+diff --git a/app/api/v1/teacher/import-batches/[id]/revert/route.ts b/app/api/v1/teacher/import-batches/[id]/revert/route.ts
+index 5a058ca..e1490a3 100644
+--- a/app/api/v1/teacher/import-batches/[id]/revert/route.ts
++++ b/app/api/v1/teacher/import-batches/[id]/revert/route.ts
+@@ -9,7 +9,7 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
+     assertSameOrigin(request);
+     const user = await requireTeacher();
+     const { id } = await context.params;
+-    const result = await revertImportBatch(id);
++    const result = await revertImportBatch(id, user.id);
+     await writeAuditLog({ actorUserId: user.id, action: "IMPORT_REVERT", targetType: "ImportBatch", targetId: id, metadata: result });
+     return NextResponse.json(result);
+   } catch (error) {
+diff --git a/app/api/v1/teacher/import-batches/[id]/route.ts b/app/api/v1/teacher/import-batches/[id]/route.ts
+index b7d91b7..8b59c5f 100644
+--- a/app/api/v1/teacher/import-batches/[id]/route.ts
++++ b/app/api/v1/teacher/import-batches/[id]/route.ts
+@@ -5,11 +5,11 @@ import { normalizePagination } from "@/lib/server/pagination";
+
+ export async function GET(request: Request, context: { params: Promise<{ id: string }> }) {
+   try {
+-    await requireTeacher();
++    const user = await requireTeacher();
+     const { id } = await context.params;
+     const url = new URL(request.url);
+     const { page, pageSize } = normalizePagination({ page: url.searchParams.get("page") ?? undefined, pageSize: url.searchParams.get("pageSize") ?? undefined });
+-    return NextResponse.json(await getImportBatchReport(id, { page, pageSize, issuesOnly: url.searchParams.get("issuesOnly") === "true" }));
++    return NextResponse.json(await getImportBatchReport(user.id, id, { page, pageSize, issuesOnly: url.searchParams.get("issuesOnly") === "true" }));
+   } catch (error) {
+     return apiErrorResponse(error, "读取导入报告失败");
+   }
+diff --git a/app/api/v1/teacher/import-batches/route.ts b/app/api/v1/teacher/import-batches/route.ts
+index 9dfe80e..e7b7c20 100644
+--- a/app/api/v1/teacher/import-batches/route.ts
++++ b/app/api/v1/teacher/import-batches/route.ts
+@@ -6,11 +6,11 @@ import { apiErrorResponse, requireTeacher } from "@/lib/server/api";
+
+ export async function GET(request: Request) {
+   try {
+-    await requireTeacher();
++    const user = await requireTeacher();
+     const url = new URL(request.url);
+     const { page, pageSize, skip } = normalizePagination({ page: url.searchParams.get("page") ?? undefined, pageSize: url.searchParams.get("pageSize") ?? undefined });
+     const status = url.searchParams.get("status");
+-    const where = { courseId: RADIO_COURSE_ID, ...(status && ["PREVIEW", "COMMITTED", "REVERTED", "FAILED"].includes(status) ? { status: status as "PREVIEW" | "COMMITTED" | "REVERTED" | "FAILED" } : {}) };
++    const where = { courseId: RADIO_COURSE_ID, importedById: user.id, ...(status && ["PREVIEW", "COMMITTED", "REVERTED", "FAILED"].includes(status) ? { status: status as "PREVIEW" | "COMMITTED" | "REVERTED" | "FAILED" } : {}) };
+     const [items, total] = await Promise.all([
+       prisma.importBatch.findMany({ where, orderBy: { createdAt: "desc" }, skip, take: pageSize, select: { id: true, fileName: true, status: true, totalRows: true, validRows: true, warningRows: true, errorRows: true, insertedRows: true, duplicateRows: true, createdAt: true, committedAt: true, revertedAt: true, expiresAt: true } }),
+       prisma.importBatch.count({ where }),
+diff --git a/app/api/v1/teacher/imports/preview/route.ts b/app/api/v1/teacher/imports/preview/route.ts
+index d44b96d..724ad09 100644
+--- a/app/api/v1/teacher/imports/preview/route.ts
++++ b/app/api/v1/teacher/imports/preview/route.ts
+@@ -4,7 +4,7 @@ import { Prisma } from "@/generated/prisma/client";
+ import { prisma } from "@/lib/db";
+ import { getImportBatchExpiry } from "@/lib/domain/import-batch";
+ import { RADIO_COURSE_ID } from "@/lib/domain/course";
+-import { validateImportRow } from "@/lib/domain/question-import";
++import { classifyImportDuplicate, findBatchDuplicateRows, importRowLocation, validateImportRow } from "@/lib/domain/question-import";
+ import { assertRequestBodySize } from "@/lib/domain/request-body";
+ import type { ImportQuestionRow, ValidatedQuestionRow } from "@/lib/domain/types";
+ import { assertSameOrigin } from "@/lib/server/http";
+@@ -55,6 +55,40 @@ export async function POST(request: Request) {
+       }
+     }
+
++    const batchDuplicates = findBatchDuplicateRows(results);
++    for (const item of results) {
++      const firstRow = batchDuplicates.get(importRowLocation(item.row));
++      if (firstRow) item.issues.push({ severity: "error", field: "重复题目", message: `与本批次 ${firstRow} 重复` });
++    }
++
++    const codedRows = results.filter((item) => item.row.externalQuestionCode?.trim());
++    const existingQuestions = codedRows.length
++      ? await prisma.question.findMany({
++        where: {
++          courseId: RADIO_COURSE_ID,
++          level: { code: { in: [...new Set(codedRows.map((item) => item.row.levelCode.trim()))] } },
++          externalQuestionCode: { in: [...new Set(codedRows.map((item) => item.row.externalQuestionCode!.trim()))] },
++        },
++        include: { level: { select: { code: true } } },
++      })
++      : [];
++    const existingByCode = new Map(existingQuestions.map((question) => [`${question.level.code}|${question.externalQuestionCode}`, question]));
++    const unnumberedRows = results.filter((item) => !item.row.externalQuestionCode?.trim());
++    const existingForSuspects = unnumberedRows.length
++      ? await prisma.question.findMany({ where: { courseId: RADIO_COURSE_ID }, select: { externalQuestionCode: true, stem: true, options: true, correctOptionIds: true } })
++      : [];
++    for (const item of results) {
++      if (item.issues.some((issue) => issue.severity === "error")) continue;
++      const existing = item.row.externalQuestionCode?.trim()
++        ? existingByCode.get(`${item.row.levelCode.trim()}|${item.row.externalQuestionCode.trim()}`)
++        : existingForSuspects.find((question) => classifyImportDuplicate({ ...item.row, options: item.options, correctOptionIds: item.correctOptionIds }, question) === "SUSPECT");
++      if (!existing) continue;
++      const kind = classifyImportDuplicate({ ...item.row, options: item.options, correctOptionIds: item.correctOptionIds }, existing);
++      if (kind === "EXACT") item.issues.push({ severity: "warning", field: "重复题目", message: "与公共题库中的题目完全相同" });
++      if (kind === "CONFLICT") item.issues.push({ severity: "error", field: "题目编号", message: "题目编号已存在，但题目内容不同" });
++      if (kind === "SUSPECT") item.issues.push({ severity: "warning", field: "重复题目", message: "未填写题号，内容与公共题库题目相同，请人工确认" });
++    }
++
+     const validRows = results.filter((item) => item.issues.every((issue) => issue.severity !== "error")).length;
+     const warningRows = results.filter((item) => item.issues.some((issue) => issue.severity === "warning")).length;
+     const errorRows = results.filter((item) => item.issues.some((issue) => issue.severity === "error")).length;
+diff --git a/lib/domain/question-import.ts b/lib/domain/question-import.ts
+index 8ba66c3..1a1f3b1 100644
+--- a/lib/domain/question-import.ts
++++ b/lib/domain/question-import.ts
+@@ -6,6 +6,15 @@ import type {
+   ValidationIssue,
+ } from "@/lib/domain/types";
+
++export type ImportDuplicateKind = "EXACT" | "CONFLICT" | "SUSPECT";
++
++type ComparableQuestion = {
++  externalQuestionCode?: string | null;
++  stem: string;
++  options: unknown;
++  correctOptionIds: unknown;
++};
++
+ const OPTION_IDS = ["A", "B", "C", "D", "E", "F", "G", "H"];
+ const ANSWER_SEPARATORS = /[,，、|/\s]+/;
+ const SPEC_PATTERN = /^(\d+)\s*选\s*(\d+)$/;
+@@ -34,6 +43,47 @@ export function inferQuestionType(correctOptionCount: number): QuestionType {
+   return correctOptionCount === 1 ? "SINGLE_CHOICE" : "MULTIPLE_CHOICE";
+ }
+
++export function normalizeQuestionContent(value: unknown): string {
++  if (typeof value === "string") return value.trim().replace(/\s+/g, " ");
++  if (Array.isArray(value)) return `[${value.map(normalizeQuestionContent).join(",")}]`;
++  if (value && typeof value === "object") {
++    return `{${Object.entries(value as Record<string, unknown>).sort(([left], [right]) => left.localeCompare(right)).map(([key, item]) => `${key}:${normalizeQuestionContent(item)}`).join(",")}}`;
++  }
++  return String(value ?? "");
++}
++
++export function importQuestionContentKey(question: Pick<ComparableQuestion, "stem" | "options" | "correctOptionIds">): string {
++  return [normalizeQuestionContent(question.stem), normalizeQuestionContent(question.options), normalizeQuestionContent(question.correctOptionIds)].join("|");
++}
++
++export function classifyImportDuplicate(candidate: ComparableQuestion, existing: ComparableQuestion): ImportDuplicateKind | null {
++  const candidateCode = candidate.externalQuestionCode?.trim();
++  const existingCode = existing.externalQuestionCode?.trim();
++  if (candidateCode && existingCode && candidateCode === existingCode) {
++    return importQuestionContentKey(candidate) === importQuestionContentKey(existing) ? "EXACT" : "CONFLICT";
++  }
++  return !candidateCode && importQuestionContentKey(candidate) === importQuestionContentKey(existing) ? "SUSPECT" : null;
++}
++
++export function importRowLocation(row: Pick<ImportQuestionRow, "rowNumber" | "sheetName">): string {
++  return row.sheetName ? `${row.sheetName}!${row.rowNumber}` : `第 ${row.rowNumber} 行`;
++}
++
++export function findBatchDuplicateRows(rows: ValidatedQuestionRow[]): Map<string, string> {
++  const firstRowByIdentity = new Map<string, string>();
++  const duplicates = new Map<string, string>();
++  for (const item of rows) {
++    if (item.issues.some((issue) => issue.severity === "error")) continue;
++    const code = item.row.externalQuestionCode?.trim();
++    const identity = code ? `code:${item.row.levelCode.trim()}|${code}` : `content:${importQuestionContentKey({ stem: item.row.stem, options: item.options, correctOptionIds: item.correctOptionIds })}`;
++    const location = importRowLocation(item.row);
++    const firstRow = firstRowByIdentity.get(identity);
++    if (firstRow) duplicates.set(location, firstRow);
++    else firstRowByIdentity.set(identity, location);
++  }
++  return duplicates;
++}
++
+ export function validateImportRow(row: ImportQuestionRow): ValidatedQuestionRow {
+   const issues: ValidationIssue[] = [];
+   const options: QuestionOption[] = OPTION_IDS.flatMap((id) => {
+diff --git a/lib/server/import-service.ts b/lib/server/import-service.ts
+index 0f64db2..05a6365 100644
+--- a/lib/server/import-service.ts
++++ b/lib/server/import-service.ts
+@@ -4,7 +4,7 @@ import { prisma } from "@/lib/db";
+ import { ApiError } from "@/lib/domain/api-error";
+ import { isImportBatchExpired } from "@/lib/domain/import-batch";
+ import { RADIO_COURSE_ID } from "@/lib/domain/course";
+-import { validateImportRow } from "@/lib/domain/question-import";
++import { classifyImportDuplicate, findBatchDuplicateRows, validateImportRow } from "@/lib/domain/question-import";
+ import type { ImportQuestionRow } from "@/lib/domain/types";
+ import { ensureKnowledgePoint } from "@/lib/server/knowledge-service";
+ import { toQuestionSnapshot } from "@/lib/server/question-revisions";
+@@ -12,9 +12,9 @@ import { writeAuditLogInTransaction } from "@/lib/server/audit";
+
+ type ImportBatchReportOptions = { page: number; pageSize: number; issuesOnly?: boolean };
+
+-export async function revertImportBatch(batchId: string, actorUserId?: string) {
++export async function revertImportBatch(batchId: string, actorUserId: string) {
+   return prisma.$transaction(async (tx) => {
+-    const batch = await tx.importBatch.findFirst({ where: { id: batchId, courseId: RADIO_COURSE_ID } });
++    const batch = await tx.importBatch.findFirst({ where: { id: batchId, courseId: RADIO_COURSE_ID, importedById: actorUserId } });
+     if (!batch) throw new ApiError("导入批次不存在", 404);
+     if (batch.status !== "COMMITTED") throw new ApiError("只有已提交批次可以撤销", 409);
+     const archivedIds = await tx.question.findMany({ where: { courseId: RADIO_COURSE_ID, importBatchId: batchId, sessionQuestions: { some: {} } }, select: { id: true } });
+@@ -31,9 +31,9 @@ export async function revertImportBatch(batchId: string, actorUserId?: string) {
+   });
+ }
+
+-export async function getImportBatchReport(batchId: string, options: ImportBatchReportOptions) {
++export async function getImportBatchReport(importedById: string, batchId: string, options: ImportBatchReportOptions) {
+   const batch = await prisma.importBatch.findFirst({
+-    where: { id: batchId, courseId: RADIO_COURSE_ID },
++    where: { id: batchId, courseId: RADIO_COURSE_ID, importedById },
+     select: { id: true, fileName: true, status: true, totalRows: true, validRows: true, warningRows: true, errorRows: true, insertedRows: true, duplicateRows: true, createdAt: true, expiresAt: true, committedAt: true, revertedAt: true },
+   });
+   if (!batch) throw new ApiError("导入批次不存在", 404);
+@@ -49,26 +49,25 @@ export async function getImportBatchReport(batchId: string, options: ImportBatch
+ }
+
+ export async function commitImportBatch(importedById: string, batchId: string) {
+-  const batch = await prisma.importBatch.findFirst({
+-    where: { id: batchId, courseId: RADIO_COURSE_ID, importedById },
+-    include: { rows: { orderBy: { rowNumber: "asc" } } },
+-  });
+-  if (!batch) throw new ApiError("导入批次不存在", 404);
+-  if (batch.status !== "PREVIEW") throw new ApiError("该导入批次不能再次提交", 409);
+-  if (batch.expiresAt ? new Date() >= batch.expiresAt : isImportBatchExpired(batch.createdAt)) throw new ApiError("导入预检已过期，请重新上传文件", 410);
+-  if (batch.errorRows > 0) throw new ApiError(`仍有 ${batch.errorRows} 行错误，不能确认导入`);
+-
+-  const validated = batch.rows.map((stored) => validateImportRow(stored.payload as unknown as ImportQuestionRow));
+-  const invalid = validated.filter((item) => item.issues.some((issue) => issue.severity === "error"));
+-  if (invalid.length) throw new ApiError(`仍有 ${invalid.length} 行错误，不能确认导入`);
+-
+   return prisma.$transaction(async (tx) => {
+     const claimed = await tx.importBatch.updateMany({
+-      where: { id: batch.id, courseId: RADIO_COURSE_ID, status: "PREVIEW" },
++      where: { id: batchId, courseId: RADIO_COURSE_ID, importedById, status: "PREVIEW" },
+       data: { status: "COMMITTED", committedAt: new Date() },
+     });
+     if (claimed.count !== 1) throw new ApiError("该导入批次已被处理", 409);
+
++    const batch = await tx.importBatch.findFirstOrThrow({
++      where: { id: batchId, courseId: RADIO_COURSE_ID, importedById },
++      include: { rows: { orderBy: { rowNumber: "asc" } } },
++    });
++    if (batch.expiresAt ? new Date() >= batch.expiresAt : isImportBatchExpired(batch.createdAt)) throw new ApiError("导入预检已过期，请重新上传文件", 410);
++
++    const validated = batch.rows.map((stored) => validateImportRow(stored.payload as unknown as ImportQuestionRow));
++    const batchDuplicates = findBatchDuplicateRows(validated);
++    if (batchDuplicates.size) throw new ApiError(`本批次有 ${batchDuplicates.size} 行重复题目，不能确认导入`);
++    const invalid = validated.filter((item) => item.issues.some((issue) => issue.severity === "error"));
++    if (invalid.length) throw new ApiError(`仍有 ${invalid.length} 行错误，不能确认导入`);
++
+     const levelCodes = [...new Set(validated.map((item) => item.row.levelCode))];
+     const levels = await tx.level.findMany({ where: { courseId: RADIO_COURSE_ID, code: { in: levelCodes }, enabled: true } });
+     const levelByCode = new Map(levels.map((level) => [level.code, level]));
+@@ -113,12 +112,43 @@ export async function commitImportBatch(importedById: string, batchId: string) {
+       };
+     });
+
+-    const inserted = questions.length ? (await tx.question.createMany({ data: questions, skipDuplicates: true })).count : 0;
++    const codedQuestions = questions.filter((question) => question.externalQuestionCode);
++    const existingCoded = codedQuestions.length ? await tx.question.findMany({
++      where: { courseId: RADIO_COURSE_ID, OR: codedQuestions.map((question) => ({ levelId: question.levelId, externalQuestionCode: question.externalQuestionCode! })) },
++      select: { levelId: true, externalQuestionCode: true, stem: true, options: true, correctOptionIds: true },
++    }) : [];
++    const existingByCode = new Map(existingCoded.map((question) => [`${question.levelId}|${question.externalQuestionCode}`, question]));
++    const unnumberedQuestions = questions.filter((question) => !question.externalQuestionCode);
++    const existingForSuspects = unnumberedQuestions.length ? await tx.question.findMany({
++      where: { courseId: RADIO_COURSE_ID },
++      select: { externalQuestionCode: true, stem: true, options: true, correctOptionIds: true },
++    }) : [];
++    const exactQuestionCodes = new Set<string>();
++    const duplicateCounts = { exact: 0, conflicts: 0, suspects: 0 };
++    for (const question of questions) {
++      const existing = question.externalQuestionCode
++        ? existingByCode.get(`${question.levelId}|${question.externalQuestionCode}`)
++        : existingForSuspects.find((candidate) => classifyImportDuplicate(question, candidate) === "SUSPECT");
++      if (!existing) continue;
++      const kind = classifyImportDuplicate(question, existing);
++      if (kind === "EXACT") {
++        duplicateCounts.exact += 1;
++        exactQuestionCodes.add(`${question.levelId}|${question.externalQuestionCode}`);
++      }
++      if (kind === "CONFLICT") duplicateCounts.conflicts += 1;
++      if (kind === "SUSPECT") duplicateCounts.suspects += 1;
++    }
++    if (duplicateCounts.conflicts) {
++      throw new ApiError(`题库已发生变化：有 ${duplicateCounts.conflicts} 行题目编号内容冲突，请重新预检后处理`, 409);
++    }
++
++    const questionsToInsert = questions.filter((question) => !question.externalQuestionCode || !exactQuestionCodes.has(`${question.levelId}|${question.externalQuestionCode}`));
++    const inserted = questionsToInsert.length ? (await tx.question.createMany({ data: questionsToInsert })).count : 0;
+     const skipped = questions.length - inserted;
+     const insertedQuestions = inserted ? await tx.question.findMany({ where: { courseId: RADIO_COURSE_ID, importBatchId: batch.id }, select: { id: true, version: true, levelId: true, knowledgePointId: true, sourceBankCode: true, externalQuestionCode: true, stem: true, preserveOptionOrder: true, options: true, correctOptionIds: true, status: true } }) : [];
+     if (insertedQuestions.length) await tx.questionRevision.createMany({ data: insertedQuestions.map((question) => ({ courseId: RADIO_COURSE_ID, questionId: question.id, revision: question.version, snapshot: toQuestionSnapshot(question), changeSource: "IMPORT_COMMIT", actorUserId: importedById })) });
+     await tx.importBatch.update({ where: { id: batch.id }, data: { insertedRows: inserted, duplicateRows: skipped } });
+-    await writeAuditLogInTransaction(tx, { actorUserId: importedById, action: "IMPORT_COMMIT", targetType: "ImportBatch", targetId: batch.id, metadata: { inserted, skipped } });
++    await writeAuditLogInTransaction(tx, { actorUserId: importedById, action: "IMPORT_COMMIT", targetType: "ImportBatch", targetId: batch.id, metadata: { inserted, skipped, suspectedDuplicates: duplicateCounts.suspects } });
+     return { batchId: batch.id, inserted, skipped };
+   }, { timeout: 60_000 });
+ }

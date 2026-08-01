@@ -9,7 +9,7 @@ services:
       MYSQL_PASSWORD: practice
       MYSQL_ROOT_PASSWORD: root-practice
     ports:
-      - "127.0.0.1:3306:3306"
+      - "127.0.0.1:3307:3306"
     volumes:
       - practice-mysql:/var/lib/mysql
       - ./scripts/mysql-docker-init.sql:/docker-entrypoint-initdb.d/01-practice-databases.sql:ro
