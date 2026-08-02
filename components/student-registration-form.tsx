@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { deriveGenderFromNationalId, normalizeNationalId, validateMainlandNationalId } from "@/lib/domain/student-identity";
 import { Button } from "@/components/ui/button";
+import { RadioPersonPicker } from "@/components/radio-person-picker";
 
 type Grade = { id: string; name: string };
 type RadioPerson = { id: string; username: string; name: string; profile: string };
@@ -91,8 +92,7 @@ export function StudentRegistrationForm() {
 
   return <form onSubmit={submit} className="mt-7 space-y-5">
     <div><h2 className="text-xl font-extrabold">选择无线电人物身份</h2><p className="mt-1 text-sm text-[var(--muted-foreground)]">确认后将成为你的独立登录用户名，审核结果、停用或到期均不会释放或变更该身份。</p></div>
-    <div className="grid gap-3 sm:grid-cols-2">{people.map((person) => <label key={person.id} className={`cursor-pointer rounded-xl border p-4 transition ${form.radioPersonId === person.id ? "border-[var(--primary)] bg-[var(--surface-soft)]" : "border-[var(--border)]"}`}><input type="radio" name="radioPersonId" value={person.id} checked={form.radioPersonId === person.id} onChange={() => update("radioPersonId", person.id)} className="sr-only" /><div className="font-extrabold">{person.name}</div><div className="mt-1 font-mono text-sm text-[var(--primary)]">{person.username}</div><p className="mt-2 text-sm text-[var(--muted-foreground)]">{person.profile}</p></label>)}</div>
-    {!people.length ? <div role="status" className="rounded-xl bg-[var(--surface-soft)] p-4 text-sm">暂无可选人物身份，请联系管理员维护目录。</div> : null}
+    <RadioPersonPicker people={people} value={form.radioPersonId} onChange={(personId) => update("radioPersonId", personId)} />
     {selectedPerson ? <div className="rounded-xl border border-[var(--primary)] bg-[var(--surface-soft)] p-4 text-sm">已选择：<strong>{selectedPerson.name}</strong>，登录用户名为 <strong>{selectedPerson.username}</strong>。确认提交后不可更换。</div> : null}
     {error ? <div role="alert" className="rounded-xl bg-rose-500/10 px-4 py-3 text-sm font-semibold text-rose-300">{error}</div> : null}
     <div className="flex gap-3"><Button type="button" variant="outline" onClick={() => setStep("profile")} disabled={pending}>返回修改实名资料</Button><Button type="submit" size="lg" className="flex-1" disabled={pending || !people.length}>{pending ? "正在确认…" : "确认人物并提交申请"}</Button></div>

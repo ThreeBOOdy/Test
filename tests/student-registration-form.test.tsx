@@ -7,7 +7,7 @@ const { replace } = vi.hoisted(() => ({ replace: vi.fn() }));
 vi.mock("next/navigation", () => ({ useRouter: () => ({ replace, refresh: vi.fn() }), useSearchParams: () => new URLSearchParams() }));
 
 const grades = { grades: [{ id: "g7", name: "七年级" }] };
-const people = { people: [{ id: "radio-person-001", username: "radio-001", name: "无线电贡献者 001", profile: "示例人物资料" }] };
+const people = { people: [{ id: "radio-person-001", username: "radio-001", name: "麦克斯韦（James Clerk Maxwell）", profile: "英国物理学家（1831—1879），建立电磁场方程组，为无线电奠定理论基础。" }] };
 
 function mockInitialLoads() {
   return vi.spyOn(globalThis, "fetch")
@@ -62,7 +62,7 @@ describe("student registration form", () => {
     await fillProfile(user);
     await user.click(screen.getByRole("checkbox", { name: /信息真实/ }));
     await user.click(screen.getByRole("button", { name: "下一步：选择人物身份" }));
-    await user.click(screen.getByText("无线电贡献者 001"));
+    await user.click(screen.getByText("麦克斯韦（James Clerk Maxwell）"));
     await user.click(screen.getByRole("button", { name: "确认人物并提交申请" }));
 
     await waitFor(() => expect(fetchMock).toHaveBeenLastCalledWith("/api/v1/auth/register", expect.objectContaining({ method: "POST" })));
@@ -82,7 +82,7 @@ describe("student registration form", () => {
     await fillProfile(user);
     await user.click(screen.getByRole("checkbox", { name: /信息真实/ }));
     await user.click(screen.getByRole("button", { name: "下一步：选择人物身份" }));
-    await user.click(screen.getByText("无线电贡献者 001"));
+    await user.click(screen.getByText("麦克斯韦（James Clerk Maxwell）"));
     await user.click(screen.getByRole("button", { name: "确认人物并提交申请" }));
     expect(await screen.findByRole("alert")).toHaveTextContent("该人物身份刚被其他同学确认，请重新选择");
     await waitFor(() => expect(fetchMock).toHaveBeenCalledWith("/api/v1/radio-people", expect.anything()));

@@ -43,6 +43,15 @@ async function main() {
   });
 
   await prisma.radioPerson.createMany({ data: RADIO_PERSON_CATALOG, skipDuplicates: true });
+  // 将旧版占位条目（“无线电贡献者 00X”）升级为真实人物；已被管理员手工改名的行保留不动。
+  await prisma.$transaction(
+    RADIO_PERSON_CATALOG.map((person) =>
+      prisma.radioPerson.updateMany({
+        where: { id: person.id, name: { startsWith: "无线电贡献者" } },
+        data: { name: person.name, profile: person.profile },
+      }),
+    ),
+  );
 
   for (const grade of grades) {
     await prisma.grade.upsert({ where: { code: grade.code }, update: { name: grade.name, sortOrder: grade.sortOrder, enabled: true }, create: grade });

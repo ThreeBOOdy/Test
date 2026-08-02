@@ -3,6 +3,7 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
+import { RadioPersonPicker } from "@/components/radio-person-picker";
 
 type Person = { id: string; username: string; name: string; profile: string };
 
@@ -54,7 +55,7 @@ export function StudentActivationForm() {
     <label className="block"><span className="mb-2 block text-sm font-extrabold">激活码</span><input aria-label="激活码" value={activationCode} onChange={(event) => setActivationCode(event.target.value)} className={inputClass} required autoComplete="one-time-code" /></label>
     <label className="block"><span className="mb-2 block text-sm font-extrabold">新密码</span><input aria-label="新密码" type="password" value={newPassword} onChange={(event) => setNewPassword(event.target.value)} className={inputClass} required minLength={8} autoComplete="new-password" /></label>
     <label className="block"><span className="mb-2 block text-sm font-extrabold">确认新密码</span><input aria-label="确认新密码" type="password" value={confirmPassword} onChange={(event) => setConfirmPassword(event.target.value)} className={inputClass} required minLength={8} autoComplete="new-password" /></label>
-    <fieldset><legend className="mb-2 text-sm font-extrabold">选择无线电人物身份</legend><div className="grid gap-2">{people.map((person) => <label key={person.id} className="rounded-xl border border-[var(--border)] bg-[var(--surface-soft)] p-3"><input className="mr-2" type="radio" name="radioPersonId" value={person.id} checked={radioPersonId === person.id} onChange={() => setRadioPersonId(person.id)} required />{person.name}（{person.username}）<span className="mt-1 block text-xs text-[var(--muted-foreground)]">{person.profile}</span></label>)}</div></fieldset>
+    <fieldset className="space-y-2"><legend className="mb-2 text-sm font-extrabold">选择无线电人物身份</legend><RadioPersonPicker people={people} value={radioPersonId} onChange={setRadioPersonId} /></fieldset>
     {message ? <div role="alert" className="rounded-xl border border-rose-100 bg-rose-50 px-4 py-3 text-sm font-bold text-rose-700">{message}</div> : null}
     <Button type="submit" className="w-full" disabled={pending}>{pending ? "正在激活…" : "完成激活"}</Button>
   </form>;
