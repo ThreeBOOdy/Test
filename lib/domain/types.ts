@@ -58,6 +58,7 @@ export type ExamRule = PracticeRule & {
 
 export type ImportQuestionRow = {
   rowNumber: number;
+  locationLabel?: string;
   sheetName?: string;
   levelCode: string;
   sourceBankCode?: string;
@@ -68,6 +69,7 @@ export type ImportQuestionRow = {
   rawAnswer: string;
   declaredSelectionSpec?: string;
   preserveOptionOrder?: boolean;
+  explanation?: string;
   optionValues: Record<string, string | undefined>;
   enabled?: boolean;
 };
