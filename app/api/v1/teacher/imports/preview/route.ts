@@ -2,11 +2,13 @@ import ExcelJS from "exceljs";
 import { NextResponse } from "next/server";
 import { Prisma } from "@/generated/prisma/client";
 import { prisma } from "@/lib/db";
+import { extractDocxText } from "@/lib/domain/docx-text";
 import { getImportBatchExpiry } from "@/lib/domain/import-batch";
 import { RADIO_COURSE_ID } from "@/lib/domain/course";
 import { classifyImportDuplicate, findBatchDuplicateRows, importRowLocation, validateImportRow } from "@/lib/domain/question-import";
 import { assertRequestBodySize } from "@/lib/domain/request-body";
 import type { ImportQuestionRow, ValidatedQuestionRow } from "@/lib/domain/types";
+import { parseWordQuestions, type WordParseError } from "@/lib/domain/word-question-parser";
 import { assertSameOrigin } from "@/lib/server/http";
 import { ApiError, apiErrorResponse, requireTeacher } from "@/lib/server/api";
 
@@ -15,44 +17,69 @@ const aliases: Record<string, string[]> = {
 };
 
 export async function POST(request: Request) {
+  let source: "EXCEL" | "WORD" = "EXCEL";
   try {
     assertSameOrigin(request);
     const user = await requireTeacher();
     assertRequestBodySize(request, 21 * 1024 * 1024);
     const form = await request.formData();
     const file = form.get("file");
-    if (!(file instanceof File)) throw new ApiError("请选择 Excel 文件");
-    if (file.size > 20 * 1024 * 1024) throw new ApiError("Excel 文件不能超过 20MB", 413);
-    if (!file.name.toLowerCase().endsWith(".xlsx")) throw new ApiError("仅支持 .xlsx 文件");
-
-    const workbook = new ExcelJS.Workbook();
-    await workbook.xlsx.load(await file.arrayBuffer());
-    if (!workbook.worksheets.length) return NextResponse.json({ message: "Excel 中没有工作表" }, { status: 400 });
+    if (!(file instanceof File)) throw new ApiError("请选择题库文件");
+    if (file.size > 20 * 1024 * 1024) throw new ApiError("题库文件不能超过 20MB", 413);
+    const fileName = file.name.toLowerCase();
     const results: ValidatedQuestionRow[] = [];
-    const sheetNames: string[] = [];
-    for (const sheet of workbook.worksheets) {
-      if (results.length >= 5000) break;
-      const headers = new Map<string, number>();
-      sheet.getRow(1).eachCell((cell, column) => headers.set(cellText(cell.value).trim(), column));
-      const columnOf = (key: string) => aliases[key]?.map((alias) => headers.get(alias)).find(Boolean);
-      const missing = ["levelCode", "categoryCode", "stem", "rawAnswer"].filter((key) => !columnOf(key));
-      if (missing.length) throw new ApiError(`${sheet.name} 缺少必要表头：${missing.map((key) => aliases[key][0]).join("、")}`);
-      sheetNames.push(sheet.name);
-      const maxRows = Math.min(sheet.rowCount, 5001);
-      for (let rowNumber = 2; rowNumber <= maxRows && results.length < 5000; rowNumber += 1) {
-        const row = sheet.getRow(rowNumber);
-        const value = (key: string) => { const column = columnOf(key); return column ? cellText(row.getCell(column).value).trim() : ""; };
-        const stem = value("stem");
-        if (!stem && !Object.values(row.values ?? {}).some(Boolean)) continue;
-        const optionValues: Record<string, string> = {};
-        for (const optionId of ["A", "B", "C", "D", "E", "F", "G", "H"]) {
-          const column = headers.get(optionId);
-          if (column) optionValues[optionId] = cellText(row.getCell(column).value).trim();
+    let sheetNames: string[];
+
+    if (fileName.endsWith(".xlsx")) {
+      source = "EXCEL";
+      const workbook = new ExcelJS.Workbook();
+      await workbook.xlsx.load(await file.arrayBuffer());
+      if (!workbook.worksheets.length) return NextResponse.json({ message: "Excel 中没有工作表" }, { status: 400 });
+      sheetNames = [];
+      for (const sheet of workbook.worksheets) {
+        if (results.length >= 5000) break;
+        const headers = new Map<string, number>();
+        sheet.getRow(1).eachCell((cell, column) => headers.set(cellText(cell.value).trim(), column));
+        const columnOf = (key: string) => aliases[key]?.map((alias) => headers.get(alias)).find(Boolean);
+        const missing = ["levelCode", "categoryCode", "stem", "rawAnswer"].filter((key) => !columnOf(key));
+        if (missing.length) throw new ApiError(`${sheet.name} 缺少必要表头：${missing.map((key) => aliases[key][0]).join("、")}`);
+        sheetNames.push(sheet.name);
+        const maxRows = Math.min(sheet.rowCount, 5001);
+        for (let rowNumber = 2; rowNumber <= maxRows && results.length < 5000; rowNumber += 1) {
+          const row = sheet.getRow(rowNumber);
+          const value = (key: string) => { const column = columnOf(key); return column ? cellText(row.getCell(column).value).trim() : ""; };
+          const stem = value("stem");
+          if (!stem && !Object.values(row.values ?? {}).some(Boolean)) continue;
+          const optionValues: Record<string, string> = {};
+          for (const optionId of ["A", "B", "C", "D", "E", "F", "G", "H"]) {
+            const column = headers.get(optionId);
+            if (column) optionValues[optionId] = cellText(row.getCell(column).value).trim();
+          }
+          const preserveOptionOrder = ["是", "1", "true", "yes", "y"].includes(value("preserveOptionOrder").toLowerCase());
+          const importRow: ImportQuestionRow = { rowNumber, sheetName: sheet.name, levelCode: value("levelCode"), sourceBankCode: value("sourceBankCode"), categoryCode: value("categoryCode"), knowledgePointName: value("knowledgePointName"), externalQuestionCode: value("externalQuestionCode"), stem, rawAnswer: value("rawAnswer"), declaredSelectionSpec: value("declaredSelectionSpec"), preserveOptionOrder, optionValues, enabled: !["否", "0", "false"].includes(value("enabled").toLowerCase()) };
+          results.push(validateImportRow(importRow));
         }
-        const preserveOptionOrder = ["是", "1", "true", "yes", "y"].includes(value("preserveOptionOrder").toLowerCase());
-        const importRow: ImportQuestionRow = { rowNumber, sheetName: sheet.name, levelCode: value("levelCode"), sourceBankCode: value("sourceBankCode"), categoryCode: value("categoryCode"), knowledgePointName: value("knowledgePointName"), externalQuestionCode: value("externalQuestionCode"), stem, rawAnswer: value("rawAnswer"), declaredSelectionSpec: value("declaredSelectionSpec"), preserveOptionOrder, optionValues, enabled: !["否", "0", "false"].includes(value("enabled").toLowerCase()) };
-        results.push(validateImportRow(importRow));
       }
+    } else if (fileName.endsWith(".docx")) {
+      source = "WORD";
+      const levelCode = formText(form.get("levelCode"));
+      const categoryCode = formText(form.get("categoryCode"));
+      const knowledgePointName = formText(form.get("knowledgePointName")) || undefined;
+      if (!levelCode) throw new ApiError("Word 导入需要选择等级");
+      if (!categoryCode) throw new ApiError("Word 导入需要填写分类号");
+      const parsed = parseWordQuestions(await extractDocxText(await file.arrayBuffer()));
+      for (const row of parsed.rows) {
+        if (results.length >= 5000) break;
+        results.push(validateImportRow({ ...row, levelCode, categoryCode, knowledgePointName }));
+      }
+      for (const error of parsed.errors) {
+        if (results.length >= 5000) break;
+        results.push(rejectedWordRow(error, levelCode, categoryCode, knowledgePointName));
+      }
+      results.sort((left, right) => left.row.rowNumber - right.row.rowNumber);
+      sheetNames = [];
+    } else {
+      throw new ApiError("仅支持 .xlsx 或 .docx 文件");
     }
 
     const batchDuplicates = findBatchDuplicateRows(results);
@@ -105,6 +132,7 @@ export async function POST(request: Request) {
       batchId: batch.id,
       status: batch.status,
       fileName: file.name,
+      source,
       sheetNames,
       stats: { totalRows: results.length, validRows, warningRows, errorRows },
       rows: results.slice(0, 100),
@@ -112,8 +140,34 @@ export async function POST(request: Request) {
       expiresAt,
     });
   } catch (error) {
-    return apiErrorResponse(error, "解析 Excel 失败");
+    return apiErrorResponse(error, source === "WORD" ? "解析 Word 文件失败" : "解析 Excel 失败");
   }
+}
+
+function formText(value: FormDataEntryValue | null): string {
+  return typeof value === "string" ? value.trim() : "";
+}
+
+function rejectedWordRow(error: WordParseError, levelCode: string, categoryCode: string, knowledgePointName?: string): ValidatedQuestionRow {
+  return {
+    row: {
+      rowNumber: error.rowNumber,
+      locationLabel: error.locationLabel,
+      levelCode,
+      categoryCode,
+      knowledgePointName,
+      stem: "",
+      rawAnswer: "",
+      optionValues: {},
+    },
+    options: [],
+    correctOptionIds: [],
+    optionCount: 0,
+    correctOptionCount: 0,
+    selectionSpec: "",
+    type: "SINGLE_CHOICE",
+    issues: [{ severity: "error", field: "题型", message: error.message }],
+  };
 }
 
 function cellText(value: ExcelJS.CellValue): string {

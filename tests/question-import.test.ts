@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { classifyImportDuplicate, findBatchDuplicateRows, normalizeAnswer, validateImportRow } from "../lib/domain/question-import";
+import { classifyImportDuplicate, findBatchDuplicateRows, importRowLocation, normalizeAnswer, validateImportRow } from "../lib/domain/question-import";
 import type { ImportQuestionRow } from "../lib/domain/types";
 
 function row(overrides: Partial<ImportQuestionRow> = {}): ImportQuestionRow {
@@ -57,5 +57,19 @@ describe("question import validation", () => {
     const duplicate = validateImportRow(row({ sheetName: "题库二", rowNumber: 2, externalQuestionCode: "Q-1" }));
 
     expect(findBatchDuplicateRows([first, duplicate])).toEqual(new Map([["题库二!2", "题库一!2"]]));
+  });
+
+  it("prioritizes the Word location label for row locations", () => {
+    expect(importRowLocation({ rowNumber: 3, locationLabel: "第 1 题" })).toBe("第 1 题");
+    expect(importRowLocation({ rowNumber: 3, sheetName: "题库", locationLabel: "第 1 题" })).toBe("第 1 题");
+    expect(importRowLocation({ rowNumber: 3, sheetName: "题库" })).toBe("题库!3");
+    expect(importRowLocation({ rowNumber: 3 })).toBe("第 3 行");
+  });
+
+  it("reports batch duplicates with Word location labels", () => {
+    const first = validateImportRow(row({ rowNumber: 1, locationLabel: "第 1 题", externalQuestionCode: "" }));
+    const duplicate = validateImportRow(row({ rowNumber: 2, locationLabel: "第 2 题", externalQuestionCode: "" }));
+
+    expect(findBatchDuplicateRows([first, duplicate])).toEqual(new Map([["第 2 题", "第 1 题"]]));
   });
 });

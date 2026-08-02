@@ -4,7 +4,7 @@ import { prisma } from "@/lib/db";
 import { ApiError } from "@/lib/domain/api-error";
 import { isImportBatchExpired } from "@/lib/domain/import-batch";
 import { RADIO_COURSE_ID } from "@/lib/domain/course";
-import { classifyImportDuplicate, findBatchDuplicateRows, validateImportRow } from "@/lib/domain/question-import";
+import { classifyImportDuplicate, findBatchDuplicateRows, importRowLocation, validateImportRow } from "@/lib/domain/question-import";
 import type { ImportQuestionRow } from "@/lib/domain/types";
 import { ensureKnowledgePoint } from "@/lib/server/knowledge-service";
 import { toQuestionSnapshot } from "@/lib/server/question-revisions";
@@ -80,7 +80,7 @@ export async function commitImportBatch(importedById: string, batchId: string) {
     const levels = await tx.level.findMany({ where: { courseId: RADIO_COURSE_ID, code: { in: levelCodes }, enabled: true } });
     const levelByCode = new Map(levels.map((level) => [level.code, level]));
     for (const item of validated) {
-      if (!levelByCode.has(item.row.levelCode)) throw new ApiError(`${formatImportLocation(item.row)} 等级 ${item.row.levelCode} 不存在或已停用`, 409);
+      if (!levelByCode.has(item.row.levelCode)) throw new ApiError(`${importRowLocation(item.row)} 等级 ${item.row.levelCode} 不存在或已停用`, 409);
     }
 
     const knowledgeByCode = new Map<string, Awaited<ReturnType<typeof ensureKnowledgePoint>>>();
@@ -99,7 +99,7 @@ export async function commitImportBatch(importedById: string, batchId: string) {
       const level = levelByCode.get(item.row.levelCode)!;
       const knowledgePoint = knowledgeByCode.get(item.row.categoryCode)!;
       if ((knowledgeById.get(knowledgePoint.id)?._count.children ?? 0) > 0) {
-        throw new ApiError(`${formatImportLocation(item.row)} 知识点 ${knowledgePoint.code} 不是末级节点`, 409);
+        throw new ApiError(`${importRowLocation(item.row)} 知识点 ${knowledgePoint.code} 不是末级节点`, 409);
       }
       return {
         courseId: RADIO_COURSE_ID,
@@ -159,8 +159,4 @@ export async function commitImportBatch(importedById: string, batchId: string) {
     await writeAuditLogInTransaction(tx, { actorUserId: importedById, action: "IMPORT_COMMIT", targetType: "ImportBatch", targetId: batch.id, metadata: { inserted, skipped, suspectedDuplicates: duplicateCounts.suspects } });
     return { batchId: batch.id, inserted, skipped };
   }, { timeout: 60_000 });
-}
-
-function formatImportLocation(row: ImportQuestionRow) {
-  return row.sheetName ? `${row.sheetName}!${row.rowNumber}` : `第 ${row.rowNumber} 行`;
 }

@@ -65,7 +65,8 @@ export function classifyImportDuplicate(candidate: ComparableQuestion, existing:
   return !candidateCode && importQuestionContentKey(candidate) === importQuestionContentKey(existing) ? "SUSPECT" : null;
 }
 
-export function importRowLocation(row: Pick<ImportQuestionRow, "rowNumber" | "sheetName">): string {
+export function importRowLocation(row: Pick<ImportQuestionRow, "rowNumber" | "sheetName" | "locationLabel">): string {
+  if (row.locationLabel) return row.locationLabel;
   return row.sheetName ? `${row.sheetName}!${row.rowNumber}` : `第 ${row.rowNumber} 行`;
 }
 
