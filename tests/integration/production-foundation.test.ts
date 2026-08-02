@@ -56,6 +56,12 @@ async function createBaseRecords() {
   return { user, level, point, question };
 }
 
+async function correctAnswerFor(sessionId: string, questionId: string): Promise<string[]> {
+  const stored = await prisma.practiceSessionQuestion.findFirstOrThrow({ where: { sessionId, questionId }, select: { snapshot: true } });
+  const correctOptionIds = (stored.snapshot as { correctOptionIds?: unknown }).correctOptionIds;
+  return Array.isArray(correctOptionIds) ? correctOptionIds.map(String) : [];
+}
+
 describe("production database foundation", () => {
   it("keeps RADIO as the sole enabled course", async () => {
     const nextCourse = await prisma.course.create({ data: { code: "PYTHON", name: "Python" } });
@@ -264,7 +270,7 @@ describe("production database foundation", () => {
     const resumed = await getPracticeSession(user.id, created.id);
     expect(resumed?.questions[0].stem).toBe("Original");
 
-    const result = await submitPracticeAnswer(user.id, created.id, question.id, ["A"], "snapshot-answer-key");
+    const result = await submitPracticeAnswer(user.id, created.id, question.id, await correctAnswerFor(created.id, question.id), "snapshot-answer-key");
     expect(result.isCorrect).toBe(true);
     expect(await prisma.practiceSession.findUniqueOrThrow({ where: { id: created.id } })).toMatchObject({ status: "COMPLETED", currentIndex: 1, correctCount: 1 });
   });
@@ -349,8 +355,10 @@ describe("production database foundation", () => {
     expect(session.total).toBe(20);
     expect((await prisma.practiceSession.findUniqueOrThrow({ where: { id: session.id } })).levelId).toBeNull();
     const [correctQuestion, incorrectQuestion] = session.questions;
-    await submitPracticeAnswer(user.id, session.id, correctQuestion.id, ["A"], "wrong-correct-key");
-    await submitPracticeAnswer(user.id, session.id, incorrectQuestion.id, ["B"], "wrong-incorrect-key");
+    const correctAnswer = await correctAnswerFor(session.id, correctQuestion.id);
+    const incorrectAnswer = await correctAnswerFor(session.id, incorrectQuestion.id);
+    await submitPracticeAnswer(user.id, session.id, correctQuestion.id, correctAnswer, "wrong-correct-key");
+    await submitPracticeAnswer(user.id, session.id, incorrectQuestion.id, ["A", "B"].filter((id) => !incorrectAnswer.includes(id)), "wrong-incorrect-key");
     expect(await prisma.wrongQuestion.findUniqueOrThrow({ where: { courseId_userId_questionId: { courseId: RADIO_COURSE_ID, userId: user.id, questionId: correctQuestion.id } } })).toMatchObject({ mastered: false, correctSessionCount: 0, wrongCount: 1 });
     expect(await prisma.wrongQuestion.findUniqueOrThrow({ where: { courseId_userId_questionId: { courseId: RADIO_COURSE_ID, userId: user.id, questionId: incorrectQuestion.id } } })).toMatchObject({ mastered: false, wrongCount: 2 });
   });
@@ -412,7 +420,9 @@ describe("production database foundation", () => {
 
     const session = await createPracticeSession(user.id, { mode: "exam", levelCode: "A" });
     const reloaded = await getPracticeSession(user.id, session.id);
-    const submission = await submitMockExam(user.id, session.id, [{ questionId: single.id, selectedOptionIds: ["A"] }, { questionId: multiple.id, selectedOptionIds: ["A"] }]);
+    const singleAnswer = await correctAnswerFor(session.id, single.id);
+    const multipleAnswer = await correctAnswerFor(session.id, multiple.id);
+    const submission = await submitMockExam(user.id, session.id, [{ questionId: single.id, selectedOptionIds: singleAnswer }, { questionId: multiple.id, selectedOptionIds: multipleAnswer.slice(0, 1) }]);
 
     expect(session.exam).toMatchObject({ durationMinutes: 40, passingCount: 1 });
     expect(reloaded?.questions.map((question) => ({ id: question.id, options: question.options }))).toEqual(session.questions.map((question) => ({ id: question.id, options: question.options })));
@@ -424,7 +434,7 @@ describe("production database foundation", () => {
     const { user, level, question } = await createBaseRecords();
     await prisma.examRule.create({ data: { levelId: level.id, singleCount: 1, multipleCount: 0, durationMinutes: 40, passingCount: 1 } });
     const session = await createPracticeSession(user.id, { mode: "exam", levelCode: level.code });
-    await saveExamDraft(user.id, session.id, { answers: { [question.id]: ["A"] }, currentIndex: 0, version: 0 });
+    await saveExamDraft(user.id, session.id, { answers: { [question.id]: await correctAnswerFor(session.id, question.id) }, currentIndex: 0, version: 0 });
     await prisma.practiceSession.update({ where: { id: session.id }, data: { expiresAt: new Date(Date.now() - 1_000) } });
 
     const [firstScan, secondScan] = await Promise.all([settleExpiredMockExams(), settleExpiredMockExams()]);
@@ -495,11 +505,13 @@ describe("production database foundation", () => {
     await prisma.levelPracticeRule.create({ data: { levelId: level.id, singleCount: 1, multipleCount: 0 } });
     const session = await createPracticeSession(user.id, { mode: "level", levelCode: level.code });
 
-    const accepted = await submitPracticeAnswer(user.id, session.id, question.id, ["A"], "retry-key");
-    const replayed = await submitPracticeAnswer(user.id, session.id, question.id, ["A"], "retry-key-retry");
+    const answer = await correctAnswerFor(session.id, question.id);
+    const wrongAnswer = ["A", "B"].filter((id) => !answer.includes(id));
+    const accepted = await submitPracticeAnswer(user.id, session.id, question.id, answer, "retry-key");
+    const replayed = await submitPracticeAnswer(user.id, session.id, question.id, answer, "retry-key-retry");
 
     expect(replayed).toEqual(accepted);
-    await expect(submitPracticeAnswer(user.id, session.id, question.id, ["B"], "replacement-key")).rejects.toMatchObject({ status: 409, message: "本题答案已接受，不能覆盖" });
+    await expect(submitPracticeAnswer(user.id, session.id, question.id, wrongAnswer, "replacement-key")).rejects.toMatchObject({ status: 409, message: "本题答案已接受，不能覆盖" });
     expect(await prisma.practiceAnswer.count({ where: { sessionId: session.id } })).toBe(1);
     expect(await prisma.wrongQuestion.count({ where: { userId: user.id, questionId: question.id } })).toBe(0);
     await expect(prisma.practiceSession.findUniqueOrThrow({ where: { id: session.id } })).resolves.toMatchObject({ currentIndex: 1, correctCount: 1, status: "COMPLETED" });
@@ -510,9 +522,10 @@ describe("production database foundation", () => {
     await prisma.levelPracticeRule.create({ data: { levelId: level.id, singleCount: 1, multipleCount: 0 } });
     const session = await createPracticeSession(user.id, { mode: "level", levelCode: level.code });
 
+    const answer = await correctAnswerFor(session.id, question.id);
     const results = await Promise.all([
-      submitPracticeAnswer(user.id, session.id, question.id, ["A"], "concurrent-retry-key"),
-      submitPracticeAnswer(user.id, session.id, question.id, ["A"], "concurrent-retry-key"),
+      submitPracticeAnswer(user.id, session.id, question.id, answer, "concurrent-retry-key"),
+      submitPracticeAnswer(user.id, session.id, question.id, answer, "concurrent-retry-key"),
     ]);
 
     expect(results[1]).toEqual(results[0]);
@@ -525,9 +538,11 @@ describe("production database foundation", () => {
     await prisma.levelPracticeRule.create({ data: { levelId: level.id, singleCount: 1, multipleCount: 0 } });
     const session = await createPracticeSession(user.id, { mode: "level", levelCode: level.code });
 
+    const correctAnswer = await correctAnswerFor(session.id, question.id);
+    const wrongAnswer = ["A", "B"].filter((id) => !correctAnswer.includes(id));
     const results = await Promise.allSettled([
-      submitPracticeAnswer(user.id, session.id, question.id, ["A"], "concurrent-a"),
-      submitPracticeAnswer(user.id, session.id, question.id, ["B"], "concurrent-b"),
+      submitPracticeAnswer(user.id, session.id, question.id, correctAnswer, "concurrent-a"),
+      submitPracticeAnswer(user.id, session.id, question.id, wrongAnswer, "concurrent-b"),
     ]);
 
     expect(results.filter((result) => result.status === "fulfilled")).toHaveLength(1);
