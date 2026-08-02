@@ -4,7 +4,7 @@ import { validateImportRow } from "../lib/domain/question-import";
 
 describe("word question parser", () => {
   it("skips template instructions before the first question number and ignores empty lines", () => {
-    const rows = parseWordQuestions([
+    const { rows } = parseWordQuestions([
       "导入说明：本模板用于批量导入选择题。",
       "每个题型必须写题号，答案不能为空。",
       "",
@@ -25,12 +25,27 @@ describe("word question parser", () => {
   });
 
   it("supports the three question-number formats with full/half-width parens", () => {
-    const rows = parseWordQuestions([
+    const { rows } = parseWordQuestions([
       "1. 题干一",
+      "A、选项A",
+      "B、选项B",
+      "答案：A",
       "2、题干二",
+      "A、选项A",
+      "B、选项B",
+      "答案：B",
       "（3）题干三",
+      "A、选项A",
+      "B、选项B",
+      "答案：A",
       "(4)题干四",
+      "A、选项A",
+      "B、选项B",
+      "答案：B",
       "5．题干五",
+      "A、选项A",
+      "B、选项B",
+      "答案：A",
     ]);
 
     expect(rows.map((row) => row.locationLabel)).toEqual(["第 1 题", "第 2 题", "第 3 题", "第 4 题", "第 5 题"]);
@@ -38,7 +53,7 @@ describe("word question parser", () => {
   });
 
   it("leaves worksheet name and question code empty for word rows", () => {
-    const rows = parseWordQuestions(["1. 题干", "A、选项A", "B、选项B", "答案：A"]);
+    const { rows } = parseWordQuestions(["1. 题干", "A、选项A", "B、选项B", "答案：A"]);
 
     expect(rows[0].sheetName).toBeUndefined();
     expect(rows[0].externalQuestionCode).toBeUndefined();
@@ -47,7 +62,7 @@ describe("word question parser", () => {
   });
 
   it("parses options in order A–H, normalizing case and supporting common separators", () => {
-    const rows = parseWordQuestions([
+    const { rows } = parseWordQuestions([
       "1. 题干",
       "a、小写选项",
       "B. 点号选项",
@@ -73,7 +88,7 @@ describe("word question parser", () => {
   });
 
   it("tolerates leading whitespace on answer, option, and explanation markers", () => {
-    const rows = parseWordQuestions([
+    const { rows } = parseWordQuestions([
       "1. 题干",
       "\tA、选项A",
       "  B. 选项B",
@@ -91,13 +106,13 @@ describe("word question parser", () => {
   });
 
   it("keeps multiline stems joined with newlines", () => {
-    const rows = parseWordQuestions(["1. 第一行题干", "  缩进的第二行题干", "A、选项A", "B、选项B", "答案：A"]);
+    const { rows } = parseWordQuestions(["1. 第一行题干", "  缩进的第二行题干", "A、选项A", "B、选项B", "答案：A"]);
 
     expect(rows[0].stem).toBe("第一行题干\n  缩进的第二行题干");
   });
 
   it("parses non-empty answer lines with common separators", () => {
-    const rows = parseWordQuestions([
+    const { rows } = parseWordQuestions([
       "1. 题干",
       "A、选项A",
       "B、选项B",
@@ -114,7 +129,7 @@ describe("word question parser", () => {
   });
 
   it("extracts a parenthetical answer at the stem end and removes it", () => {
-    const rows = parseWordQuestions([
+    const { rows } = parseWordQuestions([
       "1. 题干（A）",
       "A、选项A",
       "B、选项B",
@@ -134,7 +149,7 @@ describe("word question parser", () => {
   });
 
   it("does not extract empty parens, non-letter parens, or parens when an answer line exists", () => {
-    const rows = parseWordQuestions([
+    const { rows } = parseWordQuestions([
       "1. 题干（）",
       "A、选项A",
       "B、选项B",
@@ -153,13 +168,13 @@ describe("word question parser", () => {
   });
 
   it("treats an empty answer line as an answer line and skips parenthetical fallback", () => {
-    const rows = parseWordQuestions(["1. 题干（A）", "A、选项A", "B、选项B", "答案："]);
+    const { rows } = parseWordQuestions(["1. 题干（A）", "A、选项A", "B、选项B", "答案："]);
 
     expect(rows[0]).toMatchObject({ stem: "题干（A）", rawAnswer: "" });
   });
 
   it("merges explanation lines until the next question number or block end", () => {
-    const rows = parseWordQuestions([
+    const { rows } = parseWordQuestions([
       "1. 题干",
       "A、选项A",
       "B、选项B",
@@ -178,7 +193,7 @@ describe("word question parser", () => {
   });
 
   it("ends explanation at the next option or answer field marker", () => {
-    const rows = parseWordQuestions([
+    const { rows } = parseWordQuestions([
       "1. 题干",
       "A、选项A",
       "解析：先看选项，再看答案。",
@@ -192,7 +207,7 @@ describe("word question parser", () => {
   });
 
   it("supports all three indeterminate annotations and strips them from the stem", () => {
-    const rows = parseWordQuestions([
+    const { rows } = parseWordQuestions([
       "1. [不定项选择题] 题干一",
       "A、选项A",
       "B、选项B",
@@ -214,17 +229,200 @@ describe("word question parser", () => {
   });
 
   it("accepts an annotation on the line after the question number", () => {
-    const rows = parseWordQuestions(["1.", "[不定项选择题]题干", "A、选项A", "B、选项B", "答案：A"]);
+    const { rows } = parseWordQuestions(["1.", "[不定项选择题]题干", "A、选项A", "B、选项B", "答案：A"]);
 
     expect(rows).toHaveLength(1);
     expect(rows[0].stem).toBe("题干");
   });
 
   it("decides single vs multiple choice by answer count through the existing rule", () => {
-    const single = parseWordQuestions(["1. 题干", "A、选项A", "B、选项B", "答案：A"])[0];
-    const multiple = parseWordQuestions(["2. 题干", "A、选项A", "B、选项B", "答案：AB"])[0];
+    const single = parseWordQuestions(["1. 题干", "A、选项A", "B、选项B", "答案：A"]).rows[0];
+    const multiple = parseWordQuestions(["2. 题干", "A、选项A", "B、选项B", "答案：AB"]).rows[0];
 
     expect(validateImportRow(single).type).toBe("SINGLE_CHOICE");
     expect(validateImportRow(multiple).type).toBe("MULTIPLE_CHOICE");
+  });
+});
+
+describe("word parser unsupported types and block errors", () => {
+  it("rejects judgment questions with 对/错/正确/错误 answers one by one with location", () => {
+    const { rows, errors } = parseWordQuestions([
+      "1. 判断：力是维持运动的原因。",
+      "答案：正确",
+      "2. 判断二",
+      "答案：错误",
+      "3. 判断三",
+      "答案：对",
+      "4. 判断四",
+      "答案：错",
+    ]);
+
+    expect(rows).toHaveLength(0);
+    expect(errors).toHaveLength(4);
+    expect(errors.map((error) => error.locationLabel)).toEqual(["第 1 题", "第 2 题", "第 3 题", "第 4 题"]);
+    expect(errors.map((error) => error.rowNumber)).toEqual([1, 2, 3, 4]);
+    expect(errors.every((error) => error.message === "判断题暂不支持导入")).toBe(true);
+  });
+
+  it("rejects fill-in-the-blank questions when the stem has blank parens and the answer uses separators", () => {
+    const { rows, errors } = parseWordQuestions([
+      "1. 力与运动的关系是（）。",
+      "答案：惯性|质量",
+      "2. 光在真空中的传播速度是（ ）。",
+      "答案：3×10^8；真空中",
+    ]);
+
+    expect(rows).toHaveLength(0);
+    expect(errors).toHaveLength(2);
+    expect(errors.map((error) => error.locationLabel)).toEqual(["第 1 题", "第 2 题"]);
+    expect(errors.every((error) => error.message === "填空题暂不支持导入")).toBe(true);
+  });
+
+  it("rejects short-answer and essay questions without options", () => {
+    const { rows, errors } = parseWordQuestions([
+      "1. 简述牛顿第一定律的内容。",
+      "答案：任何物体在不受外力作用时，总保持匀速直线运动状态或静止状态。",
+      "2. 论述题：请论述能量守恒的意义。",
+    ]);
+
+    expect(rows).toHaveLength(0);
+    expect(errors.map((error) => error.message)).toEqual(["简答题暂不支持导入", "简答题暂不支持导入"]);
+    expect(errors.map((error) => error.locationLabel)).toEqual(["第 1 题", "第 2 题"]);
+  });
+
+  it("treats a stem with blank parens but no answer separator as a short-answer question", () => {
+    const { rows, errors } = parseWordQuestions(["1. 单个空位是（）。", "答案：惯性"]);
+
+    expect(rows).toHaveLength(0);
+    expect(errors).toEqual([
+      expect.objectContaining({ locationLabel: "第 1 题", message: "简答题暂不支持导入" }),
+    ]);
+  });
+
+  it("rejects a material block from [材料题] to [材料题结束] as one error and keeps inner sub-questions intact", () => {
+    const { rows, errors } = parseWordQuestions([
+      "1. 下列判断正确的一项是",
+      "A、选项A",
+      "B、选项B",
+      "答案：A",
+      "2. [材料题] 阅读下面的材料",
+      "材料一：……",
+      "（1）小题一",
+      "（2）小题二",
+      "[材料题结束]",
+      "3. 正常选择题",
+      "A、选项A",
+      "B、选项B",
+      "答案：B",
+    ]);
+
+    expect(rows.map((row) => row.locationLabel)).toEqual(["第 1 题", "第 3 题"]);
+    expect(errors).toEqual([
+      expect.objectContaining({ locationLabel: "第 2 题", message: "材料题暂不支持导入" }),
+    ]);
+  });
+
+  it("rejects an unterminated material block through the document end without splitting its lines", () => {
+    const { rows, errors } = parseWordQuestions([
+      "1. [材料题] 阅读材料",
+      "（1）小题一",
+      "（2）小题二",
+      "2. 本行也是材料的一部分",
+    ]);
+
+    expect(rows).toHaveLength(0);
+    expect(errors).toEqual([
+      expect.objectContaining({ locationLabel: "第 1 题", message: "材料题暂不支持导入" }),
+    ]);
+  });
+
+  it("detects a material annotation on the line after the question number", () => {
+    const { rows, errors } = parseWordQuestions([
+      "1. 阅读材料并作答",
+      "[材料题]",
+      "材料正文……",
+      "（1）小题",
+      "[材料题结束]",
+    ]);
+
+    expect(rows).toHaveLength(0);
+    expect(errors).toEqual([
+      expect.objectContaining({ locationLabel: "第 1 题", message: "材料题暂不支持导入" }),
+    ]);
+  });
+
+  it("rejects questions with more than eight options and explains the system limit", () => {
+    const { rows, errors } = parseWordQuestions([
+      "1. 选项超限题",
+      "A、选项A",
+      "B、选项B",
+      "C、选项C",
+      "D、选项D",
+      "E、选项E",
+      "F、选项F",
+      "G、选项G",
+      "H、选项H",
+      "I、选项I",
+      "答案：A",
+      "2. 正常选择题",
+      "A、选项A",
+      "B、选项B",
+      "答案：B",
+    ]);
+
+    expect(rows.map((row) => row.locationLabel)).toEqual(["第 2 题"]);
+    expect(errors).toEqual([
+      expect.objectContaining({ locationLabel: "第 1 题", message: "系统最多支持 8 个选项" }),
+    ]);
+  });
+
+  it("keeps valid choice questions importable next to rejected ones", () => {
+    const { rows, errors } = parseWordQuestions([
+      "1. 选择题一",
+      "A、选项A",
+      "B、选项B",
+      "答案：A",
+      "2. 判断题",
+      "答案：正确",
+      "3. 选择题二",
+      "A、选项A",
+      "B、选项B",
+      "答案：B",
+    ]);
+
+    expect(errors).toEqual([
+      expect.objectContaining({ rowNumber: 2, locationLabel: "第 2 题", message: "判断题暂不支持导入" }),
+    ]);
+    expect(rows.map((row) => row.locationLabel)).toEqual(["第 1 题", "第 3 题"]);
+    expect(rows.map((row) => row.rowNumber)).toEqual([1, 3]);
+
+    const validated = rows.map((row) => validateImportRow({ ...row, levelCode: "A", categoryCode: "4.1.1" }));
+    expect(validated.every((item) => item.issues.every((issue) => issue.severity !== "error"))).toBe(true);
+  });
+
+  it("flags missing answers as locatable validation errors", () => {
+    const { rows, errors } = parseWordQuestions([
+      "1. 缺少答案的选择题",
+      "A、选项A",
+      "B、选项B",
+      "2. 空答案行的选择题",
+      "A、选项A",
+      "B、选项B",
+      "答案：",
+    ]);
+
+    expect(errors).toHaveLength(0);
+    expect(rows.map((row) => row.locationLabel)).toEqual(["第 1 题", "第 2 题"]);
+    expect(rows.every((row) => row.rawAnswer === "")).toBe(true);
+    for (const row of rows) {
+      const validated = validateImportRow({ ...row, levelCode: "A", categoryCode: "4.1.1" });
+      expect(validated.issues).toContainEqual(expect.objectContaining({ severity: "error", field: "答案", message: "答案不能为空" }));
+    }
+  });
+
+  it("throws when the document has no question numbers", () => {
+    expect(() => parseWordQuestions(["导入说明：本模板用于批量导入选择题。", "每个题型必须写题号。"])).toThrow("未找到题目");
+    expect(() => parseWordQuestions([])).toThrow("未找到题目");
+    expect(() => parseWordQuestions(["", "   "])).toThrow("未找到题目");
   });
 });
