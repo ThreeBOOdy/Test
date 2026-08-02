@@ -21,6 +21,15 @@ export type QuestionSnapshot = {
 
 export function createQuestionSnapshot(question: Omit<QuestionSnapshot, "questionId" | "preserveOptionOrder"> & { id: string; preserveOptionOrder?: boolean }, random: () => number = Math.random): QuestionSnapshot {
   const preserveOptionOrder = question.preserveOptionOrder ?? false;
+  const sourceOptions = question.options.map((option) => ({ ...option }));
+  const labels = sourceOptions.map((option) => option.id);
+  const shuffledOptions = preserveOptionOrder ? sourceOptions : shuffle(sourceOptions, random);
+  const labelBySourceId = new Map<string, string>();
+  const options = shuffledOptions.map((option, index) => {
+    const label = labels[index];
+    labelBySourceId.set(option.id, label);
+    return { ...option, id: label };
+  });
   return {
     questionId: question.id,
     levelId: question.levelId,
@@ -33,8 +42,8 @@ export function createQuestionSnapshot(question: Omit<QuestionSnapshot, "questio
     correctOptionCount: question.correctOptionCount,
     selectionSpec: question.selectionSpec,
     preserveOptionOrder,
-    options: (preserveOptionOrder ? question.options : shuffle(question.options, random)).map((option) => ({ ...option })),
-    correctOptionIds: [...question.correctOptionIds],
+    options,
+    correctOptionIds: question.correctOptionIds.map((id) => labelBySourceId.get(id) ?? id),
     levelCode: question.levelCode,
     knowledgeName: question.knowledgeName,
   };

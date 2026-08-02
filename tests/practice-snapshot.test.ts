@@ -26,28 +26,29 @@ function question() {
 describe("practice question snapshots", () => {
   it("copies all fields required to render and grade later", () => {
     const source = question();
-    const snapshot = createQuestionSnapshot(source);
+    const snapshot = createQuestionSnapshot(source, () => 0);
     source.options[0].text = "教师后续修改";
     source.correctOptionIds[0] = "B";
 
-    expect(snapshot.options.find((option) => option.id === "A")?.text).toBe("选项 A");
-    expect(snapshot.correctOptionIds).toEqual(["A", "C"]);
+    expect(snapshot.options.map((option) => option.text).sort()).toEqual(["选项 A", "选项 B", "选项 C", "选项 D"]);
+    expect(snapshot.correctOptionIds).toEqual(["D", "B"]);
     expect(snapshot.levelCode).toBe("A");
     expect(snapshot.knowledgeName).toBe("知识点一");
   });
 
   it("grades against the saved answer set", () => {
-    const snapshot = createQuestionSnapshot(question());
-    expect(gradeQuestionSnapshot(snapshot, ["C", "A"])).toBe(true);
+    const snapshot = createQuestionSnapshot(question(), () => 0);
+    expect(gradeQuestionSnapshot(snapshot, ["D", "B"])).toBe(true);
     expect(gradeQuestionSnapshot(snapshot, ["A", "B"])).toBe(false);
   });
 
-  it("randomizes options once while retaining stable option identities", () => {
+  it("shuffles option content while keeping ABCD labels in top-to-bottom order", () => {
     const snapshot = createQuestionSnapshot(question(), () => 0);
 
-    expect(snapshot.options.map((option) => option.id)).toEqual(["B", "C", "D", "A"]);
-    expect(gradeQuestionSnapshot(snapshot, ["A", "C"])).toBe(true);
-    expect(snapshot.options.map((option) => option.id)).toEqual(["B", "C", "D", "A"]);
+    expect(snapshot.options.map((option) => option.id)).toEqual(["A", "B", "C", "D"]);
+    expect(snapshot.options.map((option) => option.text)).toEqual(["选项 B", "选项 C", "选项 D", "选项 A"]);
+    expect(snapshot.correctOptionIds).toEqual(["D", "B"]);
+    expect(gradeQuestionSnapshot(snapshot, ["D", "B"])).toBe(true);
   });
 
   it("preserves option order for position-dependent questions", () => {
