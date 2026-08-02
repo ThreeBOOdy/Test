@@ -183,4 +183,32 @@ describe("question import preview dispatch", () => {
     expect(body.rows[0].row.locationLabel).toBeUndefined();
     expect(body.sheetNames).toEqual(["题库"]);
   });
+
+  it("rejects word files over 20MB with a 413 error", async () => {
+    const oversized = new Uint8Array(20 * 1024 * 1024 + 1024).buffer;
+    const response = await previewImport(previewRequest(uploadFile(oversized, "large.docx"), { levelCode: "A", categoryCode: "1.1" }));
+
+    expect(response.status).toBe(413);
+    expect((await response.json()).message).toContain("20MB");
+    expect(mocks.importBatchCreate).not.toHaveBeenCalled();
+  });
+
+  it("caps word rows at 5000 like Excel", async () => {
+    const lines: string[] = [];
+    for (let index = 1; index <= 5001; index += 1) {
+      lines.push(`${index}. 第${index}题题干`);
+      lines.push("A、选项A");
+      lines.push("B、选项B");
+      lines.push("答案：A");
+    }
+    const buffer = await buildDocx(lines);
+
+    const response = await previewImport(previewRequest(uploadFile(buffer, "large.docx"), { levelCode: "A", categoryCode: "1.1" }));
+    const body = await response.json();
+
+    expect(response.status, JSON.stringify(body)).toBe(200);
+    expect(body.source).toBe("WORD");
+    expect(body.stats.totalRows).toBe(5000);
+    expect(mocks.importBatchCreate).toHaveBeenCalledWith({ data: expect.objectContaining({ totalRows: 5000 }) });
+  });
 });

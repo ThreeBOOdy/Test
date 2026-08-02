@@ -7,7 +7,9 @@ import { expect, test, type Page } from "@playwright/test";
 const runId = `${Date.now().toString(36)}-${process.pid}`;
 const numericRunId = `${Date.now()}${process.pid}`.slice(-8).padStart(8, "0");
 const studentUsername = `e2e-${runId}`;
-const activatedStudentUsername = "radio-001";
+// 激活后学生用户名会变成所选人物身份的用户名；人物一经占用便从可选列表消失，
+// 因此不能在本地持久化库中写死某个具体人物，运行首条用例时动态读取所选人物。
+let activatedStudentUsername = "radio-001";
 const studentNationalId = createNationalId(Number(numericRunId));
 const studentPhone = `138${numericRunId}`;
 const initialPassword = "InitialPass123!";
@@ -132,11 +134,20 @@ test.describe.serial("production business flows", () => {
     await logout(page);
 
     await login(page, studentUsername, importedPassword, "/activate");
+    // 等待人物列表客户端加载完成（“共 N 位”文本仅在水合与异步请求后出现），
+    // 避免在 React 水合完成前填写受控输入框导致值被重置而拦下表单提交。
+    await expect(page.getByText(/共 \d+ 位 · 第 1 \/ \d+ 页/)).toBeVisible({ timeout: 20_000 });
     await page.getByLabel("初始密码").fill(importedPassword);
     await page.getByLabel("激活码").fill(activationCode);
     await page.getByRole("textbox", { name: "新密码", exact: true }).fill(changedPassword);
     await page.getByRole("textbox", { name: "确认新密码", exact: true }).fill(changedPassword);
-    await page.getByRole("radio", { name: /无线电贡献者 001/ }).check();
+    const firstPersonRadio = page.locator('input[name="radioPersonId"]').first();
+    await expect(firstPersonRadio).toBeVisible();
+    await firstPersonRadio.check();
+    const selectedLabelText = await firstPersonRadio.locator("xpath=ancestor::label").innerText();
+    const usernameMatch = selectedLabelText.match(/radio-\d{3}/);
+    expect(usernameMatch, `所选人物身份应包含 radio-XXX 用户名，实际标签：${selectedLabelText}`).not.toBeNull();
+    activatedStudentUsername = usernameMatch![0];
     const activateResponsePromise = page.waitForResponse((response) => response.url().endsWith("/api/v1/auth/activate") && response.request().method() === "POST");
     await page.getByRole("button", { name: "完成激活" }).click();
     const activateResponse = await activateResponsePromise;
