@@ -15,7 +15,7 @@ export const teacherNavigation: NavigationItem[] = [
   { href: "/teacher/questions", label: "题库管理", icon: BookOpen },
   { href: "/teacher/knowledge", label: "知识点目录", icon: Target },
   { href: "/teacher/rules", label: "抽题规则", icon: Settings2 },
-  { href: "/teacher/import", label: "Excel 导入", icon: FileSpreadsheet },
+  { href: "/teacher/import", label: "题库导入", icon: FileSpreadsheet },
   { href: "/teacher/reports", label: "教学统计", icon: BarChart3 },
 ];
 
