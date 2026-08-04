@@ -45,6 +45,22 @@ services:
       - backend
     restart: "no"
 
+  seed:
+    build:
+      context: .
+      target: builder
+    environment:
+      DATABASE_URL: ${DATABASE_URL}
+      APP_SEED_PASSWORD: ${APP_SEED_PASSWORD:-ChangeMe123!}
+      NODE_ENV: production
+    command: ["npx", "tsx", "prisma/seed.ts"]
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    networks:
+      - backend
+    restart: "no"
+
   app:
     build:
       context: .
@@ -59,6 +75,8 @@ services:
       NODE_ENV: production
     depends_on:
       migrate:
+        condition: service_completed_successfully
+      seed:
         condition: service_completed_successfully
     networks:
       - frontend
@@ -77,7 +95,7 @@ services:
     environment:
       DATABASE_URL: ${DATABASE_URL}
       NODE_ENV: production
-    command: ["npx", "tsx", "scripts/exam-settlement-worker.ts"]
+    command: ["node", "--conditions=react-server", "--import", "tsx", "scripts/exam-settlement-worker.ts"]
     depends_on:
       migrate:
         condition: service_completed_successfully

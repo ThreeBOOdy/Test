@@ -453,6 +453,26 @@ docker compose down -v
 
 应用容器运行只需 Docker Engine 和 Docker Compose v2，不需要在宿主机安装 MySQL、Prisma 或 Caddy。若在宿主机或 Windows 任务计划程序运行仓库内的备份 PowerShell 工具，还必须安装 Node.js 24、执行 `npm ci`，并允许该运维账号调用 Docker Compose；脚本会自动切换到项目根目录。
 
+### 一键部署（推荐）
+
+服务器上只需一条命令即可完成全部功能的完整部署：自动生成 `.env` 与随机密钥（MySQL 密码、`AUTH_SECRET`、学生数据加密密钥）、构建镜像，并依次启动 MySQL、Prisma 迁移、基础数据 seed（管理员账号、课程、级别、知识点、题目）、Next.js 应用、定时结算 Worker 和 Caddy HTTPS 代理，最后等待健康检查通过。
+
+Linux 服务器：
+
+```bash
+./scripts/deploy-prod.sh 192.168.50.10 "192.168.50.0/24"
+```
+
+Windows 服务器：
+
+```powershell
+.\scripts\deploy-prod.ps1 -ServerIp 192.168.50.10 -AllowedCidrs "192.168.50.0/24"
+```
+
+首次运行会打印管理员初始账号 `admin` 和密码（来自生成的 `APP_SEED_PASSWORD`，登录后请立即修改）。不带参数运行则只生成 `.env`，手动填写网络地址后再运行一次。之后每次运行都会用最新代码重建并完整启动。
+
+### 手动配置方式
+
 首次部署时复制生产代码并创建 `.env`：
 
 ```dotenv
@@ -469,16 +489,16 @@ APP_ALLOWED_CIDRS="192.168.50.0/24"
 启动或升级：
 
 ```bash
-docker compose -f docker-compose.prod.yml up -d --build
+docker compose --env-file .env -f docker-compose.prod.yml up -d --build
 ```
 
-Compose 会自动启动 MySQL 8.0.46、执行 Prisma `migrate deploy`、启动 Next.js 和 Caddy。Caddy 只绑定 `APP_BIND_IP`，使用内部 CA 为该 IP 提供 HTTPS，并拒绝 `APP_ALLOWED_CIDRS` 之外的来源。MySQL 不发布宿主机端口，且位于代理无法加入的内部 Docker 网络。完整部署、证书、防火墙与验收流程见 `docs/operations/lan-https-deployment.md`。
+Compose 会自动启动 MySQL 8.0.46、执行 Prisma `migrate deploy`、执行基础数据 seed（幂等，可重复运行）、启动 Next.js 和 Caddy。Caddy 只绑定 `APP_BIND_IP`，使用内部 CA 为该 IP 提供 HTTPS，并拒绝 `APP_ALLOWED_CIDRS` 之外的来源。MySQL 不发布宿主机端口，且位于代理无法加入的内部 Docker 网络。完整部署、证书、防火墙与验收流程见 `docs/operations/lan-https-deployment.md`。
 
 查看状态和日志：
 
 ```bash
-docker compose -f docker-compose.prod.yml ps
-docker compose -f docker-compose.prod.yml logs -f
+docker compose --env-file .env -f docker-compose.prod.yml ps
+docker compose --env-file .env -f docker-compose.prod.yml logs -f
 ```
 
 生产环境不会自动执行演示数据 seed。仅部署演示环境时，在首次迁移成功后执行一次：

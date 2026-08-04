@@ -42,30 +42,87 @@ Write-Host "Node.js 已就绪：$nodeVersion"
 
 # 2. 检查系统是否已经在运行
 Write-Step 2 "检查系统是否已在运行"
-$found = @()
-foreach ($port in $ProbePorts) {
+
+function Get-HealthState([int]$Port) {
   try {
-    $response = Invoke-WebRequest -Uri "http://127.0.0.1:$port/api/health/live" -UseBasicParsing -TimeoutSec 1
-    if ($response.StatusCode -eq 200) {
-      $found += "http://localhost:$port"
-    }
-  } catch { }
-}
-if ($found.Count -gt 0) {
-  Write-Host "检测到系统已在运行，无需重复启动：" -ForegroundColor Green
-  foreach ($url in $found) { Write-Host "  $url" -ForegroundColor Green }
-  if ($found.Count -eq 1) {
-    if ($found[0] -like "http://localhost:3000") {
-      Write-Host "提示：3000 端口可能是 Docker 容器实例（代码可能较旧）。" -ForegroundColor Yellow
-      Write-Host "     如需最新代码，请停止该容器后重新运行本脚本。" -ForegroundColor Yellow
-    }
-    Start-Process $found[0]
-  } else {
-    Write-Host "发现多个实例，请打开其中“开发服务器”对应的地址（当前机器通常为 3001）。" -ForegroundColor Yellow
+    $response = Invoke-WebRequest -Uri "http://127.0.0.1:$Port/api/health/live" -UseBasicParsing -TimeoutSec 1
+    if ($response.StatusCode -ne 200) { return $null }
+    $body = $response.Content | ConvertFrom-Json
+    return @{ Responding = $true; Env = $body.env }
+  } catch {
+    return $null
   }
+}
+
+$currentDev = @()  # 最新代码的开发服务器（健康检查带 env=development 标记）
+$stalePorts = @()  # 旧实例端口（Docker 容器或旧版本代码）
+foreach ($port in $ProbePorts) {
+  $state = Get-HealthState $port
+  if ($null -eq $state) { continue }
+  if ($state.Env -eq "development") {
+    $currentDev += "http://localhost:$port"
+  } else {
+    $stalePorts += $port
+  }
+}
+
+# 旧实例一律清理：本脚本只保留并展示“最新代码”的开发服务器
+if ($stalePorts.Count -gt 0) {
+  Write-Host "检测到端口 $($stalePorts -join '、') 上有旧实例（Docker 容器或旧版本代码）。" -ForegroundColor Yellow
+  Write-Host "正在停止旧实例，以便启动最新代码……" -ForegroundColor Yellow
+
+  foreach ($port in $stalePorts) {
+    $stopped = $false
+
+    # 优先停止发布该端口的 Docker 容器（通常是旧的 docker compose app）
+    try {
+      $containerIds = docker ps -q --filter "publish=$port" 2>$null
+      if ($LASTEXITCODE -eq 0 -and $containerIds) {
+        foreach ($id in $containerIds) {
+          if (-not $id) { continue }
+          docker stop $id | Out-Null
+          if ($LASTEXITCODE -eq 0) { $stopped = $true }
+        }
+      }
+    } catch { }
+
+    # 非 Docker 场景：停止占用该端口的 node 进程（旧开发服务器）
+    if (-not $stopped) {
+      try {
+        $conn = Get-NetTCPConnection -LocalPort $port -State Listen -ErrorAction SilentlyContinue | Select-Object -First 1
+        if ($conn) {
+          $proc = Get-Process -Id $conn.OwningProcess -ErrorAction SilentlyContinue
+          if ($proc -and $proc.ProcessName -eq "node") {
+            Stop-Process -Id $conn.OwningProcess -Force -ErrorAction SilentlyContinue
+            $stopped = $true
+          }
+        }
+      } catch { }
+    }
+
+    if ($stopped) {
+      Write-Host "  端口 $port 的旧实例已停止。" -ForegroundColor Green
+    } else {
+      Write-Host "[警告] 无法自动停止端口 $port 上的旧实例。" -ForegroundColor Red
+      Write-Host "       请手动停止占用该端口的程序或容器后，重新运行本脚本。" -ForegroundColor Yellow
+      Read-Host "按回车键退出"
+      exit 1
+    }
+  }
+  Start-Sleep -Seconds 1
+  Write-Host "旧实例已清理，将继续启动最新代码。" -ForegroundColor Green
+  Write-Host ""
+}
+
+# 最新代码的开发服务器已在运行时，直接打开即可
+if ($currentDev.Count -gt 0) {
+  Write-Host "检测到最新代码的开发服务器已在运行，无需重复启动：" -ForegroundColor Green
+  foreach ($url in $currentDev) { Write-Host "  $url" -ForegroundColor Green }
+  Start-Process $currentDev[0]
   Read-Host "按回车键退出"
   exit 0
 }
+
 Write-Host "未检测到运行中的实例，开始启动服务。"
 
 # 3. 检查 MySQL 数据库

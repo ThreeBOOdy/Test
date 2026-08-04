@@ -11,7 +11,7 @@
     "test": "vitest run",
     "test:integration": "vitest run --config vitest.integration.config.ts",
     "test:e2e": "playwright test",
-    "exam:settlement-worker": "tsx scripts/exam-settlement-worker.ts",
+    "exam:settlement-worker": "node --conditions=react-server --import tsx scripts/exam-settlement-worker.ts",
     "test:watch": "vitest",
     "backup": "tsx scripts/backup-cli.ts backup",
     "backup:cleanup": "tsx scripts/backup-cli.ts cleanup",
@@ -19,12 +19,12 @@
     "backup:verify": "tsx scripts/backup-cli.ts verify",
     "backup:restore": "tsx scripts/backup-cli.ts restore",
     "backup:restore-drill": "tsx scripts/backup-cli.ts restore-drill",
-    "security:cleanup": "tsx scripts/security-maintenance.ts",
-    "security:rotate-student-data": "tsx scripts/rotate-student-data-keys.ts",
+    "security:cleanup": "node --conditions=react-server --import tsx scripts/security-maintenance.ts",
+    "security:rotate-student-data": "node --conditions=react-server --import tsx scripts/rotate-student-data-keys.ts",
     "db:generate": "prisma generate",
     "db:migrate": "prisma migrate dev",
     "db:seed": "tsx prisma/seed.ts",
-    "data-retention:cleanup": "tsx scripts/data-retention-maintenance.ts",
+    "data-retention:cleanup": "node --conditions=react-server --import tsx scripts/data-retention-maintenance.ts",
     "acceptance": "tsx scripts/full-system-acceptance.ts"
   },
   "dependencies": {
@@ -39,6 +39,7 @@
     "next": "16.2.11",
     "react": "19.2.7",
     "react-dom": "19.2.7",
+    "server-only": "^0.0.1",
     "tailwind-merge": "3.6.0",
     "zod": "4.4.3"
   },
