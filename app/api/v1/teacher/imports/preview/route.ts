@@ -8,6 +8,7 @@ import { RADIO_COURSE_ID } from "@/lib/domain/course";
 import { classifyImportDuplicate, findBatchDuplicateRows, importRowLocation, validateImportRow } from "@/lib/domain/question-import";
 import { assertRequestBodySize } from "@/lib/domain/request-body";
 import type { ImportQuestionRow, ValidatedQuestionRow } from "@/lib/domain/types";
+import { assertExcelHasNoImages } from "@/lib/domain/workbook-images";
 import { parseWordQuestions, type WordParseError } from "@/lib/domain/word-question-parser";
 import { assertSameOrigin } from "@/lib/server/http";
 import { ApiError, apiErrorResponse, requireTeacher } from "@/lib/server/api";
@@ -33,7 +34,9 @@ export async function POST(request: Request) {
     if (fileName.endsWith(".xlsx")) {
       source = "EXCEL";
       const workbook = new ExcelJS.Workbook();
-      await workbook.xlsx.load(await file.arrayBuffer());
+      const buffer = await file.arrayBuffer();
+      await workbook.xlsx.load(buffer);
+      await assertExcelHasNoImages(buffer);
       if (!workbook.worksheets.length) return NextResponse.json({ message: "Excel 中没有工作表" }, { status: 400 });
       sheetNames = [];
       for (const sheet of workbook.worksheets) {

@@ -32,6 +32,8 @@ const CONTENT_TYPES = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
   <Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/>
 </Types>`;
 
+const PNG_BASE64 = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==";
+
 function documentXml(paragraphs: string): string {
   return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
@@ -182,6 +184,24 @@ describe("question import preview dispatch", () => {
     expect(body.rows[0].row).toMatchObject({ sheetName: "题库", rowNumber: 2 });
     expect(body.rows[0].row.locationLabel).toBeUndefined();
     expect(body.sheetNames).toEqual(["题库"]);
+    expect(mocks.importBatchCreate).toHaveBeenCalledWith({ data: expect.objectContaining({ fileName: "questions.xlsx" }) });
+  });
+
+  it("rejects xlsx workbooks containing images with a whole-file error and no batch", async () => {
+    const workbook = new ExcelJS.Workbook();
+    const sheet = workbook.addWorksheet("题库");
+    sheet.addRow(["等级", "分类号", "问题", "答案"]);
+    sheet.addRow(["A", "1.1", "题目", "A"]);
+    const imageId = workbook.addImage({ base64: PNG_BASE64, extension: "png" });
+    sheet.addImage(imageId, "A2:B4");
+    const buffer = await workbook.xlsx.writeBuffer();
+
+    const response = await previewImport(previewRequest(uploadFile(buffer, "questions-with-image.xlsx")));
+    const body = await response.json();
+
+    expect(response.status).toBe(400);
+    expect(body.message).toBe("Excel 不支持图片，请改用 Word 模板");
+    expect(mocks.importBatchCreate).not.toHaveBeenCalled();
   });
 
   it("rejects word files over 20MB with a 413 error", async () => {
