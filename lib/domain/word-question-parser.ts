@@ -1,4 +1,5 @@
 import { ApiError } from "./api-error";
+import type { DocxImage, DocxParagraph } from "./docx-content";
 import type { ImportQuestionRow } from "./types";
 
 const QUESTION_NUMBER_PATTERN = /^\s*(?:[（(](\d+)[）)]|(\d+)[.、．])\s*/;
@@ -27,6 +28,12 @@ export type WordParseResult = {
   errors: WordParseError[];
 };
 
+/** 结构化解析行：文本 + 该行位置的嵌入图片（docx 段落按换行切分）。 */
+export type WordParseLine = {
+  text: string;
+  images?: DocxImage[];
+};
+
 /**
  * 将 Word 抽取出的文本行解析为逐题导入行。
  *
@@ -37,26 +44,50 @@ export type WordParseResult = {
  * - 选项按顺序解析 A–H，大小写统一转大写；超过 8 个选项逐题报错说明系统上限。
  * - 支持答案行与题干末尾括号内答案（无答案行且存在选项时）。
  * - 解析行合并到 `explanation`，保留在批次行数据，不参与行校验与写库。
- * - 首个题号之前的模板说明文字自动跳过，空行忽略。
+ * - 首个题号之前的模板说明文字自动跳过，空行忽略；纯文本行为与结构化入口一致。
  * - 无选项题目按顺序判定为判断题/填空题/简答题并逐题报错，均带 `第 N 题` 位置，
  *   不产生可入库行。
  * - 材料题从 `[材料题]` 到 `[材料题结束]`（或文档结束）整块报错并给出位置，
  *   块内行不拆成顶层题。
  * - 文档中没有任何题号/题目时抛出 `未找到题目`；缺答案由后续行校验报错。
+ *
+ * 该入口只接收纯文本行；含图 docx 请使用 `parseWordContent`。
  */
 export function parseWordQuestions(lines: readonly string[]): WordParseResult {
+  return parseStructuredLines(lines.map((text) => ({ text })));
+}
+
+/**
+ * 将结构化段落（文本 + 嵌入图片）解析为逐题导入行。
+ *
+ * 图片按所在段落当前的字段归属：题干段落 → `stemImages`；选项行 → 对应
+ * `optionImages`；答案行/解析行中的图片忽略且不报错；孤立图片段落并入题干
+ * （与现有文本解析一致，不向题干文本写入空行）。纯文本文档的输出与
+ * `parseWordQuestions` 完全一致。
+ */
+export function parseWordContent(paragraphs: readonly DocxParagraph[]): WordParseResult {
+  const lines: WordParseLine[] = [];
+  for (const paragraph of paragraphs) {
+    for (const line of paragraph.lines) {
+      lines.push({ text: line.text, images: line.images });
+    }
+  }
+  return parseStructuredLines(lines);
+}
+
+function parseStructuredLines(lines: readonly WordParseLine[]): WordParseResult {
   const rows: ImportQuestionRow[] = [];
   const errors: WordParseError[] = [];
   let index = 0;
   let rowNumber = 0;
 
-  while (index < lines.length && !QUESTION_NUMBER_PATTERN.test(lines[index])) {
+  while (index < lines.length && !QUESTION_NUMBER_PATTERN.test(lines[index].text)) {
     index += 1;
   }
   if (index >= lines.length) throw new ApiError("未找到题目", 400);
 
   while (index < lines.length) {
-    const numberLine = lines[index];
+    const numberLine = lines[index].text;
     const numberMatch = QUESTION_NUMBER_PATTERN.exec(numberLine);
     if (!numberMatch) {
       index += 1;
@@ -67,24 +98,28 @@ export function parseWordQuestions(lines: readonly string[]): WordParseResult {
     index += 1;
 
     let firstLine = stripIndeterminateAnnotation(numberLine.slice(numberMatch[0].length));
+    let firstLineIndex = index - 1;
     if (!firstLine.trim()) {
-      const nextLine = lines[index]?.trimEnd() ?? "";
+      const nextLine = lines[index]?.text.trimEnd() ?? "";
       const strippedNext = stripIndeterminateAnnotation(nextLine);
       if (strippedNext !== nextLine) {
+        firstLineIndex = index;
         index += 1;
         firstLine = strippedNext;
       }
     }
 
     if (MATERIAL_ANNOTATION_PATTERN.test(firstLine) || hasMaterialMarkerBeforeNextQuestion(lines, index)) {
-      while (index < lines.length && !lines[index].includes(MATERIAL_END_ANNOTATION)) index += 1;
+      while (index < lines.length && !lines[index].text.includes(MATERIAL_END_ANNOTATION)) index += 1;
       if (index < lines.length) index += 1;
       rejectQuestion(errors, rowNumber, questionNumber, "材料题暂不支持导入");
       continue;
     }
 
     const stemLines: string[] = [];
+    const stemImages: DocxImage[] = [];
     const optionValues: Record<string, string> = {};
+    const optionImages: Record<string, DocxImage[]> = {};
     let rawAnswer = "";
     let explanation = "";
     let explanationStarted = false;
@@ -92,11 +127,16 @@ export function parseWordQuestions(lines: readonly string[]): WordParseResult {
     let nextOptionId = "A";
     let optionOverflow = false;
 
-    if (firstLine.trim()) stemLines.push(firstLine.trimEnd());
+    if (firstLine.trim()) {
+      stemLines.push(firstLine.trimEnd());
+      stemImages.push(...(lines[firstLineIndex].images ?? []));
+    }
 
     while (index < lines.length) {
-      const current = lines[index].trimEnd();
+      const current = lines[index].text.trimEnd();
+      const lineImages = lines[index].images ?? [];
       if (!current.trim()) {
+        if (!explanationStarted && lineImages.length) stemImages.push(...lineImages);
         index += 1;
         continue;
       }
@@ -120,6 +160,7 @@ export function parseWordQuestions(lines: readonly string[]): WordParseResult {
         }
         if (nextOptionId && optionId === nextOptionId) {
           optionValues[optionId] = optionMatch[2].trim();
+          (optionImages[optionId] ??= []).push(...lineImages);
           nextOptionId = nextOptionId === "H" ? "" : String.fromCharCode(nextOptionId.charCodeAt(0) + 1);
           index += 1;
           continue;
@@ -140,6 +181,7 @@ export function parseWordQuestions(lines: readonly string[]): WordParseResult {
         explanation = explanation ? `${explanation}\n${current.trimEnd()}` : current.trimEnd();
       } else {
         stemLines.push(current.trimEnd());
+        stemImages.push(...lineImages);
       }
       index += 1;
     }
@@ -184,6 +226,9 @@ export function parseWordQuestions(lines: readonly string[]): WordParseResult {
       optionValues,
     };
     if (explanationStarted && explanation.trim()) row.explanation = explanation.trim();
+    if (stemImages.length) row.stemImages = stemImages;
+    const assignedOptionImages = Object.entries(optionImages).filter(([, images]) => images.length);
+    if (assignedOptionImages.length) row.optionImages = Object.fromEntries(assignedOptionImages);
     rows.push(row);
   }
 
@@ -209,9 +254,9 @@ function stripIndeterminateAnnotation(text: string): string {
   return rest;
 }
 
-function hasMaterialMarkerBeforeNextQuestion(lines: readonly string[], start: number): boolean {
+function hasMaterialMarkerBeforeNextQuestion(lines: readonly WordParseLine[], start: number): boolean {
   for (let index = start; index < lines.length; index += 1) {
-    const current = lines[index].trim();
+    const current = lines[index].text.trim();
     if (!current) continue;
     if (QUESTION_NUMBER_PATTERN.test(current)) return false;
     if (MATERIAL_ANNOTATION_PATTERN.test(current)) return true;

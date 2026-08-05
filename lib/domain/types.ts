@@ -1,3 +1,5 @@
+import type { DocxImage } from "./docx-content";
+
 export type QuestionType = "SINGLE_CHOICE" | "MULTIPLE_CHOICE";
 export type QuestionStatus = "ACTIVE" | "DISABLED" | "ARCHIVED";
 export type PracticeMode = "LEVEL_COMPREHENSIVE" | "KNOWLEDGE_POINT" | "WRONG_QUESTION" | "QUESTION_ORDER" | "RANDOM_ALL" | "MOCK_EXAM";
@@ -70,6 +72,10 @@ export type ImportQuestionRow = {
   declaredSelectionSpec?: string;
   preserveOptionOrder?: boolean;
   explanation?: string;
+  /** Word 含图导入时归属题干段的图片（文档顺序）。 */
+  stemImages?: DocxImage[];
+  /** Word 含图导入时归属具体选项的图片，键为选项编号（A–H）。 */
+  optionImages?: Record<string, DocxImage[]>;
   optionValues: Record<string, string | undefined>;
   enabled?: boolean;
 };
