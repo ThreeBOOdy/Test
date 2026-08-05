@@ -3,9 +3,11 @@ import { describe, expect, it } from "vitest";
 import type { DocxImage } from "../lib/domain/docx-content";
 import {
   createQuestionImageId,
+  extractImageMarkers,
   imageMarker,
   normalizeImageMarkers,
   prepareQuestionRowImages,
+  revalidateCommitRowImages,
   validateQuestionImageLimits,
 } from "../lib/domain/question-image-marker";
 import type { ImportQuestionRow } from "../lib/domain/types";
@@ -123,5 +125,102 @@ describe("question row image preparation", () => {
     expect(prepared.stem).toBe("题干");
     expect(prepared.optionValues).toEqual({ A: "选项A", B: "选项B" });
     expect(prepared.records).toEqual([]);
+  });
+});
+
+describe("commit-time image recheck", () => {
+  function batchImage(overrides: Record<string, unknown> = {}) {
+    return {
+      id: "qimg_1",
+      rowNumber: 7,
+      field: "STEM",
+      sortOrder: 0,
+      mimeType: "image/png",
+      sizeBytes: 1024,
+      ...overrides,
+    };
+  }
+
+  it("extracts image markers in document order", () => {
+    expect(extractImageMarkers("题干[图:qimg_1][图:qimg_2] 结束")).toEqual(["qimg_1", "qimg_2"]);
+    expect(extractImageMarkers("纯文本")).toEqual([]);
+  });
+
+  it("accepts a row whose markers match the batch records for row, field and order", () => {
+    const row = wordRow({
+      rowNumber: 7,
+      stem: "题干[图:qimg_1][图:qimg_2]",
+      optionValues: { A: "选项A[图:qimg_3]", B: "选项B" },
+    });
+    const images = [
+      batchImage({ id: "qimg_1", sortOrder: 0 }),
+      batchImage({ id: "qimg_2", sortOrder: 1 }),
+      batchImage({ id: "qimg_3", field: "A", sortOrder: 0 }),
+    ];
+
+    expect(revalidateCommitRowImages(row, images)).toEqual([]);
+  });
+
+  it("rejects markers that do not belong to the batch", () => {
+    const row = wordRow({ rowNumber: 7, stem: "题干[图:qimg_unknown]" });
+
+    const issues = revalidateCommitRowImages(row, [batchImage()]);
+
+    expect(issues).toEqual([
+      expect.objectContaining({ severity: "error", field: "图片", message: expect.stringContaining("不属于当前批次") }),
+    ]);
+  });
+
+  it.each([
+    ["another row", { rowNumber: 8 }],
+    ["wrong field", { field: "A" }],
+    ["wrong order", { sortOrder: 1 }],
+  ] as const)("rejects an image attributed to %s", (_label, overrides) => {
+    const row = wordRow({ rowNumber: 7, stem: "题干[图:qimg_1]" });
+
+    const issues = revalidateCommitRowImages(row, [batchImage(overrides)]);
+
+    expect(issues).toEqual([
+      expect.objectContaining({ severity: "error", field: "图片", message: expect.stringContaining("归属与预检结果不一致") }),
+    ]);
+  });
+
+  it("rejects a row where a batch image is not referenced by any marker", () => {
+    const row = wordRow({ rowNumber: 7, stem: "题干[图:qimg_1]" });
+
+    const issues = revalidateCommitRowImages(row, [
+      batchImage({ id: "qimg_1" }),
+      batchImage({ id: "qimg_2", sortOrder: 1 }),
+    ]);
+
+    expect(issues).toEqual([
+      expect.objectContaining({ severity: "error", field: "图片", message: expect.stringContaining("图片标记与批次记录不一致") }),
+    ]);
+  });
+
+  it("rejects a row with a repeated marker reference", () => {
+    const row = wordRow({ rowNumber: 7, stem: "题干[图:qimg_1][图:qimg_1]" });
+
+    const issues = revalidateCommitRowImages(row, [batchImage()]);
+
+    expect(issues).toEqual([
+      expect.objectContaining({ severity: "error", field: "图片", message: expect.stringContaining("重复引用") }),
+    ]);
+  });
+
+  it("reapplies the whitelist and per-question limits at commit time", () => {
+    const row = wordRow({ rowNumber: 7, stem: "题干[图:qimg_1]" });
+    const oversized = batchImage({ id: "qimg_2", sortOrder: 1, sizeBytes: 5 * 1024 * 1024 + 1 });
+    const unsupported = batchImage({ id: "qimg_3", sortOrder: 2, mimeType: "image/tiff" });
+
+    const issues = revalidateCommitRowImages(
+      { ...row, stem: "题干[图:qimg_1][图:qimg_2][图:qimg_3]" },
+      [batchImage(), oversized, unsupported],
+    );
+
+    expect(issues).toEqual([
+      expect.objectContaining({ severity: "error", field: "图片", message: expect.stringContaining("另存为 PNG 或 JPG 后重新插入") }),
+      expect.objectContaining({ severity: "error", field: "图片", message: expect.stringContaining("5MB") }),
+    ]);
   });
 });

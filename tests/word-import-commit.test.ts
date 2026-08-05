@@ -31,6 +31,7 @@ describe("word import commit", () => {
       id: "batch-word",
       createdAt: new Date(),
       expiresAt: new Date(Date.now() + 60_000),
+      images: [],
       rows: [{
         rowNumber: 1,
         payload: {
@@ -56,6 +57,7 @@ describe("word import commit", () => {
       id: "batch-excel",
       createdAt: new Date(),
       expiresAt: new Date(Date.now() + 60_000),
+      images: [],
       rows: [{
         rowNumber: 1,
         payload: {

@@ -4,8 +4,9 @@ import { prisma } from "@/lib/db";
 import { ApiError } from "@/lib/domain/api-error";
 import { isImportBatchExpired } from "@/lib/domain/import-batch";
 import { RADIO_COURSE_ID } from "@/lib/domain/course";
-import { classifyImportDuplicate, findBatchDuplicateRows, importRowLocation, validateImportRow } from "@/lib/domain/question-import";
-import type { ImportQuestionRow } from "@/lib/domain/types";
+import { classifyImportDuplicate, findBatchDuplicateRows, importQuestionContentKey, importRowLocation, validateImportRow } from "@/lib/domain/question-import";
+import { revalidateCommitRowImages } from "@/lib/domain/question-image-marker";
+import type { ImportQuestionRow, ValidatedQuestionRow } from "@/lib/domain/types";
 import { ensureKnowledgePoint } from "@/lib/server/knowledge-service";
 import { toQuestionSnapshot } from "@/lib/server/question-revisions";
 import { writeAuditLogInTransaction } from "@/lib/server/audit";
@@ -80,12 +81,17 @@ export async function commitImportBatch(importedById: string, batchId: string) {
 
     const batch = await tx.importBatch.findFirstOrThrow({
       where: { id: batchId, courseId: RADIO_COURSE_ID, importedById },
-      include: { rows: { orderBy: { rowNumber: "asc" } } },
+      include: { rows: { orderBy: { rowNumber: "asc" } }, images: true },
     });
     if (batch.expiresAt ? new Date() >= batch.expiresAt : isImportBatchExpired(batch.createdAt)) throw new ApiError("导入预检已过期，请重新上传文件", 410);
 
     const validated = batch.rows.map((stored) => validateImportRow(stored.payload as unknown as ImportQuestionRow));
-    const batchDuplicates = findBatchDuplicateRows(validated);
+    const imageById = new Map(batch.images.map((image) => [image.id, image]));
+    const hashById = (imageId: string) => imageById.get(imageId)?.contentHash;
+    for (const item of validated) {
+      item.issues.push(...revalidateCommitRowImages(item.row, batch.images));
+    }
+    const batchDuplicates = findBatchDuplicateRows(validated, hashById);
     if (batchDuplicates.size) throw new ApiError(`本批次有 ${batchDuplicates.size} 行重复题目，不能确认导入`, 409);
     const invalid = validated.filter((item) => item.issues.some((issue) => issue.severity === "error"));
     if (invalid.length) throw new ApiError(`仍有 ${invalid.length} 行错误，不能确认导入`);
@@ -137,22 +143,26 @@ export async function commitImportBatch(importedById: string, batchId: string) {
     const codedQuestions = questions.filter((question) => question.externalQuestionCode);
     const existingCoded = codedQuestions.length ? await tx.question.findMany({
       where: { courseId: RADIO_COURSE_ID, OR: codedQuestions.map((question) => ({ levelId: question.levelId, externalQuestionCode: question.externalQuestionCode! })) },
-      select: { levelId: true, externalQuestionCode: true, stem: true, options: true, correctOptionIds: true },
+      select: { levelId: true, externalQuestionCode: true, stem: true, options: true, correctOptionIds: true, images: { select: { id: true, contentHash: true } } },
     }) : [];
     const existingByCode = new Map(existingCoded.map((question) => [`${question.levelId}|${question.externalQuestionCode}`, question]));
     const unnumberedQuestions = questions.filter((question) => !question.externalQuestionCode);
     const existingForSuspects = unnumberedQuestions.length ? await tx.question.findMany({
       where: { courseId: RADIO_COURSE_ID },
-      select: { externalQuestionCode: true, stem: true, options: true, correctOptionIds: true },
+      select: { externalQuestionCode: true, stem: true, options: true, correctOptionIds: true, images: { select: { id: true, contentHash: true } } },
     }) : [];
+    const imagesHashById = (question: { images: Array<{ id: string; contentHash: string }> }) => {
+      const byId = new Map(question.images.map((image) => [image.id, image.contentHash]));
+      return (imageId: string) => byId.get(imageId);
+    };
     const exactQuestionCodes = new Set<string>();
     const duplicateCounts = { exact: 0, conflicts: 0, suspects: 0 };
     for (const question of questions) {
       const existing = question.externalQuestionCode
         ? existingByCode.get(`${question.levelId}|${question.externalQuestionCode}`)
-        : existingForSuspects.find((candidate) => classifyImportDuplicate(question, candidate) === "SUSPECT");
+        : existingForSuspects.find((candidate) => classifyImportDuplicate(question, candidate, hashById, imagesHashById(candidate)) === "SUSPECT");
       if (!existing) continue;
-      const kind = classifyImportDuplicate(question, existing);
+      const kind = classifyImportDuplicate(question, existing, hashById, imagesHashById(existing));
       if (kind === "EXACT") {
         duplicateCounts.exact += 1;
         exactQuestionCodes.add(`${question.levelId}|${question.externalQuestionCode}`);
@@ -168,6 +178,48 @@ export async function commitImportBatch(importedById: string, batchId: string) {
     const inserted = questionsToInsert.length ? (await tx.question.createMany({ data: questionsToInsert })).count : 0;
     const skipped = questions.length - inserted;
     const insertedQuestions = inserted ? await tx.question.findMany({ where: { courseId: RADIO_COURSE_ID, importBatchId: batch.id }, select: { id: true, version: true, levelId: true, knowledgePointId: true, sourceBankCode: true, externalQuestionCode: true, stem: true, preserveOptionOrder: true, options: true, correctOptionIds: true, status: true } }) : [];
+    if (inserted) {
+      const imagesByRowNumber = new Map<number, (typeof batch.images)[number][]>();
+      for (const image of batch.images) {
+        const list = imagesByRowNumber.get(image.rowNumber) ?? [];
+        list.push(image);
+        imagesByRowNumber.set(image.rowNumber, list);
+      }
+      const identityOf = (item: ValidatedQuestionRow, levelId: string) => item.row.externalQuestionCode?.trim()
+        ? `code:${levelId}|${item.row.externalQuestionCode.trim()}`
+        : `content:${importQuestionContentKey({ stem: item.row.stem, options: item.options, correctOptionIds: item.correctOptionIds }, hashById)}`;
+      const insertedIdentityOf = (question: (typeof insertedQuestions)[number]) => question.externalQuestionCode?.trim()
+        ? `code:${question.levelId}|${question.externalQuestionCode.trim()}`
+        : `content:${importQuestionContentKey({ stem: question.stem, options: question.options, correctOptionIds: question.correctOptionIds }, hashById)}`;
+      const questionIdByIdentity = new Map(insertedQuestions.map((question) => [insertedIdentityOf(question), question.id]));
+      const questionImages: Prisma.QuestionImageCreateManyInput[] = [];
+      for (const item of validated) {
+        const rowImages = imagesByRowNumber.get(item.row.rowNumber);
+        if (!rowImages?.length) continue;
+        const level = levelByCode.get(item.row.levelCode)!;
+        const isExactDuplicate = item.row.externalQuestionCode?.trim()
+          ? exactQuestionCodes.has(`${level.id}|${item.row.externalQuestionCode.trim()}`)
+          : false;
+        if (isExactDuplicate) continue;
+        const questionId = questionIdByIdentity.get(identityOf(item, level.id));
+        if (!questionId) throw new ApiError("图片归属的题目未写入，请重新预检", 409);
+        for (const image of rowImages) {
+          questionImages.push({
+            id: image.id,
+            courseId: RADIO_COURSE_ID,
+            questionId,
+            field: image.field,
+            sortOrder: image.sortOrder,
+            data: image.data,
+            mimeType: image.mimeType,
+            sizeBytes: image.sizeBytes,
+            contentHash: image.contentHash,
+          });
+        }
+      }
+      if (questionImages.length) await tx.questionImage.createMany({ data: questionImages });
+    }
+    await tx.importBatchImage.deleteMany({ where: { batchId: batch.id } });
     if (insertedQuestions.length) await tx.questionRevision.createMany({ data: insertedQuestions.map((question) => ({ courseId: RADIO_COURSE_ID, questionId: question.id, revision: question.version, snapshot: toQuestionSnapshot(question), changeSource: "IMPORT_COMMIT", actorUserId: importedById })) });
     await tx.importBatch.update({ where: { id: batch.id }, data: { insertedRows: inserted, duplicateRows: skipped } });
     await writeAuditLogInTransaction(tx, { actorUserId: importedById, action: "IMPORT_COMMIT", targetType: "ImportBatch", targetId: batch.id, metadata: { inserted, skipped, suspectedDuplicates: duplicateCounts.suspects } });

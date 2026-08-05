@@ -26,6 +26,8 @@ export type BatchImageRecord = {
 
 export type PreviewRowImage = Pick<BatchImageRecord, "id" | "field" | "mimeType" | "sizeBytes">;
 
+export type CommitRowImage = Pick<BatchImageRecord, "id" | "rowNumber" | "field" | "sortOrder" | "mimeType" | "sizeBytes">;
+
 export function createQuestionImageId(): string {
   return `qimg_${randomUUID().replaceAll("-", "")}`;
 }
@@ -36,6 +38,60 @@ export function imageMarker(imageId: string): string {
 
 export function sha256Bytes(data: Uint8Array): string {
   return createHash("sha256").update(data).digest("hex");
+}
+
+/** 按文本出现顺序抽取图片标记的图片 ID。 */
+export function extractImageMarkers(text: string): string[] {
+  return [...text.matchAll(IMAGE_MARKER_PATTERN)].map((match) => match[1]);
+}
+
+/**
+ * 提交期复检一行题目的图片归属与限额：每个标记必须能解析到当前批次的图片记录，
+ * 且行号、所属字段与字段内排序与预检结果一致；行内引用的记录集合必须与批次记录
+ * 完全一致（防标记被增删改）；随后复用预检的白名单/限额规则。
+ */
+export function revalidateCommitRowImages(
+  row: Pick<ImportQuestionRow, "rowNumber" | "stem" | "optionValues">,
+  images: ReadonlyArray<CommitRowImage>,
+): ValidationIssue[] {
+  const issues: ValidationIssue[] = [];
+  const imageById = new Map(images.map((image) => [image.id, image]));
+  const referenced = new Set<string>();
+  const orderByField = new Map<string, number>();
+
+  const checkMarker = (marker: string, expectedField: string, where: string) => {
+    if (referenced.has(marker)) {
+      issues.push({ severity: "error", field: "图片", message: `${where} 重复引用图片 ${marker}，请重新预检` });
+      return;
+    }
+    referenced.add(marker);
+    const record = imageById.get(marker);
+    if (!record) {
+      issues.push({ severity: "error", field: "图片", message: `${where} 引用的图片不属于当前批次，请重新预检` });
+      return;
+    }
+    const expectedOrder = orderByField.get(expectedField) ?? 0;
+    if (record.rowNumber !== row.rowNumber || record.field !== expectedField || record.sortOrder !== expectedOrder) {
+      issues.push({ severity: "error", field: "图片", message: `${where} 的图片归属与预检结果不一致，请重新预检` });
+      return;
+    }
+    orderByField.set(expectedField, expectedOrder + 1);
+  };
+
+  for (const marker of extractImageMarkers(row.stem)) checkMarker(marker, "STEM", "题干");
+  for (const [optionId, text] of Object.entries(row.optionValues)) {
+    for (const marker of extractImageMarkers(text ?? "")) checkMarker(marker, optionId, `选项 ${optionId}`);
+  }
+
+  if (!issues.length) {
+    const batchIdsForRow = new Set(images.filter((image) => image.rowNumber === row.rowNumber).map((image) => image.id));
+    if (referenced.size !== batchIdsForRow.size || [...referenced].some((id) => !batchIdsForRow.has(id))) {
+      issues.push({ severity: "error", field: "图片", message: "图片标记与批次记录不一致，请重新预检" });
+    }
+    const rowImages = images.filter((image) => image.rowNumber === row.rowNumber);
+    issues.push(...validateQuestionImageLimits(rowImages.map(({ mimeType, sizeBytes }) => ({ mimeType, sizeBytes }))));
+  }
+  return issues;
 }
 
 /**
