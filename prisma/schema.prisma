@@ -228,6 +228,7 @@ model Course {
   levelPracticeRules       LevelPracticeRule[]
   knowledgePracticeRules   KnowledgePracticeRule[]
   questions                Question[]
+  questionImages           QuestionImage[]
   importBatches            ImportBatch[]
   practiceSessions         PracticeSession[]
   examDrafts               ExamDraft[]
@@ -345,6 +346,7 @@ model Question {
   knowledgePointId     String
   level                Level                     @relation(fields: [courseId, levelId], references: [courseId, id])
   knowledgePoint       KnowledgePoint            @relation(fields: [courseId, knowledgePointId], references: [courseId, id])
+  images               QuestionImage[]
   sourceBankCode       String?
   externalQuestionCode String?
   stem                 String                    @db.Text
@@ -388,6 +390,26 @@ model QuestionRevision {
   @@unique([courseId, questionId, revision])
   @@index([courseId, questionId, createdAt])
   @@index([actorUserId, createdAt])
+}
+
+model QuestionImage {
+  id          String   @id @default(cuid())
+  courseId    String   @default("course-radio")
+  course      Course   @relation(fields: [courseId], references: [id], onDelete: Restrict)
+  questionId  String
+  question    Question @relation(fields: [courseId, questionId], references: [courseId, id], onDelete: Restrict)
+  field       String   @db.VarChar(32)
+  sortOrder   Int      @default(0)
+  data        Bytes    @db.LongBlob
+  mimeType    String   @db.VarChar(64)
+  sizeBytes   Int
+  contentHash String   @db.VarChar(64)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([courseId, id])
+  @@index([courseId, questionId, field, sortOrder])
+  @@index([courseId, contentHash])
 }
 
 model PracticeSession {

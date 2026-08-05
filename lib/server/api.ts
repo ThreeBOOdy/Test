@@ -27,6 +27,12 @@ export function requireActiveStudent() {
   return requireExactAccess("STUDENT", "FULL_STUDENT");
 }
 
+export async function requireLoggedInUser() {
+  const user = await getCurrentUser();
+  if (!user) throw new ApiError("请先登录", 401);
+  return user;
+}
+
 async function requireStudentCapability(capability: "REGISTRATION_ONLY" | "ACTIVATION_ONLY") {
   const user = await getCurrentUser();
   if (!user) throw new ApiError("请先登录", 401);
