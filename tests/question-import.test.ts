@@ -72,4 +72,43 @@ describe("question import validation", () => {
 
     expect(findBatchDuplicateRows([first, duplicate])).toEqual(new Map([["第 2 题", "第 1 题"]]));
   });
+
+  it("treats identical image content with different marker ids as the same content", () => {
+    const hashById = (id: string) => (id === "qimg_1" || id === "qimg_2" ? "same-image-hash" : undefined);
+    const candidate = validateImportRow(row({ stem: "题干 [图:qimg_1]", optionValues: { A: "A [图:qimg_2]", B: "B" } }));
+    const existing = validateImportRow(row({ stem: "题干 [图:qimg_2]", optionValues: { A: "A [图:qimg_1]", B: "B" } }));
+    const candidateComparable = { ...candidate.row, options: candidate.options, correctOptionIds: candidate.correctOptionIds };
+    const existingComparable = { ...existing.row, options: existing.options, correctOptionIds: existing.correctOptionIds };
+
+    expect(classifyImportDuplicate(candidateComparable, existingComparable, hashById, hashById)).toBe("EXACT");
+    expect(classifyImportDuplicate({ ...candidateComparable, externalQuestionCode: "" }, { ...existingComparable, externalQuestionCode: null }, hashById, hashById)).toBe("SUSPECT");
+  });
+
+  it("treats different image bytes as different content even when markers differ", () => {
+    const candidateHash = (id: string) => (id === "qimg_1" ? "hash-a" : undefined);
+    const existingHash = (id: string) => (id === "qimg_2" ? "hash-b" : undefined);
+    const candidate = validateImportRow(row({ stem: "题干 [图:qimg_1]" }));
+    const existing = validateImportRow(row({ stem: "题干 [图:qimg_2]" }));
+    const candidateComparable = { ...candidate.row, options: candidate.options, correctOptionIds: candidate.correctOptionIds };
+    const existingComparable = { ...existing.row, options: existing.options, correctOptionIds: existing.correctOptionIds };
+
+    expect(classifyImportDuplicate(candidateComparable, existingComparable, candidateHash, existingHash)).toBe("CONFLICT");
+    expect(classifyImportDuplicate({ ...candidateComparable, externalQuestionCode: "" }, { ...existingComparable, externalQuestionCode: null }, candidateHash, existingHash)).toBeNull();
+  });
+
+  it("finds batch duplicates by image content hash instead of marker id", () => {
+    const hashById = (id: string) => (id === "qimg_1" || id === "qimg_2" ? "same-image-hash" : undefined);
+    const first = validateImportRow(row({ rowNumber: 1, locationLabel: "第 1 题", externalQuestionCode: "", stem: "题干 [图:qimg_1]" }));
+    const duplicate = validateImportRow(row({ rowNumber: 2, locationLabel: "第 2 题", externalQuestionCode: "", stem: "题干 [图:qimg_2]" }));
+
+    expect(findBatchDuplicateRows([first, duplicate], hashById)).toEqual(new Map([["第 2 题", "第 1 题"]]));
+  });
+
+  it("does not flag batch rows whose image bytes differ", () => {
+    const hashById = (id: string) => (id === "qimg_1" ? "hash-a" : id === "qimg_2" ? "hash-b" : undefined);
+    const first = validateImportRow(row({ rowNumber: 1, locationLabel: "第 1 题", externalQuestionCode: "", stem: "题干 [图:qimg_1]" }));
+    const different = validateImportRow(row({ rowNumber: 2, locationLabel: "第 2 题", externalQuestionCode: "", stem: "题干 [图:qimg_2]" }));
+
+    expect(findBatchDuplicateRows([first, different], hashById)).toEqual(new Map());
+  });
 });

@@ -116,10 +116,11 @@ function parseStructuredLines(lines: readonly WordParseLine[]): WordParseResult 
       continue;
     }
 
-    const stemLines: string[] = [];
+    const stemLines: Array<{ text: string; images: DocxImage[] }> = [];
     const stemImages: DocxImage[] = [];
     const optionValues: Record<string, string> = {};
     const optionImages: Record<string, DocxImage[]> = {};
+    const optionLines: Record<string, Array<{ text: string; images: DocxImage[] }>> = {};
     let rawAnswer = "";
     let explanation = "";
     let explanationStarted = false;
@@ -128,7 +129,7 @@ function parseStructuredLines(lines: readonly WordParseLine[]): WordParseResult 
     let optionOverflow = false;
 
     if (firstLine.trim()) {
-      stemLines.push(firstLine.trimEnd());
+      stemLines.push({ text: firstLine.trimEnd(), images: lines[firstLineIndex].images ?? [] });
       stemImages.push(...(lines[firstLineIndex].images ?? []));
     }
 
@@ -136,7 +137,10 @@ function parseStructuredLines(lines: readonly WordParseLine[]): WordParseResult 
       const current = lines[index].text.trimEnd();
       const lineImages = lines[index].images ?? [];
       if (!current.trim()) {
-        if (!explanationStarted && lineImages.length) stemImages.push(...lineImages);
+        if (!explanationStarted && lineImages.length) {
+          stemLines.push({ text: "", images: lineImages });
+          stemImages.push(...lineImages);
+        }
         index += 1;
         continue;
       }
@@ -161,6 +165,7 @@ function parseStructuredLines(lines: readonly WordParseLine[]): WordParseResult 
         if (nextOptionId && optionId === nextOptionId) {
           optionValues[optionId] = optionMatch[2].trim();
           (optionImages[optionId] ??= []).push(...lineImages);
+          (optionLines[optionId] ??= []).push({ text: optionValues[optionId], images: lineImages });
           nextOptionId = nextOptionId === "H" ? "" : String.fromCharCode(nextOptionId.charCodeAt(0) + 1);
           index += 1;
           continue;
@@ -180,13 +185,13 @@ function parseStructuredLines(lines: readonly WordParseLine[]): WordParseResult 
       if (explanationStarted) {
         explanation = explanation ? `${explanation}\n${current.trimEnd()}` : current.trimEnd();
       } else {
-        stemLines.push(current.trimEnd());
+        stemLines.push({ text: current.trimEnd(), images: lineImages });
         stemImages.push(...lineImages);
       }
       index += 1;
     }
 
-    let stem = stemLines.join("\n").trim();
+    let stem = stemLines.map((line) => line.text).join("\n").trim();
     const hasOptions = Object.keys(optionValues).length > 0;
 
     if (optionOverflow) {
@@ -226,9 +231,13 @@ function parseStructuredLines(lines: readonly WordParseLine[]): WordParseResult 
       optionValues,
     };
     if (explanationStarted && explanation.trim()) row.explanation = explanation.trim();
-    if (stemImages.length) row.stemImages = stemImages;
     const assignedOptionImages = Object.entries(optionImages).filter(([, images]) => images.length);
-    if (assignedOptionImages.length) row.optionImages = Object.fromEntries(assignedOptionImages);
+    if (stemImages.length) row.stemImages = stemImages;
+    if (assignedOptionImages.length) {
+      row.optionImages = Object.fromEntries(assignedOptionImages);
+      row.optionLines = optionLines;
+    }
+    if (stemImages.length || assignedOptionImages.length) row.stemLines = stemLines;
     rows.push(row);
   }
 

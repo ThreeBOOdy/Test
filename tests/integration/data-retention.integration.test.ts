@@ -22,12 +22,14 @@ beforeEach(async () => {
   await prisma.practiceAnswer.deleteMany();
   await prisma.practiceSessionQuestion.deleteMany();
   await prisma.practiceSession.deleteMany();
+  await prisma.importBatchImage.deleteMany();
   await prisma.importBatchRow.deleteMany();
   await prisma.importBatch.deleteMany();
   await prisma.sensitiveDataReauthenticationAttempt.deleteMany();
   await prisma.studentReviewRecord.deleteMany();
   await prisma.auditLog.deleteMany();
   await prisma.questionRevision.deleteMany();
+  await prisma.questionImage.deleteMany();
   await prisma.question.deleteMany();
   await prisma.knowledgePracticeRule.deleteMany();
   await prisma.examRule.deleteMany();

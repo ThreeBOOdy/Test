@@ -76,6 +76,10 @@ export type ImportQuestionRow = {
   stemImages?: DocxImage[];
   /** Word 含图导入时归属具体选项的图片，键为选项编号（A–H）。 */
   optionImages?: Record<string, DocxImage[]>;
+  /** 题干逐行文本与其图片（行内顺序），用于把图片标记嵌入题干文本。 */
+  stemLines?: Array<{ text: string; images: DocxImage[] }>;
+  /** 选项逐行文本与其图片（行内顺序），键为选项编号（A–H）。 */
+  optionLines?: Record<string, Array<{ text: string; images: DocxImage[] }>>;
   optionValues: Record<string, string | undefined>;
   enabled?: boolean;
 };

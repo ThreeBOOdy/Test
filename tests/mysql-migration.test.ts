@@ -136,6 +136,33 @@ describe("MySQL project configuration", () => {
     expect(migration).toContain("ON DELETE RESTRICT");
     expect(migration).not.toMatch(/DELETE FROM `Question`|DROP TABLE `Question`/);
   });
+  it("creates the question-level image table with binary content and immutable storage", () => {
+    const migration = fs.readFileSync(path.resolve("prisma/migrations/20260805000000_question_images/migration.sql"), "utf8");
+
+    expect(migration).toContain("CREATE TABLE `QuestionImage`");
+    expect(migration).toContain("`data` LONGBLOB NOT NULL");
+    expect(migration).toContain("`mimeType` VARCHAR(64) NOT NULL");
+    expect(migration).toContain("`sizeBytes` INTEGER NOT NULL");
+    expect(migration).toContain("`contentHash` VARCHAR(64) NOT NULL");
+    expect(migration).toContain("`field` VARCHAR(32) NOT NULL");
+    expect(migration).toContain("`sortOrder` INTEGER NOT NULL");
+    expect(migration).toContain("FOREIGN KEY (`courseId`, `questionId`) REFERENCES `Question`(`courseId`, `id`) ON DELETE RESTRICT ON UPDATE CASCADE");
+    expect(migration).not.toMatch(/DROP TABLE `Question`|DELETE FROM `Question`/);
+  });
+  it("creates the preview-time batch image table that cascades with the import batch", () => {
+    const migration = fs.readFileSync(path.resolve("prisma/migrations/20260805030000_import_batch_images/migration.sql"), "utf8");
+
+    expect(migration).toContain("CREATE TABLE `ImportBatchImage`");
+    expect(migration).toContain("`id` VARCHAR(191) NOT NULL");
+    expect(migration).toContain("`rowNumber` INTEGER NOT NULL");
+    expect(migration).toContain("`data` LONGBLOB NOT NULL");
+    expect(migration).toContain("`mimeType` VARCHAR(64) NOT NULL");
+    expect(migration).toContain("`sizeBytes` INTEGER NOT NULL");
+    expect(migration).toContain("`contentHash` VARCHAR(64) NOT NULL");
+    expect(migration).toContain("UNIQUE INDEX `ImportBatchImage_batchId_id_key`(`batchId`, `id`)");
+    expect(migration).toContain("FOREIGN KEY (`batchId`) REFERENCES `ImportBatch`(`id`) ON DELETE CASCADE ON UPDATE CASCADE");
+    expect(migration).toContain("utf8mb4_0900_ai_ci");
+  });
   it("uses MySQL-native aggregate and duration SQL", () => {
     const statisticsService = fs.readFileSync(path.resolve("lib/server/learning-statistics-service.ts"), "utf8");
     const studentsPage = fs.readFileSync(path.resolve("app/teacher/students/page.tsx"), "utf8");

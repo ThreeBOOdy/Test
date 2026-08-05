@@ -56,6 +56,20 @@ export async function getImportBatchReport(importedById: string, batchId: string
   return { batch, items, page: options.page, pageSize: options.pageSize, total, totalPages: Math.max(1, Math.ceil(total / options.pageSize)) };
 }
 
+export async function getImportBatchImage(importedById: string, batchId: string, imageId: string) {
+  const batch = await prisma.importBatch.findFirst({
+    where: { id: batchId, courseId: RADIO_COURSE_ID, importedById },
+    select: { id: true },
+  });
+  if (!batch) throw new ApiError("导入批次不存在", 404);
+  const image = await prisma.importBatchImage.findFirst({
+    where: { batchId, id: imageId },
+    select: { data: true, mimeType: true, sizeBytes: true },
+  });
+  if (!image) throw new ApiError("图片不存在", 404);
+  return { data: Uint8Array.from(image.data), mimeType: image.mimeType, sizeBytes: image.sizeBytes };
+}
+
 export async function commitImportBatch(importedById: string, batchId: string) {
   return prisma.$transaction(async (tx) => {
     const claimed = await tx.importBatch.updateMany({

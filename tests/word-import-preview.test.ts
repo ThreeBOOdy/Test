@@ -6,6 +6,7 @@ const mocks = vi.hoisted(() => ({
   requireTeacher: vi.fn(),
   importBatchCreate: vi.fn(),
   importBatchRowCreateMany: vi.fn(),
+  importBatchImageCreateMany: vi.fn(),
   questionFindMany: vi.fn(),
 }));
 
@@ -19,11 +20,13 @@ vi.mock("@/lib/db", () => ({
     $transaction: vi.fn((callback: (tx: object) => unknown) => callback({
       importBatch: { create: mocks.importBatchCreate },
       importBatchRow: { createMany: mocks.importBatchRowCreateMany },
+      importBatchImage: { createMany: mocks.importBatchImageCreateMany },
     })),
   },
 }));
 
 import { POST as previewImport } from "@/app/api/v1/teacher/imports/preview/route";
+import { PNG_BYTES, buildDocx as buildImageDocx, drawing, mediaRelationship } from "./fixtures/word-docx";
 
 const CONTENT_TYPES = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
@@ -76,6 +79,116 @@ describe("question import preview dispatch", () => {
     mocks.questionFindMany.mockResolvedValue([]);
     mocks.importBatchCreate.mockResolvedValue({ id: "batch-word", status: "PREVIEW" });
     mocks.importBatchRowCreateMany.mockResolvedValue({ count: 1 });
+    mocks.importBatchImageCreateMany.mockResolvedValue({ count: 1 });
+  });
+
+  it("persists extracted word images to the batch table and previews thumbnails with stable ids", async () => {
+    const buffer = await buildImageDocx(
+      `<w:p><w:r><w:t>1. 含图题干</w:t></w:r>${drawing("rId1")}</w:p>` +
+        `<w:p><w:r><w:t>A、选项A</w:t></w:r>${drawing("rId2")}</w:p>` +
+        paragraph("B、选项B") +
+        paragraph("答案：A"),
+      {
+        rels: [mediaRelationship("rId1", "media/image1.png"), mediaRelationship("rId2", "media/image2.png")],
+        media: { "word/media/image1.png": PNG_BYTES, "word/media/image2.png": PNG_BYTES },
+      },
+    );
+
+    const response = await previewImport(previewRequest(uploadFile(buffer, "images.docx"), { levelCode: "A", categoryCode: "4.1.1" }));
+    const body = await response.json();
+
+    expect(response.status, JSON.stringify(body)).toBe(200);
+    const row = body.rows[0];
+    const stemMarker = row.row.stem.match(/\[图:(qimg_[a-f0-9]+)\]/);
+    const optionMarker = row.row.optionValues.A.match(/\[图:(qimg_[a-f0-9]+)\]/);
+    expect(stemMarker).not.toBeNull();
+    expect(optionMarker).not.toBeNull();
+    expect(row.images).toEqual([
+      expect.objectContaining({ id: stemMarker![1], field: "STEM", mimeType: "image/png", sizeBytes: PNG_BYTES.length }),
+      expect.objectContaining({ id: optionMarker![1], field: "A", mimeType: "image/png", sizeBytes: PNG_BYTES.length }),
+    ]);
+    expect(stemMarker![1]).not.toBe(optionMarker![1]);
+
+    const persisted = mocks.importBatchImageCreateMany.mock.calls[0][0].data as Array<Record<string, unknown>>;
+    expect(persisted).toHaveLength(2);
+    expect(persisted[0]).toMatchObject({ batchId: "batch-word", rowNumber: 1, field: "STEM", sortOrder: 0, mimeType: "image/png", sizeBytes: PNG_BYTES.length, contentHash: expect.stringMatching(/^[a-f0-9]{64}$/) });
+    expect(Buffer.from(persisted[0].data as Uint8Array)).toEqual(PNG_BYTES);
+    expect(persisted[1]).toMatchObject({ batchId: "batch-word", rowNumber: 1, field: "A", sortOrder: 0, id: optionMarker![1] });
+    expect(persisted.map((record) => record.id)).toEqual([stemMarker![1], optionMarker![1]]);
+
+    const storedPayload = mocks.importBatchRowCreateMany.mock.calls[0][0].data[0].payload;
+    expect(storedPayload.stem).toContain(`[图:${stemMarker![1]}]`);
+    expect(storedPayload).not.toHaveProperty("stemImages");
+    expect(storedPayload).not.toHaveProperty("stemLines");
+    expect(storedPayload).not.toHaveProperty("optionImages");
+    expect(storedPayload).not.toHaveProperty("optionLines");
+  });
+
+  it("rejects non-whitelisted image formats per question with a conversion hint", async () => {
+    const emfBytes = new Uint8Array([1, 2, 3, 4]);
+    const buffer = await buildImageDocx(
+      `<w:p><w:r><w:t>1. 公式图题干</w:t></w:r>${drawing("rId1")}</w:p>` +
+        paragraph("A、选项A") +
+        paragraph("B、选项B") +
+        paragraph("答案：A"),
+      {
+        rels: [mediaRelationship("rId1", "media/image1.emf")],
+        media: { "word/media/image1.emf": emfBytes },
+      },
+    );
+
+    const response = await previewImport(previewRequest(uploadFile(buffer, "formula.docx"), { levelCode: "A", categoryCode: "4.1.1" }));
+    const body = await response.json();
+
+    expect(response.status, JSON.stringify(body)).toBe(200);
+    expect(body.stats).toMatchObject({ totalRows: 1, validRows: 0, errorRows: 1 });
+    expect(body.rows[0].issues).toEqual([
+      expect.objectContaining({ severity: "error", field: "图片", message: expect.stringContaining("另存为 PNG 或 JPG 后重新插入") }),
+    ]);
+    expect(mocks.importBatchImageCreateMany).toHaveBeenCalled();
+  });
+
+  it("rejects a single image over 5MB per question", async () => {
+    const oversized = new Uint8Array(5 * 1024 * 1024 + 1);
+    const buffer = await buildImageDocx(
+      `<w:p><w:r><w:t>1. 大图题干</w:t></w:r>${drawing("rId1")}</w:p>` +
+        paragraph("A、选项A") +
+        paragraph("B、选项B") +
+        paragraph("答案：A"),
+      {
+        rels: [mediaRelationship("rId1", "media/image1.png")],
+        media: { "word/media/image1.png": oversized },
+      },
+    );
+
+    const response = await previewImport(previewRequest(uploadFile(buffer, "large-image.docx"), { levelCode: "A", categoryCode: "4.1.1" }));
+    const body = await response.json();
+
+    expect(response.status, JSON.stringify(body)).toBe(200);
+    expect(body.rows[0].issues).toEqual([
+      expect.objectContaining({ severity: "error", field: "图片", message: expect.stringContaining("5MB") }),
+    ]);
+  });
+
+  it("rejects more than 10 images in a single question", async () => {
+    const rels = Array.from({ length: 11 }, (_, index) => mediaRelationship(`rId${index}`, `media/image${index + 1}.png`));
+    const media = Object.fromEntries(Array.from({ length: 11 }, (_, index) => [`word/media/image${index + 1}.png`, PNG_BYTES]));
+    const buffer = await buildImageDocx(
+      `<w:p><w:r><w:t>1. 多图题干</w:t></w:r>${rels.map((_, index) => drawing(`rId${index}`)).join("")}</w:p>` +
+        paragraph("A、选项A") +
+        paragraph("B、选项B") +
+        paragraph("答案：A"),
+      { rels, media },
+    );
+
+    const response = await previewImport(previewRequest(uploadFile(buffer, "many-images.docx"), { levelCode: "A", categoryCode: "4.1.1" }));
+    const body = await response.json();
+
+    expect(response.status, JSON.stringify(body)).toBe(200);
+    expect(body.rows[0].issues).toEqual([
+      expect.objectContaining({ severity: "error", field: "图片", message: expect.stringContaining("10 张") }),
+    ]);
+    expect(mocks.importBatchImageCreateMany).toHaveBeenCalled();
   });
 
   it("dispatches .docx to the word parser and applies the whole-form level and category", async () => {

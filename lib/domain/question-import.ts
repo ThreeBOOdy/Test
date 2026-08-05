@@ -5,6 +5,7 @@ import type {
   ValidatedQuestionRow,
   ValidationIssue,
 } from "@/lib/domain/types";
+import { normalizeImageMarkers, type ImageHashResolver } from "@/lib/domain/question-image-marker";
 
 export type ImportDuplicateKind = "EXACT" | "CONFLICT" | "SUSPECT";
 
@@ -43,26 +44,41 @@ export function inferQuestionType(correctOptionCount: number): QuestionType {
   return correctOptionCount === 1 ? "SINGLE_CHOICE" : "MULTIPLE_CHOICE";
 }
 
-export function normalizeQuestionContent(value: unknown): string {
-  if (typeof value === "string") return value.trim().replace(/\s+/g, " ");
-  if (Array.isArray(value)) return `[${value.map(normalizeQuestionContent).join(",")}]`;
+export function normalizeQuestionContent(value: unknown, hashById?: ImageHashResolver): string {
+  if (typeof value === "string") {
+    const normalized = value.trim().replace(/\s+/g, " ");
+    return hashById ? normalizeImageMarkers(normalized, hashById) : normalized;
+  }
+  if (Array.isArray(value)) return `[${value.map((item) => normalizeQuestionContent(item, hashById)).join(",")}]`;
   if (value && typeof value === "object") {
-    return `{${Object.entries(value as Record<string, unknown>).sort(([left], [right]) => left.localeCompare(right)).map(([key, item]) => `${key}:${normalizeQuestionContent(item)}`).join(",")}}`;
+    return `{${Object.entries(value as Record<string, unknown>).sort(([left], [right]) => left.localeCompare(right)).map(([key, item]) => `${key}:${normalizeQuestionContent(item, hashById)}`).join(",")}}`;
   }
   return String(value ?? "");
 }
 
-export function importQuestionContentKey(question: Pick<ComparableQuestion, "stem" | "options" | "correctOptionIds">): string {
-  return [normalizeQuestionContent(question.stem), normalizeQuestionContent(question.options), normalizeQuestionContent(question.correctOptionIds)].join("|");
+export function importQuestionContentKey(
+  question: Pick<ComparableQuestion, "stem" | "options" | "correctOptionIds">,
+  hashById?: ImageHashResolver,
+): string {
+  return [
+    normalizeQuestionContent(question.stem, hashById),
+    normalizeQuestionContent(question.options, hashById),
+    normalizeQuestionContent(question.correctOptionIds, hashById),
+  ].join("|");
 }
 
-export function classifyImportDuplicate(candidate: ComparableQuestion, existing: ComparableQuestion): ImportDuplicateKind | null {
+export function classifyImportDuplicate(
+  candidate: ComparableQuestion,
+  existing: ComparableQuestion,
+  candidateHashById?: ImageHashResolver,
+  existingHashById?: ImageHashResolver,
+): ImportDuplicateKind | null {
   const candidateCode = candidate.externalQuestionCode?.trim();
   const existingCode = existing.externalQuestionCode?.trim();
   if (candidateCode && existingCode && candidateCode === existingCode) {
-    return importQuestionContentKey(candidate) === importQuestionContentKey(existing) ? "EXACT" : "CONFLICT";
+    return importQuestionContentKey(candidate, candidateHashById) === importQuestionContentKey(existing, existingHashById) ? "EXACT" : "CONFLICT";
   }
-  return !candidateCode && importQuestionContentKey(candidate) === importQuestionContentKey(existing) ? "SUSPECT" : null;
+  return !candidateCode && importQuestionContentKey(candidate, candidateHashById) === importQuestionContentKey(existing, existingHashById) ? "SUSPECT" : null;
 }
 
 export function importRowLocation(row: Pick<ImportQuestionRow, "rowNumber" | "sheetName" | "locationLabel">): string {
@@ -70,13 +86,13 @@ export function importRowLocation(row: Pick<ImportQuestionRow, "rowNumber" | "sh
   return row.sheetName ? `${row.sheetName}!${row.rowNumber}` : `第 ${row.rowNumber} 行`;
 }
 
-export function findBatchDuplicateRows(rows: ValidatedQuestionRow[]): Map<string, string> {
+export function findBatchDuplicateRows(rows: ValidatedQuestionRow[], hashById?: ImageHashResolver): Map<string, string> {
   const firstRowByIdentity = new Map<string, string>();
   const duplicates = new Map<string, string>();
   for (const item of rows) {
     if (item.issues.some((issue) => issue.severity === "error")) continue;
     const code = item.row.externalQuestionCode?.trim();
-    const identity = code ? `code:${item.row.levelCode.trim()}|${code}` : `content:${importQuestionContentKey({ stem: item.row.stem, options: item.options, correctOptionIds: item.correctOptionIds })}`;
+    const identity = code ? `code:${item.row.levelCode.trim()}|${code}` : `content:${importQuestionContentKey({ stem: item.row.stem, options: item.options, correctOptionIds: item.correctOptionIds }, hashById)}`;
     const location = importRowLocation(item.row);
     const firstRow = firstRowByIdentity.get(identity);
     if (firstRow) duplicates.set(location, firstRow);

@@ -143,4 +143,27 @@ describe("word content parser image field assignment", () => {
     });
     expect(upgraded.rows[1]).toMatchObject({ locationLabel: "第 2 题", stem: "题干二", rawAnswer: "ABC" });
   });
+
+  it("exposes per-line image placement for stem and options", async () => {
+    const { rows } = await parseDocx(
+      `<w:p><w:r><w:t>1. 题干</w:t></w:r>${drawing("rId5")}</w:p>` +
+        paragraph("续行") +
+        `<w:p>${drawing("rId6")}</w:p>` +
+        `<w:p><w:r><w:t>A、选项A</w:t></w:r>${drawing("rId7")}</w:p>` +
+        paragraph("B、选项B") +
+        paragraph("答案：A"),
+      [mediaRelationship("rId5", "media/image1.png"), mediaRelationship("rId6", "media/image2.png"), mediaRelationship("rId7", "media/image3.png")],
+      { "word/media/image1.png": PNG_BYTES, "word/media/image2.png": PNG_BYTES, "word/media/image3.png": PNG_BYTES },
+    );
+
+    expect(rows[0].stemLines).toEqual([
+      { text: "题干", images: [expect.objectContaining({ id: "image1.png" })] },
+      { text: "续行", images: [] },
+      { text: "", images: [expect.objectContaining({ id: "image2.png" })] },
+    ]);
+    expect(rows[0].optionLines).toEqual({
+      A: [{ text: "选项A", images: [expect.objectContaining({ id: "image3.png" })] }],
+      B: [{ text: "选项B", images: [] }],
+    });
+  });
 });

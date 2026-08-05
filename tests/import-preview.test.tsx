@@ -41,6 +41,26 @@ const wordPreview = {
   ],
 };
 
+const imagePreview = {
+  batchId: "batch-word",
+  fileName: "questions.docx",
+  source: "WORD",
+  sheetNames: [],
+  stats: { totalRows: 1, validRows: 1, warningRows: 0, errorRows: 0 },
+  rows: [
+    {
+      row: { rowNumber: 1, locationLabel: "第 1 题", stem: "含图题干 [图:qimg_1]", levelCode: "A", categoryCode: "4.1.1" },
+      selectionSpec: "4选1",
+      type: "SINGLE_CHOICE",
+      issues: [],
+      images: [
+        { id: "qimg_1", field: "STEM", mimeType: "image/png", sizeBytes: 10 },
+        { id: "qimg_2", field: "A", mimeType: "image/png", sizeBytes: 10 },
+      ],
+    },
+  ],
+};
+
 function mockPreview(payload: unknown, status = 200) {
   return vi.spyOn(globalThis, "fetch").mockResolvedValue(
     new Response(JSON.stringify(payload), { status, headers: { "Content-Type": "application/json" } }),
@@ -123,5 +143,22 @@ describe("ImportPreview", () => {
     await waitFor(() => expect(screen.getByText("题库!2")).toBeInTheDocument());
     expect(screen.getByText("Excel 题干")).toBeInTheDocument();
     expect(screen.getByText("工作表：题库；完整数据保存在服务器，页面仅展示前 100 行。")).toBeInTheDocument();
+  });
+
+  it("shows the image count and thumbnails for word rows with images", async () => {
+    const fetchMock = mockPreview(imagePreview);
+    const user = userEvent.setup();
+    render(<ImportPreview levels={levels} />);
+
+    await user.upload(screen.getByLabelText("选择 .xlsx 或 .docx 文件"), docxFile());
+    await user.type(screen.getByLabelText("分类号"), "4.1.1");
+    await user.click(screen.getByRole("button", { name: "开始预检" }));
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalled());
+    await waitFor(() => expect(screen.getByText("图片 2 张")).toBeInTheDocument());
+    const thumbnails = screen.getAllByRole("img");
+    expect(thumbnails).toHaveLength(2);
+    expect(thumbnails[0]).toHaveAttribute("src", "/api/v1/teacher/import-batches/batch-word/images/qimg_1");
+    expect(thumbnails[1]).toHaveAttribute("src", "/api/v1/teacher/import-batches/batch-word/images/qimg_2");
   });
 });

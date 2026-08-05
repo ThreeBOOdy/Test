@@ -532,6 +532,7 @@ model ImportBatch {
   importedBy    User             @relation(fields: [importedById], references: [id])
   questions     Question[]
   rows          ImportBatchRow[]
+  images        ImportBatchImage[]
   createdAt     DateTime         @default(now())
   expiresAt     DateTime?
   committedAt   DateTime?
@@ -554,6 +555,24 @@ model ImportBatchRow {
 
   @@unique([batchId, rowNumber])
   @@index([batchId, valid, rowNumber])
+}
+
+model ImportBatchImage {
+  id          String      @id
+  batchId     String
+  batch       ImportBatch @relation(fields: [batchId], references: [id], onDelete: Cascade)
+  rowNumber   Int
+  field       String      @db.VarChar(32)
+  sortOrder   Int         @default(0)
+  data        Bytes       @db.LongBlob
+  mimeType    String      @db.VarChar(64)
+  sizeBytes   Int
+  contentHash String      @db.VarChar(64)
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+
+  @@unique([batchId, id])
+  @@index([batchId, rowNumber, field, sortOrder])
 }
 
 model StudentImportBatch {
