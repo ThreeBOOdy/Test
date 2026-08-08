@@ -6,11 +6,34 @@ import type { ImportQuestionRow, ValidationIssue } from "./types";
 /** 图片标记 `[图:qimg_xxx]`，其中 `qimg_xxx` 是图片记录 ID。 */
 export const IMAGE_MARKER_PATTERN = /\[图:(qimg_[A-Za-z0-9_-]+)\]/g;
 
+/** 单捕获组的拆分模式：只把完整标记作为独立片段，避免 split 附带内部捕获组。 */
+const IMAGE_MARKER_SPLIT_PATTERN = /(\[图:qimg_[A-Za-z0-9_-]+\])/g;
+
 export const ALLOWED_IMAGE_MIME_TYPES = new Set(["image/png", "image/jpeg", "image/gif", "image/webp"]);
 export const MAX_IMAGE_SIZE_BYTES = 5 * 1024 * 1024;
 export const MAX_IMAGES_PER_QUESTION = 10;
 
 export type ImageHashResolver = (imageId: string) => string | undefined;
+
+/** 含图文本的可渲染片段：图片标记单独成段，其余文本原样保留。 */
+export type RichTextSegment =
+  | { type: "text"; text: string }
+  | { type: "image"; imageId: string };
+
+/**
+ * 按图片标记把文本拆分为渲染片段：标记之间/前后的文本保持原样，
+ * 非 `qimg_*` 的方括号文本不会被误判为图片。
+ */
+export function splitImageMarkerText(content: string): RichTextSegment[] {
+  return content
+    .split(IMAGE_MARKER_SPLIT_PATTERN)
+    .map((part, index): RichTextSegment =>
+      index % 2 === 1
+        ? { type: "image", imageId: part.slice(3, -1) }
+        : { type: "text", text: part },
+    )
+    .filter((segment) => (segment.type === "text" ? segment.text.length > 0 : true));
+}
 
 /** 预检批次级图片记录；提交时以同一 ID 迁入题目级表（ADR 0002）。 */
 export type BatchImageRecord = {

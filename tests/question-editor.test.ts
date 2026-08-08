@@ -24,6 +24,11 @@ describe("question editor validation", () => {
   it("rejects selecting every option as correct", () => {
     expect(() => normalizeQuestionEditorInput({ options, correctOptionIds: ["A", "B", "C", "D"] })).toThrow("至少需要保留一个错误选项");
   });
+
+  it("keeps question image markers intact in option text so edits do not drop images", () => {
+    const result = normalizeQuestionEditorInput({ options: [{ id: "A", text: "请看图[图:qimg_1]" }, { id: "B", text: "干扰项" }], correctOptionIds: ["A"] });
+    expect(result.options[0].text).toBe("请看图[图:qimg_1]");
+  });
 });
 
 describe("knowledge code validation", () => {

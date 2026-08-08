@@ -8,6 +8,7 @@ import {
   normalizeImageMarkers,
   prepareQuestionRowImages,
   revalidateCommitRowImages,
+  splitImageMarkerText,
   validateQuestionImageLimits,
 } from "../lib/domain/question-image-marker";
 import type { ImportQuestionRow } from "../lib/domain/types";
@@ -53,6 +54,35 @@ describe("question image markers", () => {
     expect(marker).toBe("[图:qimg_abc123]");
     expect(normalizeImageMarkers(`题干 ${marker} 结束`, (id) => (id === "qimg_abc123" ? "hash-1" : undefined))).toBe("题干 [图:hash-1] 结束");
     expect(normalizeImageMarkers(`未知 ${marker}`, () => undefined)).toBe("未知 [图:qimg_abc123]");
+  });
+
+  it("splits pure text into a single text segment", () => {
+    expect(splitImageMarkerText("纯文本题目")).toEqual([{ type: "text", text: "纯文本题目" }]);
+  });
+
+  it("splits a single image marker with surrounding text", () => {
+    expect(splitImageMarkerText("请看图[图:qimg_1]后作答")).toEqual([
+      { type: "text", text: "请看图" },
+      { type: "image", imageId: "qimg_1" },
+      { type: "text", text: "后作答" },
+    ]);
+  });
+
+  it("splits multiple adjacent and separated image markers in document order", () => {
+    expect(splitImageMarkerText("前[图:qimg_1][图:qimg_2]中[图:qimg_3]后")).toEqual([
+      { type: "text", text: "前" },
+      { type: "image", imageId: "qimg_1" },
+      { type: "image", imageId: "qimg_2" },
+      { type: "text", text: "中" },
+      { type: "image", imageId: "qimg_3" },
+      { type: "text", text: "后" },
+    ]);
+  });
+
+  it("keeps bracket text that is not a question image marker unchanged", () => {
+    expect(splitImageMarkerText("[图:not-qimg] [普通括号]")).toEqual([
+      { type: "text", text: "[图:not-qimg] [普通括号]" },
+    ]);
   });
 });
 
