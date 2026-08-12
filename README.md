@@ -863,6 +863,18 @@ Copy-Item .env.example .env
 docker compose -f docker-compose.prod.yml up -d --build
 ```
 
+### 一键部署（全流程）
+
+Windows 服务器可一次完成环境检查、防火墙配置（可选）、密钥生成、构建启动、健康等待、根证书导出和授权端验收：
+
+```powershell
+.\scripts\deploy-lan-all.ps1 -ServerIp 192.168.50.10 -AllowedCidrs "192.168.50.0/24" -ConfigureFirewall
+```
+
+脚本串接 `deploy-prod.ps1`、`configure-lan-firewall.ps1`、`export-internal-ca.ps1` 与 `test-lan-deployment.ps1`（授权模式）。受管设备根证书安装、未授权网段/公网验收、admin 初始改密和备份计划任务仍需按 `docs/operations/lan-https-deployment.md` 人工完成。
+
+脚本末尾会逐项提问上述人工事项并等待填写（直接回车表示未完成），确认结果写入 `test-results\lan-acceptance\deployment-checklist.json` 与 `.md` 供归档；自动化场景可加 `-SkipChecklist` 跳过提问。
+
 生产环境必须设置完整且密码已 URL 编码的 `DATABASE_URL`、随机的 `MYSQL_PASSWORD` 与 `MYSQL_ROOT_PASSWORD`、至少 32 字符的 `AUTH_SECRET`、固定的 `APP_BIND_IP`、批准的 `APP_ALLOWED_CIDRS`，以及两个不同的学生敏感数据密钥。`APP_TIME_ZONE` 未设置时默认使用 `Asia/Taipei`。数据库不暴露宿主机端口，应用会在网络配置校验和迁移任务成功后启动。详细步骤见 `docs/operations/lan-https-deployment.md`。
 
 `STUDENT_DATA_ENCRYPTION_KEY` 与 `STUDENT_DATA_HASH_KEY` 都必须是精确 32 个随机字节的 Base64 编码，并分别生成。可在 PowerShell 中运行以下函数两次，将两次输出分别写入 `.env`；不要将密钥打印到应用日志或提交到版本库：
