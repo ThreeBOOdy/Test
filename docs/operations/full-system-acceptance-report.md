@@ -1,6 +1,6 @@
 # 全系统验收报告
 
-- 执行时间：2026-08-01T07:37:50.162Z 至 2026-08-01T07:42:05.744Z
+- 执行时间：2026-08-12T14:47:54.055Z 至 2026-08-12T14:51:32.608Z
 - 主机：LAPTOP-TEP5OGIF
 - Node：v24.14.1
 - 工作区：D:\Tests\Test
@@ -10,16 +10,16 @@
 
 | 检查 | 状态 | 耗时 | 说明 |
 | --- | --- | ---: | --- |
-| Prisma schema validation | passed | 3517 ms | 完成 |
-| Lint | passed | 11980 ms | 完成 |
-| 领域/API/UI 测试 | passed | 35466 ms | 完成 |
-| 集成库迁移 | passed | 29654 ms | 完成 |
-| E2E 库迁移 | passed | 30143 ms | 完成 |
-| E2E 库种子 | passed | 2230 ms | 完成 |
-| MySQL 集成测试 | passed | 55722 ms | 完成 |
-| Playwright 端到端测试 | passed | 44019 ms | 完成 |
-| 生产构建与 TypeScript 检查 | passed | 26739 ms | 完成 |
-| 隔离恢复演练 | passed | 16106 ms | 完成 |
+| Prisma schema validation | passed | 3602 ms | 完成 |
+| Lint | passed | 12536 ms | 完成 |
+| 领域/API/UI 测试 | passed | 39627 ms | 完成 |
+| 集成库迁移 | passed | 3075 ms | 完成 |
+| E2E 库迁移 | passed | 16291 ms | 完成 |
+| E2E 库种子 | passed | 2400 ms | 完成 |
+| MySQL 集成测试 | passed | 36298 ms | 完成 |
+| Playwright 端到端测试 | passed | 61201 ms | 完成 |
+| 生产构建与 TypeScript 检查 | passed | 26587 ms | 完成 |
+| 隔离恢复演练 | passed | 16928 ms | 完成 |
 
 ## 设计第 28 节映射
 
