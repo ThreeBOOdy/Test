@@ -164,7 +164,8 @@ test.describe.serial("production business flows", () => {
   test("student practice restores progress and closes the wrong-question loop", async ({ page }) => {
     await login(page, activatedStudentUsername, changedPassword, "/student");
     await page.getByRole("link", { name: /A级综合训练/ }).click();
-    await expect(page).toHaveURL(/\/student\/practice\?session=/);
+    // 首次访问会冷编译路由并在服务端创建练习会话，CI 冷启动下可能超过默认 5 秒。
+    await expect(page).toHaveURL(/\/student\/practice\?session=/, { timeout: 30_000 });
     await expect(page.getByText("第 1 / 10 题", { exact: true })).toBeVisible();
 
     await answerWrong(page);

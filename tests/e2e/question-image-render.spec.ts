@@ -101,7 +101,8 @@ test("question images render across bank, revisions, wrong book, and practice zo
     await expect(page.locator('img[src^="/api/v1/question-images/"]').first()).toBeVisible();
 
     await page.getByRole("link", { name: "随机巩固错题" }).click();
-    await expect(page).toHaveURL(/\/student\/practice\?session=/);
+    // 首次访问会冷编译路由并在服务端创建练习会话，CI 冷启动下可能超过默认 5 秒。
+    await expect(page).toHaveURL(/\/student\/practice\?session=/, { timeout: 30_000 });
     await expect(page.getByRole("heading", { level: 1 })).toContainText(stemText, { timeout: 15_000 });
     const practiceImage = page.locator('img[src^="/api/v1/question-images/"]').first();
     await expect(practiceImage).toBeVisible({ timeout: 15_000 });
