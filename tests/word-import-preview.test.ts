@@ -219,7 +219,7 @@ describe("question import preview dispatch", () => {
     expect(body.rows[0].row.sheetName).toBeUndefined();
     expect(body.rows[0].row.externalQuestionCode).toBeUndefined();
     expect(body.sheetNames).toEqual([]);
-    expect(mocks.importBatchCreate).toHaveBeenCalledWith({ data: expect.objectContaining({ fileName: "题库.docx", courseId: expect.any(String), totalRows: 2, validRows: 2 }) });
+    expect(mocks.importBatchCreate).toHaveBeenCalledWith({ data: expect.objectContaining({ fileName: "题库.docx", totalRows: 2, validRows: 2 }) });
   });
 
   it("rejects word uploads when the level or category code is missing", async () => {

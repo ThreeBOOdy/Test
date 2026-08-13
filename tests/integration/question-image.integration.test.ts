@@ -3,7 +3,6 @@ import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { PrismaMariaDb } from "@prisma/adapter-mariadb";
 import { PrismaClient } from "../../generated/prisma/client";
 import { assertDatabaseName } from "../../lib/domain/database-url";
-import { RADIO_COURSE_ID } from "../../lib/domain/course";
 import { getQuestionImage } from "../../lib/server/question-image";
 
 const mocks = vi.hoisted(() => ({ getCurrentUser: vi.fn() }));
@@ -77,7 +76,6 @@ describe("question image model and read endpoint", () => {
     const stored = await prisma.questionImage.findUniqueOrThrow({ where: { id: image.id } });
     expect(stored).toMatchObject({
       id: "img-1",
-      courseId: RADIO_COURSE_ID,
       field: "A",
       sortOrder: 2,
       mimeType: "image/png",

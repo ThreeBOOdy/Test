@@ -45,7 +45,7 @@ export type RestoreEvidence = {
   migrationVersion: string;
   tableCounts: Record<string, number>;
   activeLoginAccounts: number;
-  enabledRadioCourses: number;
+  enabledLevels: number;
   sensitiveFields: "verified" | "not-present";
   sensitiveFieldKeyIds?: string[];
 };
@@ -362,7 +362,7 @@ export function validateRestoreEvidence(manifest: BackupManifest, evidence: Rest
       `Restored migration version mismatch: expected ${manifest.migrationVersion}, received ${evidence.migrationVersion}`,
     );
   }
-  for (const table of ["User", "Course", "Question", "PracticeSession"]) {
+  for (const table of ["User", "Level", "Question", "PracticeSession"]) {
     const count = evidence.tableCounts[table];
     if (!Number.isInteger(count) || count < 0) {
       throw new Error(`Invalid restored table count for ${table}`);
@@ -371,8 +371,8 @@ export function validateRestoreEvidence(manifest: BackupManifest, evidence: Rest
   if (evidence.tableCounts.User < 1 || evidence.activeLoginAccounts < 1) {
     throw new Error("Restored database has no active login account");
   }
-  if (evidence.tableCounts.Course < 1 || evidence.enabledRadioCourses !== 1) {
-    throw new Error("Restored database must contain exactly one enabled RADIO course");
+  if (evidence.tableCounts.Level < 1 || evidence.enabledLevels < 1) {
+    throw new Error("Restored database has no enabled practice level");
   }
   if (evidence.tableCounts.Question < 1) {
     throw new Error("Restored database has no practice questions");

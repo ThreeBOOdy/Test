@@ -373,17 +373,17 @@ describe("backup retention and operational safety", () => {
 });
 
 describe("restore validation", () => {
-  it("accepts matching migration, core counts, login data, and RADIO course evidence", () => {
+  it("accepts matching migration, core counts, login data, and level evidence", () => {
     const manifest = backupManifest("2026-07-30T08:00:00.000Z", "practice.backup");
     expect(
       validateRestoreEvidence(manifest, {
         migrationVersion: manifest.migrationVersion,
-        tableCounts: { User: 3, Course: 1, Question: 20, PracticeSession: 4 },
+        tableCounts: { User: 3, Level: 3, Question: 20, PracticeSession: 4 },
         activeLoginAccounts: 3,
-        enabledRadioCourses: 1,
+        enabledLevels: 3,
         sensitiveFields: "verified",
       }),
-    ).toMatchObject({ enabledRadioCourses: 1, sensitiveFields: "verified" });
+    ).toMatchObject({ enabledLevels: 3, sensitiveFields: "verified" });
   });
 
   it("rejects a restore whose migration or core data does not match", () => {
@@ -391,9 +391,9 @@ describe("restore validation", () => {
     expect(() =>
       validateRestoreEvidence(manifest, {
         migrationVersion: "wrong-migration",
-        tableCounts: { User: 0, Course: 0, Question: 0, PracticeSession: 0 },
+        tableCounts: { User: 0, Level: 0, Question: 0, PracticeSession: 0 },
         activeLoginAccounts: 0,
-        enabledRadioCourses: 0,
+        enabledLevels: 0,
         sensitiveFields: "not-present",
       }),
     ).toThrow(/migration version mismatch/i);
@@ -404,9 +404,9 @@ describe("restore validation", () => {
     expect(() =>
       validateRestoreEvidence(manifest, {
         migrationVersion: manifest.migrationVersion,
-        tableCounts: { User: 2, Course: 1, Question: 0, PracticeSession: 0 },
+        tableCounts: { User: 2, Level: 3, Question: 0, PracticeSession: 0 },
         activeLoginAccounts: 2,
-        enabledRadioCourses: 1,
+        enabledLevels: 3,
         sensitiveFields: "not-present",
       }),
     ).toThrow(/no practice questions/i);

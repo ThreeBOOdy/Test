@@ -5,7 +5,6 @@ import { PaginationNav } from "@/components/pagination-nav";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { prisma } from "@/lib/db";
-import { RADIO_COURSE_ID } from "@/lib/domain/course";
 import { formatPercent } from "@/lib/utils";
 import type { ExamSettlementSource, PracticeMode, PracticeStatus } from "@/lib/domain/types";
 import { normalizePagination } from "@/lib/server/pagination";
@@ -19,8 +18,8 @@ export default async function HistoryPage({ searchParams }: { searchParams: Prom
   const params = await searchParams;
   const { page, pageSize, skip } = normalizePagination({ page: params.page });
   const [sessions, total, summary] = await Promise.all([
-    prisma.practiceSession.findMany({ where: { courseId: RADIO_COURSE_ID, userId: user.id }, include: { level: true, knowledgePoint: true, _count: { select: { questions: true } } }, orderBy: { startedAt: "desc" }, skip, take: pageSize }),
-    prisma.practiceSession.count({ where: { courseId: RADIO_COURSE_ID, userId: user.id } }),
+    prisma.practiceSession.findMany({ where: { userId: user.id }, include: { level: true, knowledgePoint: true, _count: { select: { questions: true } } }, orderBy: { startedAt: "desc" }, skip, take: pageSize }),
+    prisma.practiceSession.count({ where: { userId: user.id } }),
     getStudentLearningSummary(user.id),
   ]);
   const totalPages = Math.max(1, Math.ceil(total / pageSize));

@@ -9,7 +9,6 @@ import { getKnowledgeRuleInventory, isPracticeRuleWithinInventory } from "@/lib/
 import { buildPracticeLaunchHref } from "@/lib/domain/practice-launcher";
 import { normalizePracticeLaunch } from "@/lib/domain/practice-launcher";
 import { prisma } from "@/lib/db";
-import { RADIO_COURSE_ID } from "@/lib/domain/course";
 import { getCurrentUser } from "@/lib/server/session";
 import { createPracticeSession } from "@/lib/server/practice-service";
 
@@ -31,13 +30,13 @@ export default async function PracticeStartPage({ searchParams }: { searchParams
     redirect(`/student/practice?session=${session.id}`);
   }
   const [levels, points, levelRules, knowledgeRules, examRules, questions, activeSession] = await Promise.all([
-    prisma.level.findMany({ where: { courseId: RADIO_COURSE_ID, enabled: true }, orderBy: [{ sortOrder: "asc" }, { code: "asc" }] }),
-    prisma.knowledgePoint.findMany({ where: { courseId: RADIO_COURSE_ID, enabled: true }, orderBy: [{ depth: "asc" }, { sortOrder: "asc" }, { code: "asc" }] }),
-    prisma.levelPracticeRule.findMany({ where: { courseId: RADIO_COURSE_ID, enabled: true }, include: { level: true } }),
-    prisma.knowledgePracticeRule.findMany({ where: { courseId: RADIO_COURSE_ID, enabled: true }, include: { level: true, knowledgePoint: true } }),
-    prisma.examRule.findMany({ where: { courseId: RADIO_COURSE_ID, enabled: true }, include: { level: true } }),
-    prisma.question.findMany({ where: { courseId: RADIO_COURSE_ID, status: "ACTIVE", knowledgePoint: { enabled: true } }, select: { levelId: true, knowledgePointId: true, type: true } }),
-    prisma.practiceSession.findFirst({ where: { courseId: RADIO_COURSE_ID, userId: user.id, status: "IN_PROGRESS" }, orderBy: { startedAt: "desc" }, select: { id: true } }),
+    prisma.level.findMany({ where: { enabled: true }, orderBy: [{ sortOrder: "asc" }, { code: "asc" }] }),
+    prisma.knowledgePoint.findMany({ where: { enabled: true }, orderBy: [{ depth: "asc" }, { sortOrder: "asc" }, { code: "asc" }] }),
+    prisma.levelPracticeRule.findMany({ where: { enabled: true }, include: { level: true } }),
+    prisma.knowledgePracticeRule.findMany({ where: { enabled: true }, include: { level: true, knowledgePoint: true } }),
+    prisma.examRule.findMany({ where: { enabled: true }, include: { level: true } }),
+    prisma.question.findMany({ where: { status: "ACTIVE", knowledgePoint: { enabled: true } }, select: { levelId: true, knowledgePointId: true, type: true } }),
+    prisma.practiceSession.findFirst({ where: { userId: user.id, status: "IN_PROGRESS" }, orderBy: { startedAt: "desc" }, select: { id: true } }),
   ]);
   const levelById = new Map(levels.map((level) => [level.id, level]));
   const pointById = new Map(points.map((point) => [point.id, point]));

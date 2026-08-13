@@ -4,7 +4,6 @@ import { Prisma } from "@/generated/prisma/client";
 import { prisma } from "@/lib/db";
 import { extractDocxContent } from "@/lib/domain/docx-content";
 import { getImportBatchExpiry } from "@/lib/domain/import-batch";
-import { RADIO_COURSE_ID } from "@/lib/domain/course";
 import { classifyImportDuplicate, findBatchDuplicateRows, importRowLocation, validateImportRow } from "@/lib/domain/question-import";
 import { prepareQuestionRowImages, validateQuestionImageLimits, type BatchImageRecord, type PreviewRowImage } from "@/lib/domain/question-image-marker";
 import { assertRequestBodySize } from "@/lib/domain/request-body";
@@ -106,7 +105,6 @@ export async function POST(request: Request) {
     const existingQuestions = codedRows.length
       ? await prisma.question.findMany({
         where: {
-          courseId: RADIO_COURSE_ID,
           level: { code: { in: [...new Set(codedRows.map((item) => item.row.levelCode.trim()))] } },
           externalQuestionCode: { in: [...new Set(codedRows.map((item) => item.row.externalQuestionCode!.trim()))] },
         },
@@ -117,7 +115,7 @@ export async function POST(request: Request) {
     const unnumberedRows = results.filter((item) => !item.row.externalQuestionCode?.trim());
     const existingForSuspects = unnumberedRows.length
       ? await prisma.question.findMany({
-        where: { courseId: RADIO_COURSE_ID },
+        where: {},
         select: { externalQuestionCode: true, stem: true, options: true, correctOptionIds: true, images: { select: { id: true, contentHash: true } } },
       })
       : [];
@@ -142,7 +140,7 @@ export async function POST(request: Request) {
     const errorRows = results.filter((item) => item.issues.some((issue) => issue.severity === "error")).length;
     const expiresAt = getImportBatchExpiry(new Date());
     const batch = await prisma.$transaction(async (tx) => {
-      const created = await tx.importBatch.create({ data: { courseId: RADIO_COURSE_ID, fileName: file.name, importedById: user.id, status: "PREVIEW", totalRows: results.length, validRows, warningRows, errorRows, expiresAt } });
+      const created = await tx.importBatch.create({ data: { fileName: file.name, importedById: user.id, status: "PREVIEW", totalRows: results.length, validRows, warningRows, errorRows, expiresAt } });
       if (results.length) {
         await tx.importBatchRow.createMany({ data: results.map((item, index) => ({ batchId: created.id, rowNumber: index + 1, payload: JSON.parse(JSON.stringify(stripRowImages(item.row))) as Prisma.InputJsonValue, issues: item.issues as Prisma.InputJsonValue, valid: item.issues.every((issue) => issue.severity !== "error") })) });
       }

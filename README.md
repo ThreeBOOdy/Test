@@ -8,6 +8,8 @@
 
 2026-08-02 新增 Word 题库导入能力（仅接受选择题，判断题/填空/简答/材料题一律报错不入库），按 6 张分票完成并验收，设计文档与 ADR 见 `docs/word-question-import-design.md` 与 `docs/adr/0001-word-import-choice-only-boundary.md`。
 
+2026-08-13 移除单课程硬编码边界：删除 `Course` 模型与所有表的 `courseId` 列、复合外键和复合唯一键，系统回归单一领域（等级 + 知识点直接承载题库数据）。多课程/课程切换能力暂不建设，后续需要时再重新设计。
+
 ## 当前版本组成
 
 - **生产增强**：会话版本、登录限流、审计日志、练习快照、服务端 Excel 批次、分页、教学统计、健康检查、CI、备份恢复和生产部署。
@@ -15,7 +17,7 @@
 - **训练 UI 重构**：题目导航、草稿选择状态、频谱进度、即时判题、完成摘要，以及教师移动端“更多”功能面板。
 - **学生账号体系**：自主注册、管理员审核、拒绝修改与重新提交、一年默认有效期、长期账号、敏感资料加密和 Excel 批量导入。
 - **兼容修复**：导航配置拆出 Client Component 边界，现有视觉资源替代缺失插画，端到端测试同步新版交互文案。
-- **课程与角色边界**：`RADIO` 单课程数据隔离；管理员、教师、学生页面/API/服务层严格分离；种子账号角色修正。
+- **角色边界**：管理员、教师、学生页面/API/服务层严格分离；种子账号角色修正。
 - **账号与认证**：数据库有状态会话、分角色空闲与绝对时限、分角色密码策略、教师由管理员创建、学生人物用户名永久绑定、一次性激活码。
 - **题库与练习**：题目修订与乐观并发、教师批次所有权、公共题库只归档、选项随机化冻结、唯一进行中练习、答题幂等、错题三刷掌握。
 - **Word 题库导入**：按小鹅通 Word 批量导入模板解析 `.docx`，仅接受选择题；判断题、填空题、简答题逐题报错，材料题整块拒绝；题号只用于定位不入库，解析保留在批次行数据，等级/分类号整份应用。
@@ -236,7 +238,6 @@ flowchart LR
 | 模型 | 说明 |
 | --- | --- |
 | `User` | 学生、教师和管理员账号，登录用户名与真实姓名分离、密码摘要、角色、启停和强制改密 |
-| `Course` | 课程边界，当前唯一启用 `RADIO`，所有题库、规则、练习和历史均归属课程 |
 | `RadioPerson` | 无线电贡献人物身份目录与永久占用状态 |
 | `StudentActivation` | 一次性激活码哈希、有效期、版本与使用时间 |
 | `AuthSession` | 数据库有状态会话：令牌哈希、用户、角色、空闲与绝对到期、撤销时间 |
@@ -351,7 +352,6 @@ Copy-Item .env.example .env
 | --- | --- | --- |
 | `DATABASE_URL` | `mysql://practice:URL编码后的密码@127.0.0.1:3306/practice_dev` | Prisma 使用的 MySQL 地址；密码中的特殊字符必须进行 URL 编码 |
 | `SHADOW_DATABASE_URL` | `mysql://practice:URL编码后的密码@127.0.0.1:3306/practice_shadow` | `prisma migrate dev` 使用的独立 shadow database |
-| `COURSE_MIGRATION_DATABASE_URL` | `mysql://practice:URL编码后的密码@127.0.0.1:3306/practice_ci_migration` | RADIO 课程边界迁移集成测试使用的独立、可清空数据库；必须保留数据库名 `practice_ci_migration` |
 | `APP_SEED_PASSWORD` | `ChangeMe123!` | 演示账号种子密码 |
 | `AUTH_SECRET` | 至少 32 字符随机字符串 | JWT 签名密钥 |
 | `COOKIE_SECURE` | `false` | 本地 HTTP 为 `false`，正式 HTTPS 为 `true` |
@@ -385,7 +385,6 @@ Copy-Item .env.example .env
 ```dotenv
 DATABASE_URL="mysql://practice:URL编码后的密码@127.0.0.1:3306/practice_dev"
 SHADOW_DATABASE_URL="mysql://practice:URL编码后的密码@127.0.0.1:3306/practice_shadow"
-COURSE_MIGRATION_DATABASE_URL="mysql://practice:URL编码后的密码@127.0.0.1:3306/practice_ci_migration"
 ```
 
 完成首次迁移和演示数据写入：
@@ -455,7 +454,7 @@ docker compose down -v
 
 ### 一键部署（推荐）
 
-服务器上只需一条命令即可完成全部功能的完整部署：自动生成 `.env` 与随机密钥（MySQL 密码、`AUTH_SECRET`、学生数据加密密钥）、构建镜像，并依次启动 MySQL、Prisma 迁移、基础数据 seed（管理员账号、课程、级别、知识点、题目）、Next.js 应用、定时结算 Worker 和 Caddy HTTPS 代理，最后等待健康检查通过。
+服务器上只需一条命令即可完成全部功能的完整部署：自动生成 `.env` 与随机密钥（MySQL 密码、`AUTH_SECRET`、学生数据加密密钥）、构建镜像，并依次启动 MySQL、Prisma 迁移、基础数据 seed（管理员账号、级别、知识点、题目）、Next.js 应用、定时结算 Worker 和 Caddy HTTPS 代理，最后等待健康检查通过。
 
 Linux 服务器：
 
@@ -513,8 +512,8 @@ docker compose -f docker-compose.prod.yml run --rm migrate npm run db:seed
 
 | 角色 | 用户名 | 默认密码 |
 | --- | --- | --- |
-| 管理员 | `teacher` | `ChangeMe123!` |
-| 教师 | `instructor` | `ChangeMe123!` |
+| 管理员 | `admin` | `ChangeMe123!` |
+| 教师 | `teacher` | `ChangeMe123!` |
 | 学生 | `student` | `ChangeMe123!` |
 
 如果修改了 `APP_SEED_PASSWORD`，密码以环境变量为准。Seed 按等级代码和知识点分类号等业务唯一键对齐数据，可以在同一开发数据库中重复执行。
@@ -708,7 +707,6 @@ npm.cmd run acceptance
 - 等级练习即时判题、刷新恢复、历史记录、错题产生、错题组卷和掌握状态更新。
 - 教师移动端“更多”面板可访问全部管理入口，练习题目导航、草稿选择和完成摘要可独立渲染测试。
 - Excel 预检、警告报告、101 行完整提交和撤销。
-- RADIO 单课程边界迁移：旧题库、规则、练习会话和历史数据无损回填，并拒绝跨课程关联。
 - 管理员、教师、学生角色越权矩阵统一返回 `403`。
 - 数据库有状态会话的到期、撤销、退出、改密和重置失效。
 - 题目修订、乐观并发 `409`、公共题库只归档与批次撤销不物理删除。
@@ -718,9 +716,9 @@ npm.cmd run acceptance
 
 当前版本验证基线：
 
-- Vitest 单元、UI 与仓库规则测试：67 个测试文件，415 项通过、1 项跳过。
-- MySQL 集成测试：6 个文件、58 项通过，覆盖课程迁移、学生注册、导入、审核、敏感数据、题库、练习、考试与清理。
-- Playwright 端到端测试：4/4 通过（管理员导入并激活学生、练习断网恢复与错题三会话掌握、教师 Excel 批次预检/报告/提交/撤销、Word 题库导入闭环）。
+- Vitest 单元、UI 与仓库规则测试：73 个测试文件，476 项通过、1 项跳过。
+- MySQL 集成测试：8 个文件、66 项通过，覆盖学生注册、导入、审核、敏感数据、题库、练习、考试与清理。
+- Playwright 端到端测试：5/5 通过（管理员导入并激活学生、练习断网恢复与错题三会话掌握、教师 Excel 批次预检/报告/提交/撤销、Word 题库导入闭环、含图题目渲染）。
 - ESLint、Prisma Schema 校验和 Next.js 生产构建。
 - `npm audit`：当前报告 1 个高危依赖告警；尚未执行可能引入破坏性升级的 `npm audit fix --force`。
 
@@ -738,7 +736,7 @@ npm.cmd run acceptance
 npm.cmd audit
 ```
 
-本机运行 `npm.cmd run test:integration` 前，确认 `.env` 中的 `COURSE_MIGRATION_DATABASE_URL` 指向由 `scripts/mysql-bootstrap.sql` 创建的 `practice_ci_migration`。该测试会清空并重建该数据库中的表，切勿指向开发或生产数据库。
+本机运行 `npm.cmd run test:integration` 前，确认 `.env` 中的 `DATABASE_URL` 指向由 `scripts/mysql-bootstrap.sql` 创建的 `practice_ci_integration`。该测试会清空并重建该数据库中的表，切勿指向开发或生产数据库。
 
 GitHub Actions 使用 MySQL 8.0.46 服务容器，并为集成测试和端到端测试创建独立数据库，自动执行依赖安装、Prisma Generate、数据库迁移、Seed、单元测试、集成测试、ESLint、生产构建和 Playwright E2E。
 
@@ -799,7 +797,7 @@ Windows 任务计划程序还应每天运行 `.\scripts\data-retention.ps1`，�
   -BackupDirectory E:\PracticeBackups
 ```
 
-恢复成功还要求清单迁移版本与数据库一致、关键表计数合理、至少存在一个可登录账号、恰好一个启用的 `RADIO` 课程，并在存在学生敏感字段时完成 AES-GCM 解密抽样。导入或数据库核验失败时应用保持停止，等待人工处置。
+恢复成功还要求清单迁移版本与数据库一致、关键表计数合理、至少存在一个可登录账号、至少存在一个启用的等级，并在存在学生敏感字段时完成 AES-GCM 解密抽样。导入或数据库核验失败时应用保持停止，等待人工处置。
 
 恢复演练必须在隔离环境设置 `BACKUP_RESTORE_BASE_URL`、`BACKUP_RESTORE_SMOKE_USERNAME` 和 `BACKUP_RESTORE_SMOKE_PASSWORD`；可用 `BACKUP_RESTORE_SMOKE_LEVEL_CODE` 指定等级，默认 `A`。脚本重启应用后会强制完成就绪检查、真实学生登录、创建一轮练习并提交第一道题的答案，任一步失败均返回非零退出且不会记录为恢复成功。冒烟学生应为专用测试账号，凭据由外部密码保险库注入，不得写入仓库或日志。
 
@@ -824,7 +822,7 @@ $env:BACKUP_RESTORE_TARGET_ID = "monthly-restore-drill-01"
   -DatabaseName practice_restore_drill
 ```
 
-演练会启动隔离编排目标，然后认证并导入备份，验证迁移版本、核心表计数、登录账号、`RADIO` 课程和敏感字段解密；应用通过就绪检查后，使用专用冒烟学生真实登录、读取练习题目、开启模拟考试并提交答案完成交卷。每次执行都会将备份标识、开始/结束时间、耗时、隔离目标、校验结果、失败原因和发现的问题写入 `logs/restore-drills.jsonl`（或 `BACKUP_RESTORE_DRILL_LOG_FILE`）。最近一次成功演练可由运维记录系统查询该 JSONL 中最后一条 `status=succeeded` 的记录。
+演练会启动隔离编排目标，然后认证并导入备份，验证迁移版本、核心表计数、登录账号、启用等级和敏感字段解密；应用通过就绪检查后，使用专用冒烟学生真实登录、读取练习题目、开启模拟考试并提交答案完成交卷。每次执行都会将备份标识、开始/结束时间、耗时、隔离目标、校验结果、失败原因和发现的问题写入 `logs/restore-drills.jsonl`（或 `BACKUP_RESTORE_DRILL_LOG_FILE`）。最近一次成功演练可由运维记录系统查询该 JSONL 中最后一条 `status=succeeded` 的记录。
 
 平台运维负责人至少每月检查最近成功记录；演练失败时，当班运维负责隔离目标和容器日志，数据库管理员负责备份、迁移和数据核验，应用负责人负责登录或练习链路故障。失败记录不得被改写为成功；修复后使用同一份或更新备份重新演练，并保留失败记录供复盘。
 
@@ -988,7 +986,7 @@ mysql:8.0.46
 - 增加 AI 解析草稿、教师审核和学生查看流程。
 - Word 题库导入暂不支持图片与公式，后续作为独立功能规划。
 - 增加班级模型与按班级限定教师数据范围（当前设计明确不建设）。
-- 未来接入 C++、Python 等更多课程与课程切换界面（当前只启用 `RADIO`）。
+- 多课程与课程切换能力暂不建设，后续需要时再重新设计课程隔离与切换界面。
 
 ## GitHub
 

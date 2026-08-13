@@ -7,7 +7,6 @@ import { QuestionRichText } from "@/components/question-rich-text";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { prisma } from "@/lib/db";
-import { RADIO_COURSE_ID } from "@/lib/domain/course";
 import { getCurrentUser } from "@/lib/server/session";
 import { normalizePagination } from "@/lib/server/pagination";
 
@@ -34,9 +33,9 @@ export default async function WrongPage({ searchParams }: { searchParams: Promis
   const params = await searchParams;
   const { page, pageSize, skip } = normalizePagination({ page: params.page });
   const [wrongItems, total, pending] = await Promise.all([
-    prisma.wrongQuestion.findMany({ where: { courseId: RADIO_COURSE_ID, userId: user.id }, include: { question: { include: { level: true, knowledgePoint: true } } }, orderBy: [{ mastered: "asc" }, { lastWrongAt: "desc" }], skip, take: pageSize }),
-    prisma.wrongQuestion.count({ where: { courseId: RADIO_COURSE_ID, userId: user.id } }),
-    prisma.wrongQuestion.count({ where: { courseId: RADIO_COURSE_ID, userId: user.id, mastered: false } }),
+    prisma.wrongQuestion.findMany({ where: { userId: user.id }, include: { question: { include: { level: true, knowledgePoint: true } } }, orderBy: [{ mastered: "asc" }, { lastWrongAt: "desc" }], skip, take: pageSize }),
+    prisma.wrongQuestion.count({ where: { userId: user.id } }),
+    prisma.wrongQuestion.count({ where: { userId: user.id, mastered: false } }),
   ]);
   const mastered = total - pending;
   const totalPages = Math.max(1, Math.ceil(total / pageSize));

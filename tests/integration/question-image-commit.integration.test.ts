@@ -3,7 +3,6 @@ import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { PrismaMariaDb } from "@prisma/adapter-mariadb";
 import { Prisma, PrismaClient } from "../../generated/prisma/client";
 import { assertDatabaseName } from "../../lib/domain/database-url";
-import { RADIO_COURSE_ID } from "../../lib/domain/course";
 import { getQuestionImage } from "../../lib/server/question-image";
 import { commitImportBatch, revertImportBatch } from "../../lib/server/import-service";
 
@@ -111,7 +110,6 @@ async function previewWordDocx(fileName: string, buffer: ArrayBuffer) {
 async function createPreviewBatch(teacherId: string, rows: Array<Record<string, unknown>>, images: Array<Record<string, unknown>> = []) {
   const batch = await prisma.importBatch.create({
     data: {
-      courseId: RADIO_COURSE_ID,
       fileName: "constructed.docx",
       status: "PREVIEW",
       totalRows: rows.length,
@@ -193,7 +191,7 @@ describe("question image commit lifecycle", () => {
     expect(result).toEqual({ batchId: preview.batchId, inserted: 1, skipped: 0 });
 
     const question = await prisma.question.findFirstOrThrow({
-      where: { courseId: RADIO_COURSE_ID, importBatchId: preview.batchId },
+      where: { importBatchId: preview.batchId },
       include: { images: true, revisions: true },
     });
     expect(question.stem).toContain(`[图:${stemImage.id}]`);
@@ -242,7 +240,7 @@ describe("question image commit lifecycle", () => {
 
     const result = await commitImportBatch("teacher-1", batch.id);
     expect(result).toEqual({ batchId: batch.id, inserted: 0, skipped: 1 });
-    expect(await prisma.question.count({ where: { courseId: RADIO_COURSE_ID } })).toBe(1);
+    expect(await prisma.question.count()).toBe(1);
     expect(await prisma.questionImage.count({ where: { id: "qimg_new" } })).toBe(0);
     expect(await prisma.importBatchImage.count({ where: { batchId: batch.id } })).toBe(0);
   });
@@ -257,7 +255,7 @@ describe("question image commit lifecycle", () => {
     );
 
     await expect(commitImportBatch("teacher-1", batch.id)).rejects.toMatchObject({ status: 409, message: expect.stringContaining("内容冲突 1 行") });
-    expect(await prisma.question.count({ where: { courseId: RADIO_COURSE_ID } })).toBe(1);
+    expect(await prisma.question.count()).toBe(1);
     expect(await prisma.importBatch.findUniqueOrThrow({ where: { id: batch.id } })).toMatchObject({ status: "PREVIEW" });
   });
 
@@ -291,7 +289,7 @@ describe("question image commit lifecycle", () => {
       [{ id: "qimg_tiff", rowNumber: 1, field: "STEM", sortOrder: 0, data: Uint8Array.from(PNG_BYTES), mimeType: "image/tiff", sizeBytes: PNG_BYTES.length, contentHash: sha256(PNG_BYTES) }],
     );
     await expect(commitImportBatch("teacher-1", unsupportedBatch.id)).rejects.toMatchObject({ status: 400, message: expect.stringContaining("仍有 1 行错误") });
-    expect(await prisma.question.count({ where: { courseId: RADIO_COURSE_ID } })).toBe(0);
+    expect(await prisma.question.count()).toBe(0);
   });
 
   it("keeps question images readable after reverting a committed batch", async () => {
@@ -304,7 +302,7 @@ describe("question image commit lifecycle", () => {
     await expect(revertImportBatch(preview.batchId, "teacher-1")).resolves.toEqual({ archived: 1 });
 
     const question = await prisma.question.findFirstOrThrow({
-      where: { courseId: RADIO_COURSE_ID, importBatchId: preview.batchId },
+      where: { importBatchId: preview.batchId },
       include: { images: true, revisions: true },
     });
     expect(question.status).toBe("ARCHIVED");

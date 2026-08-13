@@ -8,7 +8,6 @@ import { assertSameOrigin } from "@/lib/server/http";
 import { writeAuditLogInTransaction } from "@/lib/server/audit";
 import { parseQuestionRevisionSnapshot, STALE_VERSION_MESSAGE, toQuestionSnapshot } from "@/lib/server/question-revisions";
 import { ApiError, apiErrorResponse, requireTeacher } from "@/lib/server/api";
-import { RADIO_COURSE_ID } from "@/lib/domain/course";
 
 const schema = z.object({ version: z.number().int().positive() });
 
@@ -20,14 +19,14 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
     const revision = z.coerce.number().int().positive().parse(revisionText);
     const { version } = schema.parse(await readJsonBody(request));
     const restored = await prisma.$transaction(async (tx) => {
-      const historical = await tx.questionRevision.findFirst({ where: { courseId: RADIO_COURSE_ID, questionId: id, revision } });
+      const historical = await tx.questionRevision.findFirst({ where: { questionId: id, revision } });
       if (!historical) throw new ApiError("题目修订不存在", 404);
       const snapshot = parseQuestionRevisionSnapshot(historical.snapshot);
       const normalized = normalizeQuestionEditorInput({ options: snapshot.options as { id: string; text: string }[], correctOptionIds: snapshot.correctOptionIds as string[] });
-      const changed = await tx.question.updateMany({ where: { id, courseId: RADIO_COURSE_ID, version }, data: { ...snapshot, type: normalized.type, optionCount: normalized.optionCount, correctOptionCount: normalized.correctOptionCount, selectionSpec: normalized.selectionSpec, options: normalized.options as Prisma.InputJsonValue, correctOptionIds: normalized.correctOptionIds as Prisma.InputJsonValue, version: { increment: 1 } } });
+      const changed = await tx.question.updateMany({ where: { id, version }, data: { ...snapshot, type: normalized.type, optionCount: normalized.optionCount, correctOptionCount: normalized.correctOptionCount, selectionSpec: normalized.selectionSpec, options: normalized.options as Prisma.InputJsonValue, correctOptionIds: normalized.correctOptionIds as Prisma.InputJsonValue, version: { increment: 1 } } });
       if (changed.count !== 1) throw new ApiError(STALE_VERSION_MESSAGE, 409);
-      const updated = await tx.question.findFirstOrThrow({ where: { id, courseId: RADIO_COURSE_ID } });
-      await tx.questionRevision.create({ data: { courseId: RADIO_COURSE_ID, questionId: id, revision: updated.version, snapshot: toQuestionSnapshot(updated), changeSource: "TEACHER_RESTORE", actorUserId: user.id } });
+      const updated = await tx.question.findFirstOrThrow({ where: { id } });
+      await tx.questionRevision.create({ data: { questionId: id, revision: updated.version, snapshot: toQuestionSnapshot(updated), changeSource: "TEACHER_RESTORE", actorUserId: user.id } });
       await writeAuditLogInTransaction(tx, { actorUserId: user.id, action: "QUESTION_RESTORE", targetType: "Question", targetId: id, metadata: { restoredRevision: revision, version: updated.version } });
       return updated;
     });

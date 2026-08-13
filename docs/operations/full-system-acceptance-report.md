@@ -25,7 +25,7 @@
 
 | 章节 | 状态 | 证据 | 缺口或环境说明 |
 | --- | --- | --- | --- |
-| 28.1 权限验收 | verified | tests/role-route-access.test.ts；tests/registration-review-access.test.ts；tests/student-sensitive-data-route.test.ts；tests/course-boundary.test.ts | 无 |
+| 28.1 权限验收 | verified | tests/role-route-access.test.ts；tests/registration-review-access.test.ts；tests/student-sensitive-data-route.test.ts | 无 |
 | 28.2 一致性验收 | partial | tests/registration-review-route.test.ts；tests/question-concurrency-routes.test.ts；tests/practice-engine.test.ts；tests/practice-draft-route.test.ts | 审计故障回滚、并发建练习和所有幂等请求未被统一验收场景完整覆盖。 |
 | 28.3 考试验收 | partial | tests/exam-rules.test.ts；tests/practice-draft-route.test.ts；scripts/exam-settlement-worker.ts；tests/e2e/production-flows.spec.ts | 关闭浏览器、worker 重启补交、延迟泄题和未作答组合仍需专门验收。 |
 | 28.4 安全验收 | partial | tests/backup-operations.test.ts；tests/student-sensitive-data.test.ts；tests/session-guards.test.ts；docs/operations/lan-https-acceptance.md | 生产数据库、备份、日志和受管设备证书需在目标环境检查；脚本不会打印密钥。 |

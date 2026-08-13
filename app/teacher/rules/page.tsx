@@ -2,18 +2,17 @@ import { AppShell } from "@/components/app-shell";
 import { PageHeader } from "@/components/page-header";
 import { RuleEditor } from "@/components/rule-editor";
 import { prisma } from "@/lib/db";
-import { RADIO_COURSE_ID } from "@/lib/domain/course";
 import { parseJsonStringArray } from "@/lib/domain/json-string-array";
 import type { ExamRule, KnowledgePoint, Level, PracticeRule, QuestionOption } from "@/lib/domain/types";
 
 export default async function RulesPage() {
   const [levels, points, questions, levelRuleRows, knowledgeRuleRows, examRuleRows] = await Promise.all([
-    prisma.level.findMany({ where: { courseId: RADIO_COURSE_ID, enabled: true }, orderBy: [{ sortOrder: "asc" }, { code: "asc" }] }),
-    prisma.knowledgePoint.findMany({ where: { courseId: RADIO_COURSE_ID, enabled: true }, orderBy: [{ depth: "asc" }, { sortOrder: "asc" }, { code: "asc" }] }),
-    prisma.question.findMany({ where: { courseId: RADIO_COURSE_ID, status: "ACTIVE" } }),
-    prisma.levelPracticeRule.findMany({ where: { courseId: RADIO_COURSE_ID } }),
-    prisma.knowledgePracticeRule.findMany({ where: { courseId: RADIO_COURSE_ID } }),
-    prisma.examRule.findMany({ where: { courseId: RADIO_COURSE_ID } }),
+    prisma.level.findMany({ where: { enabled: true }, orderBy: [{ sortOrder: "asc" }, { code: "asc" }] }),
+    prisma.knowledgePoint.findMany({ where: { enabled: true }, orderBy: [{ depth: "asc" }, { sortOrder: "asc" }, { code: "asc" }] }),
+    prisma.question.findMany({ where: { status: "ACTIVE" } }),
+    prisma.levelPracticeRule.findMany(),
+    prisma.knowledgePracticeRule.findMany(),
+    prisma.examRule.findMany(),
   ]);
   const levelRules: Record<string, PracticeRule> = Object.fromEntries(levelRuleRows.map((rule) => [rule.levelId, { singleCount: rule.singleCount, multipleCount: rule.multipleCount, version: rule.version }]));
   const knowledgeRules: Record<string, PracticeRule> = Object.fromEntries(knowledgeRuleRows.map((rule) => [`${rule.knowledgePointId}:${rule.levelId}`, { singleCount: rule.singleCount, multipleCount: rule.multipleCount, version: rule.version }]));

@@ -348,7 +348,7 @@ async function validateRestoredDatabase(options: Options, manifest: ReturnType<t
   );
   const countRows = await queryDatabase(
     options,
-    "SELECT 'User', COUNT(*) FROM `User` UNION ALL SELECT 'Course', COUNT(*) FROM `Course` UNION ALL SELECT 'Question', COUNT(*) FROM `Question` UNION ALL SELECT 'PracticeSession', COUNT(*) FROM `PracticeSession`",
+    "SELECT 'User', COUNT(*) FROM `User` UNION ALL SELECT 'Level', COUNT(*) FROM `Level` UNION ALL SELECT 'Question', COUNT(*) FROM `Question` UNION ALL SELECT 'PracticeSession', COUNT(*) FROM `PracticeSession`",
   );
   const tableCounts = Object.fromEntries(
     countRows.split(/\r?\n/).map((row) => {
@@ -363,9 +363,9 @@ async function validateRestoredDatabase(options: Options, manifest: ReturnType<t
     await queryDatabase(options, "SELECT COUNT(*) FROM `User` WHERE enabled = 1 AND passwordHash <> ''"),
     "active login account",
   );
-  const enabledRadioCourses = parseCount(
-    await queryDatabase(options, "SELECT COUNT(*) FROM `Course` WHERE code = 'RADIO' AND enabled = 1"),
-    "enabled RADIO course",
+  const enabledLevels = parseCount(
+    await queryDatabase(options, "SELECT COUNT(*) FROM `Level` WHERE enabled = 1"),
+    "enabled practice level",
   );
   const sensitiveRow = await queryDatabase(
     options,
@@ -386,7 +386,7 @@ async function validateRestoredDatabase(options: Options, manifest: ReturnType<t
     migrationVersion,
     tableCounts,
     activeLoginAccounts,
-    enabledRadioCourses,
+    enabledLevels,
     sensitiveFields,
     ...(sensitiveFieldKeyIds ? { sensitiveFieldKeyIds } : {}),
   });

@@ -5,7 +5,6 @@ import { assertDatabaseName } from "../../lib/domain/database-url";
 import { commitImportBatch, getImportBatchReport, revertImportBatch } from "../../lib/server/import-service";
 import { abandonMockExam, createPracticeSession, getPracticeSession, saveExamDraft, settleExpiredMockExams, submitMockExam, submitPracticeAnswer } from "../../lib/server/practice-service";
 import { createSession, findSessionUser, revokeSession, revokeUserSessions } from "../../lib/server/session";
-import { RADIO_COURSE_ID } from "../../lib/domain/course";
 import { getTeacherLearningStatistics } from "../../lib/server/learning-statistics-service";
 
 const connectionString = process.env.DATABASE_URL;
@@ -38,7 +37,6 @@ beforeEach(async () => {
   await prisma.levelPracticeRule.deleteMany();
   await deleteKnowledgePoints();
   await prisma.level.deleteMany();
-  await prisma.course.deleteMany({ where: { id: { not: RADIO_COURSE_ID } } });
   await prisma.user.deleteMany();
   await prisma.grade.deleteMany();
 });
@@ -65,42 +63,6 @@ async function correctAnswerFor(sessionId: string, questionId: string): Promise<
 }
 
 describe("production database foundation", () => {
-  it("keeps RADIO as the sole enabled course", async () => {
-    const nextCourse = await prisma.course.create({ data: { code: "PYTHON", name: "Python" } });
-
-    await expect(prisma.course.create({ data: { code: "SECOND_ACTIVE", name: "Second Active", enabled: true, activeSlot: 1 } })).rejects.toMatchObject({ code: "P2039" });
-    await expect(prisma.course.update({ where: { id: RADIO_COURSE_ID }, data: { enabled: false, activeSlot: null } })).rejects.toMatchObject({ code: "P2039" });
-    await expect(prisma.course.update({ where: { id: nextCourse.id }, data: { enabled: true, activeSlot: 1 } })).rejects.toMatchObject({ code: "P2039" });
-
-    await expect(prisma.course.findMany({ where: { enabled: true }, select: { id: true } })).resolves.toEqual([{ id: RADIO_COURSE_ID }]);
-  });
-
-  it("rejects cross-course question ownership", async () => {
-    const otherCourse = await prisma.course.create({ data: { code: "PYTHON", name: "Python" } });
-    const radioLevel = await prisma.level.create({ data: { courseId: RADIO_COURSE_ID, code: "A", name: "Radio A" } });
-    const otherPoint = await prisma.knowledgePoint.create({ data: { courseId: otherCourse.id, code: "1.1", name: "Python Point", path: "/1/1.1", depth: 1 } });
-
-    await expect(prisma.question.create({ data: { courseId: RADIO_COURSE_ID, levelId: radioLevel.id, knowledgePointId: otherPoint.id, stem: "Cross course", type: "SINGLE_CHOICE", optionCount: 2, correctOptionCount: 1, selectionSpec: "2选1", options: [{ id: "A", text: "A" }, { id: "B", text: "B" }], correctOptionIds: ["A"] } })).rejects.toMatchObject({ code: "P2003" });
-  });
-
-  it("keeps practice selection inside the RADIO course boundary", async () => {
-    const otherCourse = await prisma.course.create({ data: { code: "PYTHON", name: "Python" } });
-    const user = await prisma.user.create({ data: { username: "course-student", displayName: "Course Student", passwordHash: "test", role: "STUDENT" } });
-    const radioLevel = await prisma.level.create({ data: { courseId: RADIO_COURSE_ID, code: "A", name: "Radio A" } });
-    const otherLevel = await prisma.level.create({ data: { courseId: otherCourse.id, code: "A", name: "Python A" } });
-    const radioPoint = await prisma.knowledgePoint.create({ data: { courseId: RADIO_COURSE_ID, code: "1.1", name: "Radio Point", path: "/1/1.1", depth: 1 } });
-    const otherPoint = await prisma.knowledgePoint.create({ data: { courseId: otherCourse.id, code: "1.1", name: "Python Point", path: "/1/1.1", depth: 1 } });
-    await prisma.levelPracticeRule.create({ data: { courseId: RADIO_COURSE_ID, levelId: radioLevel.id, singleCount: 1, multipleCount: 0 } });
-    await prisma.levelPracticeRule.create({ data: { courseId: otherCourse.id, levelId: otherLevel.id, singleCount: 1, multipleCount: 0 } });
-    const radioQuestion = await prisma.question.create({ data: { courseId: RADIO_COURSE_ID, levelId: radioLevel.id, knowledgePointId: radioPoint.id, externalQuestionCode: "Q-1", stem: "Radio", type: "SINGLE_CHOICE", optionCount: 2, correctOptionCount: 1, selectionSpec: "2选1", options: [{ id: "A", text: "A" }, { id: "B", text: "B" }], correctOptionIds: ["A"] } });
-    await prisma.question.create({ data: { courseId: otherCourse.id, levelId: otherLevel.id, knowledgePointId: otherPoint.id, externalQuestionCode: "Q-1", stem: "Python", type: "SINGLE_CHOICE", optionCount: 2, correctOptionCount: 1, selectionSpec: "2选1", options: [{ id: "A", text: "A" }, { id: "B", text: "B" }], correctOptionIds: ["A"] } });
-
-    const session = await createPracticeSession(user.id, { mode: "level", levelCode: "A", courseId: otherCourse.id } as Parameters<typeof createPracticeSession>[1]);
-
-    expect(session.questions.map((question) => question.id)).toEqual([radioQuestion.id]);
-    expect(await prisma.practiceSession.findUniqueOrThrow({ where: { id: session.id } })).toMatchObject({ courseId: RADIO_COURSE_ID, levelId: radioLevel.id });
-  });
-
   it("persists student account foundations and review history", async () => {
     const grade = await prisma.grade.create({ data: { code: "GRADE_7", name: "七年级", sortOrder: 7 } });
     const administrator = await prisma.user.create({ data: { username: "administrator", displayName: "Administrator", passwordHash: "test", role: "ADMIN" } });
@@ -137,7 +99,7 @@ describe("production database foundation", () => {
     await prisma.practiceSessionQuestion.create({ data: { sessionId: session.id, questionId: question.id, position: 0, snapshot } });
     await submitPracticeAnswer(user.id, session.id, question.id, ["A"], "base-answer-key");
 
-    const answer = await prisma.practiceAnswer.findUniqueOrThrow({ where: { courseId_sessionId_questionId: { courseId: RADIO_COURSE_ID, sessionId: session.id, questionId: question.id } } });
+    const answer = await prisma.practiceAnswer.findUniqueOrThrow({ where: { sessionId_questionId: { sessionId: session.id, questionId: question.id } } });
     expect(answer.selectedOptionIds).toEqual(["A"]);
   });
 
@@ -361,8 +323,8 @@ describe("production database foundation", () => {
     const incorrectAnswer = await correctAnswerFor(session.id, incorrectQuestion.id);
     await submitPracticeAnswer(user.id, session.id, correctQuestion.id, correctAnswer, "wrong-correct-key");
     await submitPracticeAnswer(user.id, session.id, incorrectQuestion.id, ["A", "B"].filter((id) => !incorrectAnswer.includes(id)), "wrong-incorrect-key");
-    expect(await prisma.wrongQuestion.findUniqueOrThrow({ where: { courseId_userId_questionId: { courseId: RADIO_COURSE_ID, userId: user.id, questionId: correctQuestion.id } } })).toMatchObject({ mastered: false, correctSessionCount: 0, wrongCount: 1 });
-    expect(await prisma.wrongQuestion.findUniqueOrThrow({ where: { courseId_userId_questionId: { courseId: RADIO_COURSE_ID, userId: user.id, questionId: incorrectQuestion.id } } })).toMatchObject({ mastered: false, wrongCount: 2 });
+    expect(await prisma.wrongQuestion.findUniqueOrThrow({ where: { userId_questionId: { userId: user.id, questionId: correctQuestion.id } } })).toMatchObject({ mastered: false, correctSessionCount: 0, wrongCount: 1 });
+    expect(await prisma.wrongQuestion.findUniqueOrThrow({ where: { userId_questionId: { userId: user.id, questionId: incorrectQuestion.id } } })).toMatchObject({ mastered: false, wrongCount: 2 });
   });
 
   it("creates sequential practice in strict natural question-number order", async () => {
@@ -449,7 +411,7 @@ describe("production database foundation", () => {
     expect(JSON.stringify(reloaded)).not.toContain("correctOptionIds");
     expect(replay).toEqual(reloaded?.examResult);
     expect(await prisma.practiceSession.findUniqueOrThrow({ where: { id: session.id } })).toMatchObject({ status: "COMPLETED", examSettlementSource: "AUTO_SETTLEMENT" });
-    expect(await prisma.practiceAnswer.count({ where: { courseId: RADIO_COURSE_ID, sessionId: session.id } })).toBe(1);
+    expect(await prisma.practiceAnswer.count({ where: { sessionId: session.id } })).toBe(1);
   });
 
   it("abandons an active mock exam without grading it or updating wrong questions", async () => {
@@ -460,8 +422,8 @@ describe("production database foundation", () => {
 
     await expect(abandonMockExam(user.id, session.id)).resolves.toEqual({ abandoned: true });
     expect(await prisma.practiceSession.findUniqueOrThrow({ where: { id: session.id } })).toMatchObject({ status: "ABANDONED", correctCount: 0 });
-    expect(await prisma.practiceAnswer.count({ where: { courseId: RADIO_COURSE_ID, sessionId: session.id } })).toBe(0);
-    expect(await prisma.wrongQuestion.count({ where: { courseId: RADIO_COURSE_ID, userId: user.id, questionId: question.id } })).toBe(0);
+    expect(await prisma.practiceAnswer.count({ where: { sessionId: session.id } })).toBe(0);
+    expect(await prisma.wrongQuestion.count({ where: { userId: user.id, questionId: question.id } })).toBe(0);
   });
 
   it("uses completed sessions only for teacher statistics across mixed session states", async () => {
@@ -549,10 +511,10 @@ describe("production database foundation", () => {
 
     expect(results.filter((result) => result.status === "fulfilled")).toHaveLength(1);
     expect(results.filter((result) => result.status === "rejected")).toHaveLength(1);
-    const answer = await prisma.practiceAnswer.findUniqueOrThrow({ where: { courseId_sessionId_questionId: { courseId: RADIO_COURSE_ID, sessionId: session.id, questionId: question.id } } });
+    const answer = await prisma.practiceAnswer.findUniqueOrThrow({ where: { sessionId_questionId: { sessionId: session.id, questionId: question.id } } });
     expect(await prisma.practiceAnswer.count({ where: { sessionId: session.id } })).toBe(1);
     expect(answer.selectedOptionIds).toEqual(expect.arrayContaining([expect.stringMatching(/^[AB]$/)]));
-    expect(await prisma.wrongQuestion.findUnique({ where: { courseId_userId_questionId: { courseId: RADIO_COURSE_ID, userId: user.id, questionId: question.id } } })).toEqual(answer.isCorrect ? null : expect.objectContaining({ wrongCount: 1, mastered: false }));
+    expect(await prisma.wrongQuestion.findUnique({ where: { userId_questionId: { userId: user.id, questionId: question.id } } })).toEqual(answer.isCorrect ? null : expect.objectContaining({ wrongCount: 1, mastered: false }));
   });
 
   it("persists and resumes versioned mock exam drafts without exposing grading data", async () => {
@@ -579,7 +541,7 @@ describe("production database foundation", () => {
     await saveExamDraft(user.id, session.id, { answers: { [question.id]: ["A"] }, currentIndex: 0, version: 0 });
     await submitMockExam(user.id, session.id, [{ questionId: question.id, selectedOptionIds: ["A"] }]);
 
-    expect(await prisma.examDraft.findUnique({ where: { courseId_sessionId: { courseId: RADIO_COURSE_ID, sessionId: session.id } } })).toBeNull();
+    expect(await prisma.examDraft.findUnique({ where: { sessionId: session.id } })).toBeNull();
     await expect(saveExamDraft(user.id, session.id, { answers: {}, currentIndex: 0, version: 1 })).rejects.toMatchObject({ status: 409 });
   });
 
