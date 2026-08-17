@@ -6,18 +6,18 @@
 
 **Status:** done
 
-- [ ] 新增 `ReviewPlan` / `ReviewCard` 模型：
+- [x] 新增 `ReviewPlan` / `ReviewCard` 模型：
   - 学生、日期、计划类型、状态。
   - 复习卡片关联题目、知识点、优先级。
-- [ ] 新增 `lib/server/review-plan-service.ts`：
+- [x] 新增 `lib/server/review-plan-service.ts`：
   - 从 `WrongQuestion` 取未掌握错题。
   - 从 `PracticeAnswer` 统计近期薄弱知识点。
   - 生成每日计划：优先未掌握错题 + 薄弱知识点专项题。
-- [ ] 支持“考前冲刺”：根据考试日期倒排，生成每日题量。
-- [ ] 新增学生端 API：
+- [x] 支持“考前冲刺”：根据考试日期倒排，生成每日题量。
+- [x] 新增学生端 API：
   - 获取今日计划。
   - 完成计划中的任务后更新状态。
-- [ ] 学生首页或练习启动器展示“今日计划”。
+- [x] 学生首页或练习启动器展示“今日计划”。
 
 **验收标准：**
 - 学生能获取今日复习计划。

@@ -132,6 +132,7 @@ export async function generateReviewPlan(
   const type = input.type ?? "DAILY";
   const planDate = input.planDate ?? getBusinessDate(now);
   const planDateValue = dateOnlyValue(planDate);
+  if (type === "EXAM_SPRINT" && !input.examDate) throw new ApiError("考前冲刺需要考试日期", 400);
 
   const existing = await findPlan(userId, planDateValue, type);
   if (existing) return toPublicPlan(existing);

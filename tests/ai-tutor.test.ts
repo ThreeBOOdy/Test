@@ -131,7 +131,7 @@ describe("prepareAiTutorChat", () => {
   beforeEach(() => {
     for (const mock of Object.values(mocks)) mock.mockReset();
     mocks.aiUsageLogCount.mockResolvedValue(0);
-    mocks.practiceSessionFindFirst.mockResolvedValue({ id: "session-1" });
+    mocks.practiceSessionFindFirst.mockResolvedValue({ id: "session-1", questions: [{ id: "psq-1" }] });
     mocks.questionFindUnique.mockResolvedValue(sampleQuestion);
     mocks.wrongQuestionFindUnique.mockResolvedValue({ wrongCount: 2 });
     mocks.wrongQuestionCount.mockResolvedValue(3);
@@ -175,6 +175,7 @@ describe("prepareAiTutorChat", () => {
     mocks.aiConversationFindFirst.mockResolvedValue({
       id: "conv-1",
       userId: "user-1",
+      questionId: "q-1",
       messages: [
         { role: "USER", content: "为什么选 B？" },
         { role: "ASSISTANT", content: "先想想中继台下行应避开哪些业务。" },

@@ -85,7 +85,10 @@ function parseApprovedExplanation(value: string | null): string | null {
   if (!value) return null;
   try {
     const parsed = JSON.parse(value) as JsonObject;
-    if (typeof parsed.summary === "string" && parsed.summary.trim()) return parsed.summary.trim();
+    const parts = [parsed.summary, parsed.knowledge, parsed.memory]
+      .filter((part): part is string => typeof part === "string" && part.trim().length > 0)
+      .map((part) => part.trim());
+    if (parts.length > 0) return parts.join("\n");
   } catch {
     // The stored value may be plain text from the older fallback path.
   }
@@ -208,9 +211,10 @@ export async function getAiTutorContext(
   if (practiceSessionId) {
     const session = await prisma.practiceSession.findFirst({
       where: { id: practiceSessionId, userId },
-      select: { id: true },
+      include: { questions: { where: { questionId }, select: { id: true } } },
     });
     if (!session) throw new ApiError("练习不存在或不属于当前学生", 404);
+    if (session.questions.length === 0) throw new ApiError("题目不属于该练习", 400);
   }
 
   const [wrongQuestion, knowledgeWrongCount, recentWrong, wrongAnswerInSession] = await Promise.all([
@@ -257,16 +261,19 @@ export async function getAiTutorHistory(
   conversationId: string,
   userId: string,
   client: Pick<typeof prisma, "aiConversation" | "aiMessage"> = prisma,
-): Promise<AiTutorHistoryMessage[]> {
+): Promise<{ messages: AiTutorHistoryMessage[]; questionId: string }> {
   const conversation = await client.aiConversation.findFirst({
     where: { id: conversationId, userId },
     include: { messages: { orderBy: { createdAt: "asc" } } },
   });
   if (!conversation) throw new ApiError("对话不存在或不属于当前学生", 404);
-  return conversation.messages.map((message) => ({
-    role: message.role === AI_MESSAGE_ROLE_USER ? "USER" : "ASSISTANT",
-    content: message.content,
-  }));
+  return {
+    questionId: conversation.questionId,
+    messages: conversation.messages.map((message) => ({
+      role: message.role === AI_MESSAGE_ROLE_USER ? "USER" : "ASSISTANT",
+      content: message.content,
+    })),
+  };
 }
 
 export async function createAiTutorConversation(input: {
@@ -338,7 +345,11 @@ export async function prepareAiTutorChat(input: {
   let conversationId = input.conversationId;
   let history: AiTutorHistoryMessage[] = [];
   if (conversationId) {
-    history = await getAiTutorHistory(conversationId, input.userId, input.client ?? prisma);
+    const conversation = await getAiTutorHistory(conversationId, input.userId, input.client ?? prisma);
+    if (conversation.questionId !== input.questionId) {
+      throw new ApiError("对话与题目不匹配", 400);
+    }
+    history = conversation.messages;
   } else {
     const created = await createAiTutorConversation({
       userId: input.userId,
