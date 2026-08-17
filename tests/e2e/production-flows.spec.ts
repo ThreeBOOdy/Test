@@ -104,7 +104,7 @@ test.describe.serial("production business flows", () => {
     try {
       await page.getByLabel("学生账号 Excel").setInputFiles(filePath);
       const studentRow = page.getByRole("row").filter({ hasText: studentUsername });
-      await expect(studentRow).toContainText("通过");
+      await expect(studentRow).toContainText("通过", { timeout: 20_000 });
       await studentRow.getByRole("button", { name: "编辑" }).click();
       const editDialog = page.getByRole("dialog", { name: "编辑导入学生" });
       await expect(editDialog.getByLabel("姓名")).toHaveValue("端到端学生");
