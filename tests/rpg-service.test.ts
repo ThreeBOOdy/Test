@@ -45,6 +45,7 @@ import {
   getPlayerStatus,
   getTodayQuests,
   setGamificationEnabled,
+  setMapEnabled,
 } from "@/lib/server/rpg-service";
 
 const profile = {
@@ -54,6 +55,7 @@ const profile = {
   level: 1,
   title: "见习报务员",
   gamificationEnabled: true,
+  mapEnabled: true,
   createdAt: new Date("2026-08-18T00:00:00.000Z"),
   updatedAt: new Date("2026-08-18T00:00:00.000Z"),
 };
@@ -93,6 +95,7 @@ describe("rpg service", () => {
         nextLevelXp: 80,
         levelProgress: 0,
         gamificationEnabled: true,
+        mapEnabled: true,
       });
       expect(result.todayQuests).toHaveLength(4);
       expect(result.todayQuests[0]).toMatchObject({ type: "PRACTICE", target: 20, xpReward: 50 });
@@ -132,6 +135,24 @@ describe("rpg service", () => {
         create: { userId: "user-1", gamificationEnabled: false },
       });
       expect(result.gamificationEnabled).toBe(false);
+    });
+  });
+
+  describe("setMapEnabled", () => {
+    it("updates the map entry flag and returns refreshed status", async () => {
+      mocks.profileUpsert.mockResolvedValue({ ...profile, mapEnabled: false });
+      mocks.levelFindMany.mockResolvedValue(levels);
+      mocks.questFindMany.mockResolvedValueOnce([]).mockResolvedValue(questRows);
+      mocks.questCreateMany.mockResolvedValue({ count: 4 });
+
+      const result = await setMapEnabled("user-1", false);
+
+      expect(mocks.profileUpsert).toHaveBeenCalledWith({
+        where: { userId: "user-1" },
+        update: { mapEnabled: false },
+        create: { userId: "user-1", mapEnabled: false },
+      });
+      expect(result.mapEnabled).toBe(false);
     });
   });
 

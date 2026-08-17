@@ -129,6 +129,7 @@ export async function getPlayerStatus(
     nextLevelXp,
     levelProgress,
     gamificationEnabled: profile.gamificationEnabled,
+    mapEnabled: profile.mapEnabled,
     todayQuests: quests.map(toPublicQuest),
   };
 }
@@ -164,13 +165,29 @@ export async function completeQuest(userId: string, questId: string): Promise<Pu
   });
 }
 
-export async function setGamificationEnabled(userId: string, enabled: boolean): Promise<PublicPlayerStatus> {
+export async function updatePlayerProfile(
+  userId: string,
+  input: { gamificationEnabled?: boolean; mapEnabled?: boolean },
+): Promise<PublicPlayerStatus> {
+  const data: { gamificationEnabled?: boolean; mapEnabled?: boolean } = {};
+  if (input.gamificationEnabled !== undefined) data.gamificationEnabled = input.gamificationEnabled;
+  if (input.mapEnabled !== undefined) data.mapEnabled = input.mapEnabled;
+  if (Object.keys(data).length === 0) return getPlayerStatus(userId);
+
   await prisma.playerProfile.upsert({
     where: { userId },
-    update: { gamificationEnabled: enabled },
-    create: { userId, gamificationEnabled: enabled },
+    update: data,
+    create: { userId, ...data },
   });
   return getPlayerStatus(userId);
+}
+
+export async function setGamificationEnabled(userId: string, enabled: boolean): Promise<PublicPlayerStatus> {
+  return updatePlayerProfile(userId, { gamificationEnabled: enabled });
+}
+
+export async function setMapEnabled(userId: string, enabled: boolean): Promise<PublicPlayerStatus> {
+  return updatePlayerProfile(userId, { mapEnabled: enabled });
 }
 
 async function grantXp(

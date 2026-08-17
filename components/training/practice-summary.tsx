@@ -2,6 +2,7 @@ import Link from "next/link";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { AiTutorChat } from "@/components/training/ai-tutor-chat";
+import { BossBattle } from "@/components/training/boss-battle";
 import { Artwork } from "@/components/visual/artwork";
 
 export function PracticeSummary({
@@ -12,6 +13,7 @@ export function PracticeSummary({
   settlementSource,
   wrongQuestions = [],
   sessionId,
+  boss,
 }: {
   title: string;
   correct: number;
@@ -20,6 +22,7 @@ export function PracticeSummary({
   settlementSource?: "STUDENT_SUBMISSION" | "AUTO_SETTLEMENT";
   wrongQuestions?: Array<{ id: string; stem: string }>;
   sessionId?: string;
+  boss?: { correct: number; total: number; passingCount: number };
 }) {
   const accuracy = total ? Math.round(correct / total * 100) : 0;
   const passed = passingCount === undefined ? undefined : correct >= passingCount;
@@ -60,6 +63,16 @@ export function PracticeSummary({
           </div>
         </div>
       </div>
+      {boss ? (
+        <section className="pb-10">
+          <div className="mb-4">
+            <div className="text-xs font-bold uppercase tracking-[.22em] text-[var(--primary)]">Boss Battle Result</div>
+            <h2 className="mt-1 text-xl font-extrabold">Boss 战结算</h2>
+            <p className="mt-1 text-sm text-[var(--muted-foreground)]">最终正确率转化为对 Boss 的伤害，达到通关线即可击败 Boss。</p>
+          </div>
+          <BossBattle mode="result" correct={boss.correct} total={boss.total} passingCount={boss.passingCount} />
+        </section>
+      ) : null}
       {wrongQuestions.length > 0 ? (
         <section className="pb-10">
           <div className="mb-4">

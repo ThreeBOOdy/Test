@@ -471,6 +471,7 @@ model PlayerProfile {
   level               Int      @default(1)
   title               String   @default("见习报务员")
   gamificationEnabled Boolean  @default(true)
+  mapEnabled          Boolean  @default(true)
   createdAt           DateTime @default(now())
   updatedAt           DateTime @updatedAt
 

@@ -5,7 +5,7 @@ const mocks = vi.hoisted(() => ({
   getPlayerStatus: vi.fn(),
   getTodayQuests: vi.fn(),
   completeQuest: vi.fn(),
-  setGamificationEnabled: vi.fn(),
+  updatePlayerProfile: vi.fn(),
 }));
 
 vi.mock("@/lib/server/session", () => ({ getCurrentUser: mocks.getCurrentUser }));
@@ -13,7 +13,7 @@ vi.mock("@/lib/server/rpg-service", () => ({
   getPlayerStatus: mocks.getPlayerStatus,
   getTodayQuests: mocks.getTodayQuests,
   completeQuest: mocks.completeQuest,
-  setGamificationEnabled: mocks.setGamificationEnabled,
+  updatePlayerProfile: mocks.updatePlayerProfile,
 }));
 
 import { GET as statusGET } from "@/app/api/v1/rpg/status/route";
@@ -47,6 +47,7 @@ const status = {
   nextLevelXp: 80,
   levelProgress: 62,
   gamificationEnabled: true,
+  mapEnabled: true,
   todayQuests: [quest],
 };
 
@@ -57,7 +58,7 @@ describe("rpg student routes", () => {
     mocks.getPlayerStatus.mockResolvedValue(status);
     mocks.getTodayQuests.mockResolvedValue([quest]);
     mocks.completeQuest.mockResolvedValue({ ...quest, status: "COMPLETED", ready: false, completedAt: "2026-08-18T12:00:00.000Z" });
-    mocks.setGamificationEnabled.mockResolvedValue(status);
+    mocks.updatePlayerProfile.mockResolvedValue(status);
   });
 
   it("GET status returns player status for active students", async () => {
@@ -112,7 +113,30 @@ describe("rpg student routes", () => {
     const response = await profilePATCH(request);
     expect(response.status).toBe(200);
     expect(await response.json()).toEqual(status);
-    expect(mocks.setGamificationEnabled).toHaveBeenCalledWith("user-1", false);
+    expect(mocks.updatePlayerProfile).toHaveBeenCalledWith("user-1", { gamificationEnabled: false });
+  });
+
+  it("PATCH profile updates map entry visibility for students", async () => {
+    const request = new Request("http://localhost/api/v1/rpg/profile", {
+      method: "PATCH",
+      headers: { "content-type": "application/json", origin: "http://localhost", host: "localhost" },
+      body: JSON.stringify({ mapEnabled: false }),
+    });
+    const response = await profilePATCH(request);
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual(status);
+    expect(mocks.updatePlayerProfile).toHaveBeenCalledWith("user-1", { mapEnabled: false });
+  });
+
+  it("PATCH profile rejects empty setting updates", async () => {
+    const request = new Request("http://localhost/api/v1/rpg/profile", {
+      method: "PATCH",
+      headers: { "content-type": "application/json", origin: "http://localhost", host: "localhost" },
+      body: JSON.stringify({}),
+    });
+    const response = await profilePATCH(request);
+    expect(response.status).toBe(400);
+    expect(mocks.updatePlayerProfile).not.toHaveBeenCalled();
   });
 
   it("PATCH profile rejects teachers", async () => {
@@ -124,6 +148,6 @@ describe("rpg student routes", () => {
     });
     const response = await profilePATCH(request);
     expect(response.status).toBe(403);
-    expect(mocks.setGamificationEnabled).not.toHaveBeenCalled();
+    expect(mocks.updatePlayerProfile).not.toHaveBeenCalled();
   });
 });

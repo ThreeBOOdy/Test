@@ -1,7 +1,7 @@
 # J-Space Workspace Ledger
 
 ## Goal
-M1 AI 扩展 + 10 轻度 RPG 基础完成并提交（03-10，含模型/规则/API/UI/测试）
+完成 11 知识点地图/副本/Boss 战（含地图/副本/Boss反馈/隐藏入口/测试）
 
 ## Core
 - 10 RPG 数据模型 — PlayerProfile/PlayerLevel/QuestLog/XpLog 与迁移
@@ -29,9 +29,10 @@ M1 AI 扩展 + 10 轻度 RPG 基础完成并提交（03-10，含模型/规则/AP
 - ✓12 09 专注模式与连续打卡：FocusSession 模型/迁移 + streak 计算 + API + 学生首页 + 服务层测试 — verified by: prisma validate + tsc --noEmit + eslint + vitest focus-service 18/route 5/migration 22
 - ✓13 06 AI 答疑教练已实现：AiConversation/AiMessage + tutor + SSE + 反馈 + 学生端 UI + 测试 — verified by: tsc --noEmit + eslint + vitest 50 cases (ai-tutor/route/chat/mysql-migration/repository-quality)
 - ✓14 10 轻度 RPG 基础已实现：PlayerProfile/PlayerLevel/QuestLog/XpLog 模型与迁移、XP 规则接入练习/复习/专注/错题清零、状态/任务/领取/开关 API、学生首页 RPG 面板与开关 — verified by: prisma validate + tsc --noEmit + eslint + vitest 58 cases (rpg service/route/panel + focus regression + mysql-migration)
+- ✓15 11 知识点地图/副本/Boss 战已实现：学习地图/掌握状态/待攻克副本入口/Boss血条与结算/隐藏入口开关（mapEnabled） — verified by: prisma validate + tsc --noEmit + eslint + vitest 89 files 534+92 cases
 
 ## Open
 - ?01 当前用户量和题库量是否足够支撑 FSRS/MCP 等后期功能 — settled by: 用现有统计数据或种子数据量估算，再决定是否提前建设
 
 ## Next
-进入 11 知识点地图/副本 或 12 整合验收
+进入 12 整合验收

@@ -1,7 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { Award, CheckCircle2, Circle, Power, Radio, Sparkles, Target, Trophy } from "lucide-react";
+import Link from "next/link";
+import { Award, CheckCircle2, Circle, Map, Power, Radio, Sparkles, Target, Trophy } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -12,6 +13,7 @@ export function RpgPanel({ initial }: { initial: PublicPlayerStatus }) {
   const [message, setMessage] = useState<{ tone: "success" | "error"; text: string } | null>(null);
   const [pendingId, setPendingId] = useState<string | null>(null);
   const [toggling, setToggling] = useState(false);
+  const [mapPending, setMapPending] = useState(false);
 
   async function refreshStatus() {
     const response = await fetch("/api/v1/rpg/status", { credentials: "include", cache: "no-store" });
@@ -69,6 +71,30 @@ export function RpgPanel({ initial }: { initial: PublicPlayerStatus }) {
     }
   }
 
+  async function restoreMapEntry() {
+    setMapPending(true);
+    setMessage(null);
+    try {
+      const response = await fetch("/api/v1/rpg/profile", {
+        method: "PATCH",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ mapEnabled: true }),
+      });
+      const result = await response.json();
+      if (!response.ok) {
+        setMessage({ tone: "error", text: result.message ?? "更新学习地图入口设置失败" });
+        return;
+      }
+      setStatus(result);
+      setMessage({ tone: "success", text: "学习地图入口已恢复显示" });
+    } catch {
+      setMessage({ tone: "error", text: "连接失败，请稍后重试" });
+    } finally {
+      setMapPending(false);
+    }
+  }
+
   const nextLevelLabel = status.nextLevelXp == null ? "已满级" : `${status.xp} / ${status.nextLevelXp} XP`;
   const progressWidth = status.nextLevelXp == null ? 100 : status.levelProgress;
 
@@ -89,7 +115,19 @@ export function RpgPanel({ initial }: { initial: PublicPlayerStatus }) {
               </div>
             </div>
           </div>
-          <div className="flex shrink-0 items-center gap-2">
+          <div className="flex shrink-0 flex-wrap items-center gap-2">
+            {status.gamificationEnabled && status.mapEnabled ? (
+              <Link href={"/student/map" as never} className="inline-flex min-h-9 items-center gap-1.5 rounded-xl border border-cyan-300/20 bg-cyan-300/10 px-3 text-xs font-bold text-[var(--primary)] transition hover:bg-cyan-300/20">
+                <Map className="size-3" />
+                学习地图
+              </Link>
+            ) : null}
+            {status.gamificationEnabled && !status.mapEnabled ? (
+              <Button type="button" variant="outline" size="sm" disabled={mapPending} onClick={restoreMapEntry}>
+                <Map className="size-3" />
+                {mapPending ? "处理中" : "显示学习地图"}
+              </Button>
+            ) : null}
             <Badge tone={status.gamificationEnabled ? "amber" : "neutral"}>
               {status.gamificationEnabled ? "游戏化已开启" : "游戏化已关闭"}
             </Badge>

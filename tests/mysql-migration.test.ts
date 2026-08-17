@@ -288,6 +288,14 @@ describe("MySQL project configuration", () => {
     expect(schema).toMatch(/questLogs\s+QuestLog\[\]/);
     expect(schema).toMatch(/xpLogs\s+XpLog\[\]/);
   });
+  it("adds the knowledge map hidden-entry switch to PlayerProfile", () => {
+    const migration = fs.readFileSync(path.resolve("prisma/migrations/20260819000000_knowledge_map_entry/migration.sql"), "utf8");
+    const schema = fs.readFileSync(path.resolve("prisma/schema.prisma"), "utf8");
+
+    expect(migration).toContain("ALTER TABLE `PlayerProfile` ADD COLUMN `mapEnabled` BOOLEAN NOT NULL DEFAULT true");
+    expect(schema).toMatch(/mapEnabled\s+Boolean\s+@default\(true\)/);
+    expect(migration).not.toMatch(/DROP TABLE `PlayerProfile`|DELETE FROM `PlayerProfile`/);
+  });
 });
 
 describe("MySQL database URL protection", () => {

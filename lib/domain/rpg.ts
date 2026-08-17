@@ -65,5 +65,6 @@ export type PublicPlayerStatus = {
   nextLevelXp: number | null;
   levelProgress: number;
   gamificationEnabled: boolean;
+  mapEnabled: boolean;
   todayQuests: PublicQuest[];
 };

@@ -26,6 +26,7 @@ const initial: PublicPlayerStatus = {
   nextLevelXp: 80,
   levelProgress: 0,
   gamificationEnabled: true,
+  mapEnabled: true,
   todayQuests: [quest],
 };
 
