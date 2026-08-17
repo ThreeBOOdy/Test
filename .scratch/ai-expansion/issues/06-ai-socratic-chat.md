@@ -4,23 +4,23 @@
 
 **Blocked by:** 01、02
 
-**Status:** pending
+**Status:** done
 
-- [ ] 新增 `AiConversation` / `AiMessage` 模型（或 JSON 会话字段，推荐独立表）。
-- [ ] 新增 `lib/server/ai/tutor.ts`：
+- [x] 新增 `AiConversation` / `AiMessage` 模型（或 JSON 会话字段，推荐独立表）。
+- [x] 新增 `lib/server/ai/tutor.ts`：
   - 构造安全上下文：题目、选项、答案、知识点、该生本题/知识点统计。
   - 不包含任何个人敏感信息。
   - Prompt 明确“先提示，不要直接给答案”。
-- [ ] 新增 `app/api/v1/ai/chat/route.ts`：
+- [x] 新增 `app/api/v1/ai/chat/route.ts`：
   - 支持 SSE 流式返回。
   - 校验学生身份。
   - 写入 `AiMessage` 和 `AiUsageLog`。
   - 做基础限流，例如每名学生每天最多 N 次。
-- [ ] 新增学生端对话 UI：
+- [x] 新增学生端对话 UI：
   - 练习结果页“问 AI”按钮。
   - 对话面板，支持追问。
   - “有帮助 / 没帮助”反馈。
-- [ ] 补充 API 测试（MockProvider）和组件测试。
+- [x] 补充 API 测试（MockProvider）和组件测试。
 
 **验收标准：**
 - 学生答错后可发起 AI 对话。
