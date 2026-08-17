@@ -69,6 +69,32 @@ enum PracticeStatus {
   ABANDONED
 }
 
+enum FocusSessionStatus {
+  IN_PROGRESS
+  COMPLETED
+  ABANDONED
+}
+
+enum ReviewPlanType {
+  DAILY
+  EXAM_SPRINT
+}
+
+enum ReviewPlanStatus {
+  ACTIVE
+  COMPLETED
+}
+
+enum ReviewCardSource {
+  WRONG_QUESTION
+  WEAK_KNOWLEDGE
+}
+
+enum ReviewCardStatus {
+  PENDING
+  COMPLETED
+}
+
 enum ExamSettlementSource {
   STUDENT_SUBMISSION
   AUTO_SETTLEMENT
@@ -89,54 +115,57 @@ enum StudentImportStatus {
 }
 
 model User {
-  id                    String                     @id @default(cuid())
-  username              String                     @unique
-  displayName           String
-  passwordHash          String
-  role                  UserRole                   @default(STUDENT)
-  enabled               Boolean                    @default(true)
-  mustChangePassword    Boolean                    @default(true)
-  sessionVersion        Int                        @default(0)
-  studentStatus         StudentAccountStatus?
-  registrationSource    StudentRegistrationSource?
-  nationalIdEncrypted   String?                    @db.Text
-  nationalIdHash        String?                    @unique
-  nationalIdLast4       String?                    @db.VarChar(4)
-  gender                StudentGender?
-  school                String?
-  gradeId               String?
-  grade                 Grade?                     @relation(fields: [gradeId], references: [id], onDelete: Restrict)
-  phoneEncrypted        String?                    @db.Text
-  phoneHash             String?                    @unique
-  phoneLast4            String?                    @db.VarChar(4)
-  submittedAt           DateTime?
-  reviewedAt            DateTime?
-  reviewedById          String?
-  reviewedBy            User?                      @relation("StudentReviewedBy", fields: [reviewedById], references: [id], onDelete: SetNull)
-  reviewedStudents      User[]                     @relation("StudentReviewedBy")
-  rejectionReason       String?                    @db.Text
-  validFrom             DateTime?                  @db.Date
-  validUntil            DateTime?                  @db.Date
-  isLongTerm            Boolean                    @default(false)
-  profileIncomplete     Boolean                    @default(false)
-  activationRequired    Boolean                    @default(false)
-  realName              String?
-  radioPersonId         String?                    @unique
-  radioPerson           RadioPerson?               @relation(fields: [radioPersonId], references: [id], onDelete: Restrict)
-  studentActivation     StudentActivation?
-  authSessions          AuthSession[]
-  sessions              PracticeSession[]
-  wrongQuestions        WrongQuestion[]
-  imports               ImportBatch[]
-  studentImports        StudentImportBatch[]
-  auditLogs             AuditLog[]
-  questionRevisions QuestionRevision[]
-  studentReviewRecords  StudentReviewRecord[]      @relation("StudentReviewStudent")
-  authoredReviewRecords StudentReviewRecord[]      @relation("StudentReviewActor")
-  questionExplanationReviews Question[]            @relation("QuestionExplanationReviewedBy")
-  aiUsageLogs           AiUsageLog[]
-  createdAt             DateTime                   @default(now())
-  updatedAt             DateTime                   @updatedAt
+  id                         String                     @id @default(cuid())
+  username                   String                     @unique
+  displayName                String
+  passwordHash               String
+  role                       UserRole                   @default(STUDENT)
+  enabled                    Boolean                    @default(true)
+  mustChangePassword         Boolean                    @default(true)
+  sessionVersion             Int                        @default(0)
+  studentStatus              StudentAccountStatus?
+  registrationSource         StudentRegistrationSource?
+  nationalIdEncrypted        String?                    @db.Text
+  nationalIdHash             String?                    @unique
+  nationalIdLast4            String?                    @db.VarChar(4)
+  gender                     StudentGender?
+  school                     String?
+  gradeId                    String?
+  grade                      Grade?                     @relation(fields: [gradeId], references: [id], onDelete: Restrict)
+  phoneEncrypted             String?                    @db.Text
+  phoneHash                  String?                    @unique
+  phoneLast4                 String?                    @db.VarChar(4)
+  submittedAt                DateTime?
+  reviewedAt                 DateTime?
+  reviewedById               String?
+  reviewedBy                 User?                      @relation("StudentReviewedBy", fields: [reviewedById], references: [id], onDelete: SetNull)
+  reviewedStudents           User[]                     @relation("StudentReviewedBy")
+  rejectionReason            String?                    @db.Text
+  validFrom                  DateTime?                  @db.Date
+  validUntil                 DateTime?                  @db.Date
+  isLongTerm                 Boolean                    @default(false)
+  profileIncomplete          Boolean                    @default(false)
+  activationRequired         Boolean                    @default(false)
+  realName                   String?
+  radioPersonId              String?                    @unique
+  radioPerson                RadioPerson?               @relation(fields: [radioPersonId], references: [id], onDelete: Restrict)
+  studentActivation          StudentActivation?
+  authSessions               AuthSession[]
+  sessions                   PracticeSession[]
+  focusSessions              FocusSession[]
+  wrongQuestions             WrongQuestion[]
+  reviewPlans                ReviewPlan[]
+  imports                    ImportBatch[]
+  studentImports             StudentImportBatch[]
+  auditLogs                  AuditLog[]
+  questionRevisions          QuestionRevision[]
+  studentReviewRecords       StudentReviewRecord[]      @relation("StudentReviewStudent")
+  authoredReviewRecords      StudentReviewRecord[]      @relation("StudentReviewActor")
+  questionExplanationReviews Question[]                 @relation("QuestionExplanationReviewedBy")
+  aiUsageLogs                AiUsageLog[]
+  aiConversations            AiConversation[]
+  createdAt                  DateTime                   @default(now())
+  updatedAt                  DateTime                   @updatedAt
 
   @@index([role, studentStatus, enabled])
   @@index([gradeId, studentStatus])
@@ -245,7 +274,6 @@ model ExamRule {
   enabled         Boolean  @default(true)
   version         Int      @default(1)
   updatedAt       DateTime @updatedAt
-
 }
 
 model KnowledgePoint {
@@ -263,6 +291,7 @@ model KnowledgePoint {
   questions     Question[]
   practiceRules KnowledgePracticeRule[]
   sessions      PracticeSession[]
+  reviewCards   ReviewCard[]
   createdAt     DateTime                @default(now())
   updatedAt     DateTime                @updatedAt
 
@@ -297,38 +326,41 @@ model KnowledgePracticeRule {
 }
 
 model Question {
-  id                   String                    @id @default(cuid())
-  levelId              String
-  knowledgePointId     String
-  level                Level                     @relation(fields: [levelId], references: [id])
-  knowledgePoint       KnowledgePoint            @relation(fields: [knowledgePointId], references: [id])
-  images               QuestionImage[]
-  sourceBankCode       String?
-  externalQuestionCode String?
-  stem                 String                    @db.Text
-  type                 QuestionType
-  optionCount          Int
-  correctOptionCount   Int
-  selectionSpec        String
-  preserveOptionOrder  Boolean                   @default(false)
-  options              Json
-  correctOptionIds     Json
-  status               QuestionStatus            @default(ACTIVE)
-  version              Int                       @default(1)
-  importBatchId        String?
-  importBatch          ImportBatch?              @relation(fields: [importBatchId], references: [id], onDelete: Restrict)
-  sessionQuestions     PracticeSessionQuestion[]
-  answers              PracticeAnswer[]
-  wrongQuestions       WrongQuestion[]
-  revisions            QuestionRevision[]
-  explanation          String?                   @db.Text
-  explanationStatus    String                    @default("NONE")
-  explanationVersion   Int                       @default(0)
+  id                      String                    @id @default(cuid())
+  levelId                 String
+  knowledgePointId        String
+  level                   Level                     @relation(fields: [levelId], references: [id])
+  knowledgePoint          KnowledgePoint            @relation(fields: [knowledgePointId], references: [id])
+  images                  QuestionImage[]
+  sourceBankCode          String?
+  externalQuestionCode    String?
+  stem                    String                    @db.Text
+  type                    QuestionType
+  optionCount             Int
+  correctOptionCount      Int
+  selectionSpec           String
+  preserveOptionOrder     Boolean                   @default(false)
+  options                 Json
+  correctOptionIds        Json
+  status                  QuestionStatus            @default(ACTIVE)
+  version                 Int                       @default(1)
+  importBatchId           String?
+  importBatch             ImportBatch?              @relation(fields: [importBatchId], references: [id], onDelete: Restrict)
+  sessionQuestions        PracticeSessionQuestion[]
+  answers                 PracticeAnswer[]
+  wrongQuestions          WrongQuestion[]
+  reviewCards             ReviewCard[]
+  revisions               QuestionRevision[]
+  aiConversations         AiConversation[]
+  explanation             String?                   @db.Text
+  explanationStatus       String                    @default("NONE")
+  explanationVersion      Int                       @default(0)
+  explanationRejectReason String?                   @db.Text
   explanationReviewedById String?
-  explanationReviewedBy User?                    @relation("QuestionExplanationReviewedBy", fields: [explanationReviewedById], references: [id], onDelete: SetNull)
-  explanationReviewedAt DateTime?
-  createdAt            DateTime                  @default(now())
-  updatedAt            DateTime                  @updatedAt
+  explanationReviewedBy   User?                     @relation("QuestionExplanationReviewedBy", fields: [explanationReviewedById], references: [id], onDelete: SetNull)
+  explanationReviewedAt   DateTime?
+  createdAt               DateTime                  @default(now())
+  updatedAt               DateTime                  @updatedAt
 
   @@unique([levelId, externalQuestionCode])
   @@index([levelId, type, status])
@@ -392,9 +424,28 @@ model PracticeSession {
   questions               PracticeSessionQuestion[]
   answers                 PracticeAnswer[]
   examDraft               ExamDraft?
+  aiConversations         AiConversation[]
 
   @@index([userId, status, startedAt])
   @@index([mode, status, expiresAt])
+}
+
+model FocusSession {
+  id                  String             @id @default(cuid())
+  userId              String
+  user                User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  status              FocusSessionStatus @default(IN_PROGRESS)
+  targetMinutes       Int?
+  targetQuestionCount Int?
+  actualMinutes       Int?
+  actualQuestionCount Int?
+  startedAt           DateTime           @default(now())
+  endedAt             DateTime?
+  createdAt           DateTime           @default(now())
+  updatedAt           DateTime           @updatedAt
+
+  @@index([userId, status, startedAt])
+  @@index([userId, endedAt])
 }
 
 model ExamDraft {
@@ -460,23 +511,62 @@ model WrongQuestion {
   @@index([userId, mastered])
 }
 
+model ReviewPlan {
+  id          String           @id @default(cuid())
+  userId      String
+  user        User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  planDate    DateTime         @db.Date
+  type        ReviewPlanType   @default(DAILY)
+  status      ReviewPlanStatus @default(ACTIVE)
+  examDate    DateTime?        @db.Date
+  completedAt DateTime?
+  cards       ReviewCard[]
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+
+  @@unique([userId, planDate, type])
+  @@index([userId, planDate, status])
+  @@index([userId, type, status])
+}
+
+model ReviewCard {
+  id               String           @id @default(cuid())
+  reviewPlanId     String
+  reviewPlan       ReviewPlan       @relation(fields: [reviewPlanId], references: [id], onDelete: Cascade)
+  questionId       String
+  question         Question         @relation(fields: [questionId], references: [id], onDelete: Restrict)
+  knowledgePointId String?
+  knowledgePoint   KnowledgePoint?  @relation(fields: [knowledgePointId], references: [id], onDelete: Restrict)
+  source           ReviewCardSource
+  priority         Int              @default(0)
+  status           ReviewCardStatus @default(PENDING)
+  completedAt      DateTime?
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
+
+  @@unique([reviewPlanId, questionId])
+  @@index([reviewPlanId, status])
+  @@index([questionId, status])
+  @@index([knowledgePointId, status])
+}
+
 model ImportBatch {
-  id            String           @id @default(cuid())
+  id            String             @id @default(cuid())
   fileName      String
-  status        ImportStatus     @default(PREVIEW)
-  totalRows     Int              @default(0)
-  validRows     Int              @default(0)
-  warningRows   Int              @default(0)
-  errorRows     Int              @default(0)
-  insertedRows  Int              @default(0)
-  duplicateRows Int              @default(0)
+  status        ImportStatus       @default(PREVIEW)
+  totalRows     Int                @default(0)
+  validRows     Int                @default(0)
+  warningRows   Int                @default(0)
+  errorRows     Int                @default(0)
+  insertedRows  Int                @default(0)
+  duplicateRows Int                @default(0)
   errorReport   Json?
   importedById  String
-  importedBy    User             @relation(fields: [importedById], references: [id])
+  importedBy    User               @relation(fields: [importedById], references: [id])
   questions     Question[]
   rows          ImportBatchRow[]
   images        ImportBatchImage[]
-  createdAt     DateTime         @default(now())
+  createdAt     DateTime           @default(now())
   expiresAt     DateTime?
   committedAt   DateTime?
   revertedAt    DateTime?
@@ -538,17 +628,17 @@ model StudentImportBatch {
 }
 
 model StudentImportRow {
-  id                       String             @id @default(cuid())
-  batchId                  String
-  batch                    StudentImportBatch @relation(fields: [batchId], references: [id], onDelete: Cascade)
-  sheetName                String
-  sourceRowNumber          Int
-  payload                  Json
-  initialPasswordHash      String?            @db.Text
-  issues                   Json
-  valid                    Boolean
-  createdAt                DateTime           @default(now())
-  updatedAt                DateTime           @updatedAt
+  id                  String             @id @default(cuid())
+  batchId             String
+  batch               StudentImportBatch @relation(fields: [batchId], references: [id], onDelete: Cascade)
+  sheetName           String
+  sourceRowNumber     Int
+  payload             Json
+  initialPasswordHash String?            @db.Text
+  issues              Json
+  valid               Boolean
+  createdAt           DateTime           @default(now())
+  updatedAt           DateTime           @updatedAt
 
   @@unique([batchId, sheetName, sourceRowNumber])
   @@index([batchId, valid, sheetName, sourceRowNumber])
@@ -566,21 +656,50 @@ model LoginAttempt {
 }
 
 model AiUsageLog {
-  id               String    @id @default(cuid())
+  id               String   @id @default(cuid())
   userId           String?
-  user             User?     @relation(fields: [userId], references: [id], onDelete: SetNull)
+  user             User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
   action           String
   provider         String
   model            String
-  promptTokens     Int       @default(0)
-  completionTokens Int       @default(0)
-  totalTokens      Int       @default(0)
+  promptTokens     Int      @default(0)
+  completionTokens Int      @default(0)
+  totalTokens      Int      @default(0)
   latencyMs        Int?
   requestHash      String?
-  createdAt        DateTime  @default(now())
+  createdAt        DateTime @default(now())
 
   @@index([userId, createdAt])
   @@index([action, createdAt])
+}
+
+model AiConversation {
+  id                String           @id @default(cuid())
+  userId            String
+  user              User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  questionId        String
+  question          Question         @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  practiceSessionId String?
+  practiceSession   PracticeSession? @relation(fields: [practiceSessionId], references: [id], onDelete: SetNull)
+  createdAt         DateTime         @default(now())
+  updatedAt         DateTime         @updatedAt
+  messages          AiMessage[]
+
+  @@index([userId, updatedAt])
+  @@index([questionId, updatedAt])
+  @@index([practiceSessionId, updatedAt])
+}
+
+model AiMessage {
+  id             String         @id @default(cuid())
+  conversationId String
+  conversation   AiConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  role           String
+  content        String         @db.Text
+  feedback       String?
+  createdAt      DateTime       @default(now())
+
+  @@index([conversationId, createdAt])
 }
 
 model SensitiveDataReauthenticationAttempt {
@@ -593,6 +712,7 @@ model SensitiveDataReauthenticationAttempt {
   @@index([userId, success, createdAt], map: "SensitiveDataReauth_user_success_createdAt_idx")
   @@index([ipHash, success, createdAt], map: "SensitiveDataReauth_ip_success_createdAt_idx")
 }
+
 model AuditLog {
   id          String   @id @default(cuid())
   actorUserId String?

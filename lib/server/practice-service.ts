@@ -6,12 +6,14 @@ import { parseJsonStringArray } from "@/lib/domain/json-string-array";
 import { selectPracticeQuestions, selectPrioritizedRandomQuestions, shuffle, sortQuestionsByBankNumber } from "@/lib/domain/practice-engine";
 import { createQuestionSnapshot, gradeQuestionSnapshot, toPublicQuestionSnapshot, type QuestionSnapshot } from "@/lib/domain/practice-snapshot";
 import { advanceWrongQuestionMastery } from "@/lib/domain/wrong-question-mastery";
+import { completeReviewCardsForSession } from "@/lib/server/review-plan-service";
+import { parseStudentExplanation, type StudentExplanation } from "@/lib/domain/student-explanation";
 import type { ExamRule, PracticeMode, PublicAnswerResult, PublicExamResult, PublicPracticeSession, Question, QuestionOption } from "@/lib/domain/types";
 
 type CreatePracticeRequest =
   | { mode: "level" | "order" | "random" | "exam"; levelCode: string }
   | { mode: "knowledge"; levelCode: string; knowledgePointId: string }
-  | { mode: "wrong" };
+  | { mode: "wrong"; questionId?: string };
 
 type QuestionRecord = {
   id: string;
@@ -33,7 +35,7 @@ type QuestionRecord = {
 };
 
 export async function createPracticeSession(userId: string, input: CreatePracticeRequest): Promise<PublicPracticeSession> {
-  if (input.mode === "wrong") return createWrongQuestionSession(userId);
+  if (input.mode === "wrong") return createWrongQuestionSession(userId, input.questionId);
   const level = await prisma.level.findFirst({ where: { code: input.levelCode, enabled: true } });
   if (!level) throw new ApiError("所选等级不存在或已停用", 404);
   if (input.mode === "exam") return createMockExamSession(userId, level.id);
@@ -72,13 +74,15 @@ async function createMockExamSession(userId: string, levelId: string) {
   });
 }
 
-async function createWrongQuestionSession(userId: string): Promise<PublicPracticeSession> {
+async function createWrongQuestionSession(userId: string, questionId?: string): Promise<PublicPracticeSession> {
   const wrongQuestions = await prisma.wrongQuestion.findMany({
     where: { userId, mastered: false, question: { status: "ACTIVE", knowledgePoint: { enabled: true } } },
     include: { question: { include: { level: { select: { code: true } }, knowledgePoint: { select: { name: true } } } } },
   });
-  const selected = shuffle(wrongQuestions).slice(0, 20);
-  if (!selected.length) throw new ApiError("当前没有待巩固错题", 409);
+  const selected = questionId
+    ? wrongQuestions.filter((item) => item.questionId === questionId)
+    : shuffle(wrongQuestions).slice(0, 20);
+  if (!selected.length) throw new ApiError(questionId ? "该错题不在待巩固列表" : "当前没有待巩固错题", 409);
   const snapshots = selected.map(({ question }) => createQuestionSnapshot({ ...toDomainQuestion(question), levelCode: question.level.code, knowledgeName: question.knowledgePoint.name }));
   return persistPracticeSession(userId, "WRONG_QUESTION", null, null, snapshots);
 }
@@ -102,9 +106,12 @@ export async function getPracticeSession(userId: string, sessionId: string): Pro
   if (!session) return null;
   const snapshots = session.questions.map((item) => item.snapshot as unknown as QuestionSnapshot);
   const correctCount = session.answers.filter((answer) => answer.isCorrect).length;
+  const answeredQuestionIds = session.answers.map((answer) => answer.questionId);
+  const explanations = await getApprovedExplanations(answeredQuestionIds);
+  const explanationById = new Map(answeredQuestionIds.map((id, index) => [id, explanations[index] ?? null]));
   const results = Object.fromEntries(session.answers.map((answer) => {
     const snapshot = snapshots.find((item) => item.questionId === answer.questionId);
-    return [answer.questionId, { isCorrect: answer.isCorrect, correctOptionIds: snapshot?.correctOptionIds ?? [], selectedOptionIds: parseJsonStringArray(answer.selectedOptionIds, "selectedOptionIds"), answeredCount: session.answers.length, correctCount }];
+    return [answer.questionId, { isCorrect: answer.isCorrect, correctOptionIds: snapshot?.correctOptionIds ?? [], selectedOptionIds: parseJsonStringArray(answer.selectedOptionIds, "selectedOptionIds"), answeredCount: session.answers.length, correctCount, explanation: explanationById.get(answer.questionId) ?? null }];
   }));
   const exam = session.mode === "MOCK_EXAM" && session.durationMinutesSnapshot && session.passingCountSnapshot && session.expiresAt
     ? { durationMinutes: session.durationMinutesSnapshot, passingCount: session.passingCountSnapshot, expiresAt: session.expiresAt }
@@ -147,7 +154,7 @@ export async function saveExamDraft(userId: string, sessionId: string, input: { 
 }
 export async function submitPracticeAnswer(userId: string, sessionId: string, questionId: string, selectedOptionIds: string[], idempotencyKey: string) {
   try {
-    return await prisma.$transaction(async (tx) => {
+    const result = await prisma.$transaction(async (tx) => {
       // Serialize concurrent submissions for the same session by locking the
       // session row first. Without this, two racing inserts both hold shared
       // locks from their foreign-key checks and deadlock against the session
@@ -174,15 +181,20 @@ export async function submitPracticeAnswer(userId: string, sessionId: string, qu
       const total = await tx.practiceSessionQuestion.count({ where: { sessionId } });
       const completedAt = answeredCount === total ? new Date() : undefined;
       await tx.practiceSession.update({ where: { id: sessionId }, data: { currentIndex: answeredCount, correctCount, ...(completedAt ? { status: "COMPLETED", completedAt } : {}) } });
-      if (completedAt) await settleWrongQuestionMastery(tx, userId, sessionId);
+      if (completedAt) {
+        await settleWrongQuestionMastery(tx, userId, sessionId);
+        await completeReviewCardsForSession(userId, sessionId, tx);
+      }
       return { isCorrect, correctOptionIds: snapshot.correctOptionIds, selectedOptionIds, answeredCount, correctCount };
     });
+    return { ...result, explanation: await getApprovedExplanation(questionId) };
   } catch (error) {
     if (!(error instanceof Prisma.PrismaClientKnownRequestError) || error.code !== "P2002") throw error;
     const existing = await prisma.practiceAnswer.findUnique({ where: { sessionId_questionId: { sessionId, questionId } } });
     const sessionQuestion = await prisma.practiceSessionQuestion.findUnique({ where: { sessionId_questionId: { sessionId, questionId } }, include: { session: true } });
     if (!existing || !sessionQuestion || sessionQuestion.session.userId !== userId) throw error;
-    return replayOrRejectPracticeAnswer(existing, snapshotFromSessionQuestion(sessionQuestion), selectedOptionIds);
+    const result = replayOrRejectPracticeAnswer(existing, snapshotFromSessionQuestion(sessionQuestion), selectedOptionIds);
+    return { ...result, explanation: await getApprovedExplanation(questionId) };
   }
 }
 
@@ -251,6 +263,7 @@ async function settleMockExam(userId: string, sessionId: string, submittedAnswer
     const correctCount = graded.filter((answer) => answer.isCorrect).length;
     await tx.practiceSession.update({ where: { id: sessionId }, data: { status: "COMPLETED", currentIndex: graded.length, correctCount, completedAt: now, examSettlementSource: settlementSource } });
     await settleWrongQuestionMastery(tx, userId, sessionId);
+    await completeReviewCardsForSession(userId, sessionId, tx);
     await tx.examDraft.deleteMany({ where: { sessionId } });
     return toPublicExamResult(correctCount, graded.length, session.passingCountSnapshot ?? graded.length, now, settlementSource);
   });
@@ -304,6 +317,24 @@ function createSnapshots(records: QuestionRecord[], questions: Question[]) {
 
 function toPublicSession(session: { id: string; mode: PracticeMode; status: "IN_PROGRESS" | "COMPLETED" | "ABANDONED" }, snapshots: QuestionSnapshot[], results: Record<string, PublicAnswerResult>, exam?: { durationMinutes: number; passingCount: number; expiresAt: Date }, draft?: PublicPracticeSession["draft"], examResult?: PublicExamResult): PublicPracticeSession {
   return { id: session.id, mode: session.mode, status: session.status, title: sessionTitle(session.mode, snapshots), total: snapshots.length, questions: snapshots.map(toPublicQuestionSnapshot), initialResults: session.mode === "MOCK_EXAM" ? {} : results, ...(exam ? { exam: { durationMinutes: exam.durationMinutes, passingCount: exam.passingCount, expiresAt: exam.expiresAt.toISOString() } } : {}), ...(draft ? { draft } : {}), ...(examResult ? { examResult } : {}) };
+}
+
+async function getApprovedExplanations(questionIds: string[]): Promise<Array<StudentExplanation | null>> {
+  if (questionIds.length === 0) return [];
+  const rows = await prisma.question.findMany({
+    where: { id: { in: questionIds }, explanationStatus: "APPROVED" },
+    select: { id: true, explanation: true },
+  });
+  const byId = new Map(rows.map((row) => [row.id, parseStudentExplanation(row.explanation)]));
+  return questionIds.map((id) => byId.get(id) ?? null);
+}
+
+async function getApprovedExplanation(questionId: string): Promise<StudentExplanation | null> {
+  const row = await prisma.question.findFirst({
+    where: { id: questionId, explanationStatus: "APPROVED" },
+    select: { explanation: true },
+  });
+  return row ? parseStudentExplanation(row.explanation) : null;
 }
 
 function toPublicDraft(answers: unknown, currentIndex: number, version: number, updatedAt: Date): NonNullable<PublicPracticeSession["draft"]> {

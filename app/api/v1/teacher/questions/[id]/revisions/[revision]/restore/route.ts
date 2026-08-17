@@ -23,7 +23,17 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
       if (!historical) throw new ApiError("题目修订不存在", 404);
       const snapshot = parseQuestionRevisionSnapshot(historical.snapshot);
       const normalized = normalizeQuestionEditorInput({ options: snapshot.options as { id: string; text: string }[], correctOptionIds: snapshot.correctOptionIds as string[] });
-      const changed = await tx.question.updateMany({ where: { id, version }, data: { ...snapshot, type: normalized.type, optionCount: normalized.optionCount, correctOptionCount: normalized.correctOptionCount, selectionSpec: normalized.selectionSpec, options: normalized.options as Prisma.InputJsonValue, correctOptionIds: normalized.correctOptionIds as Prisma.InputJsonValue, version: { increment: 1 } } });
+      const explanationData = snapshot.explanationStatus !== undefined || snapshot.explanation !== undefined
+        ? {
+            explanation: snapshot.explanation ?? null,
+            explanationStatus: snapshot.explanationStatus ?? "NONE",
+            explanationVersion: snapshot.explanationVersion ?? 0,
+            explanationRejectReason: snapshot.explanationRejectReason ?? null,
+            explanationReviewedById: snapshot.explanationReviewedById ?? null,
+            explanationReviewedAt: snapshot.explanationReviewedAt ? new Date(snapshot.explanationReviewedAt) : null,
+          }
+        : {};
+      const changed = await tx.question.updateMany({ where: { id, version }, data: { ...snapshot, ...explanationData, type: normalized.type, optionCount: normalized.optionCount, correctOptionCount: normalized.correctOptionCount, selectionSpec: normalized.selectionSpec, options: normalized.options as Prisma.InputJsonValue, correctOptionIds: normalized.correctOptionIds as Prisma.InputJsonValue, version: { increment: 1 } } });
       if (changed.count !== 1) throw new ApiError(STALE_VERSION_MESSAGE, 409);
       const updated = await tx.question.findFirstOrThrow({ where: { id } });
       await tx.questionRevision.create({ data: { questionId: id, revision: updated.version, snapshot: toQuestionSnapshot(updated), changeSource: "TEACHER_RESTORE", actorUserId: user.id } });

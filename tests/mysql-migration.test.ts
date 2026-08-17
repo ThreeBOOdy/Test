@@ -196,6 +196,74 @@ describe("MySQL project configuration", () => {
     expect(schema).toMatch(/explanationStatus\s+String\s+@default\("NONE"\)/);
     expect(schema).toContain("model AiUsageLog {");
   });
+  it("adds the AI explanation rejection reason field without discarding questions", () => {
+    const migration = fs.readFileSync(path.resolve("prisma/migrations/20260817010000_ai_explanation_review_reject_reason/migration.sql"), "utf8");
+    const schema = fs.readFileSync(path.resolve("prisma/schema.prisma"), "utf8");
+
+    expect(migration).toContain("ALTER TABLE `Question` ADD COLUMN `explanationRejectReason` TEXT NULL");
+    expect(schema).toContain("explanationRejectReason String?");
+    expect(schema).toContain("@db.Text");
+    expect(migration).not.toMatch(/DROP TABLE `Question`|DELETE FROM `Question`/);
+  });
+  it("creates AI tutor conversation and message tables without discarding questions", () => {
+    const migration = fs.readFileSync(path.resolve("prisma/migrations/20260817020000_ai_tutor_conversation/migration.sql"), "utf8");
+    const schema = fs.readFileSync(path.resolve("prisma/schema.prisma"), "utf8");
+
+    expect(migration).toContain("CREATE TABLE `AiConversation`");
+    expect(migration).toContain("CREATE TABLE `AiMessage`");
+    expect(migration).toContain("`practiceSessionId` VARCHAR(191) NULL");
+    expect(migration).toContain("`role` VARCHAR(191) NOT NULL");
+    expect(migration).toContain("`content` TEXT NOT NULL");
+    expect(migration).toContain("`feedback` VARCHAR(191) NULL");
+    expect(migration).toContain("FOREIGN KEY (`userId`) REFERENCES `User`(`id`)");
+    expect(migration).toContain("FOREIGN KEY (`questionId`) REFERENCES `Question`(`id`)");
+    expect(migration).toContain("FOREIGN KEY (`practiceSessionId`) REFERENCES `PracticeSession`(`id`)");
+    expect(migration).toContain("FOREIGN KEY (`conversationId`) REFERENCES `AiConversation`(`id`)");
+    expect(migration).not.toMatch(/DROP TABLE `Question`|DELETE FROM `Question`/);
+
+    expect(schema).toContain("model AiConversation {");
+    expect(schema).toContain("model AiMessage {");
+    expect(schema).toMatch(/practiceSession\s+PracticeSession\?/);
+    expect(schema).toMatch(/aiConversations\s+AiConversation\[\]/);
+  });
+  it("creates focus session tables without discarding questions", () => {
+    const migration = fs.readFileSync(path.resolve("prisma/migrations/20260817030000_focus_session_and_streak/migration.sql"), "utf8");
+    const schema = fs.readFileSync(path.resolve("prisma/schema.prisma"), "utf8");
+
+    expect(migration).toContain("CREATE TABLE `FocusSession`");
+    expect(migration).toContain("ENUM('IN_PROGRESS', 'COMPLETED', 'ABANDONED') NOT NULL DEFAULT 'IN_PROGRESS'");
+    expect(migration).toContain("`targetMinutes` INTEGER NULL");
+    expect(migration).toContain("`targetQuestionCount` INTEGER NULL");
+    expect(migration).toContain("`actualMinutes` INTEGER NULL");
+    expect(migration).toContain("`actualQuestionCount` INTEGER NULL");
+    expect(migration).toContain("`endedAt` DATETIME(3) NULL");
+    expect(migration).toContain("FOREIGN KEY (`userId`) REFERENCES `User`(`id`)");
+    expect(migration).toContain("ON DELETE CASCADE");
+    expect(migration).toContain("FocusSession_userId_status_startedAt_idx");
+    expect(migration).not.toMatch(/DROP TABLE `Question`|DELETE FROM `Question`/);
+
+    expect(schema).toContain("model FocusSession {");
+    expect(schema).toContain("enum FocusSessionStatus {");
+    expect(schema).toMatch(/focusSessions\s+FocusSession\[\]/);
+  });
+  it("adds review plan and review card tables without discarding existing data", () => {
+    const migration = fs.readFileSync(path.resolve("prisma/migrations/20260818000000_review_plan_and_cards/migration.sql"), "utf8");
+    const schema = fs.readFileSync(path.resolve("prisma/schema.prisma"), "utf8");
+
+    expect(migration).toContain("CREATE TABLE `ReviewPlan`");
+    expect(migration).toContain("CREATE TABLE `ReviewCard`");
+    expect(migration).toContain("`planDate` DATE NOT NULL");
+    expect(migration).toContain("ENUM('DAILY', 'EXAM_SPRINT')");
+    expect(migration).toContain("ENUM('WRONG_QUESTION', 'WEAK_KNOWLEDGE')");
+    expect(migration).toContain("FOREIGN KEY (`userId`) REFERENCES `User`(`id`) ON DELETE CASCADE");
+    expect(migration).toContain("FOREIGN KEY (`questionId`) REFERENCES `Question`(`id`) ON DELETE RESTRICT");
+    expect(migration).not.toMatch(/DROP TABLE `(Question|User|ReviewPlan|ReviewCard)`|DELETE FROM `Question`/);
+
+    expect(schema).toContain("model ReviewPlan {");
+    expect(schema).toContain("model ReviewCard {");
+    expect(schema).toMatch(/reviewPlans\s+ReviewPlan\[\]/);
+    expect(schema).toMatch(/reviewCards\s+ReviewCard\[\]/);
+  });
 });
 
 describe("MySQL database URL protection", () => {

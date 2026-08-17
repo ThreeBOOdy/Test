@@ -1,4 +1,5 @@
 import type { DocxImage } from "./docx-content";
+import type { StudentExplanation } from "./student-explanation";
 
 export type QuestionType = "SINGLE_CHOICE" | "MULTIPLE_CHOICE";
 export type QuestionStatus = "ACTIVE" | "DISABLED" | "ARCHIVED";
@@ -26,6 +27,11 @@ export type Question = {
   options: QuestionOption[];
   correctOptionIds: string[];
   status: QuestionStatus;
+  explanation?: string | null;
+  explanationStatus?: "NONE" | "DRAFT" | "APPROVED" | "REJECTED" | (string & {});
+  explanationVersion?: number;
+  explanationReviewedById?: string | null;
+  explanationReviewedAt?: Date | string | null;
 };
 
 export type KnowledgePoint = {
@@ -100,7 +106,7 @@ export type ValidatedQuestionRow = {
   type: QuestionType;
   issues: ValidationIssue[];
 };
-export type PublicQuestion = Omit<Question, "correctOptionIds" | "status" | "correctOptionCount" | "selectionSpec"> & {
+export type PublicQuestion = Omit<Question, "correctOptionIds" | "status" | "correctOptionCount" | "selectionSpec" | "explanation"> & {
   knowledgeName: string;
   levelCode: string;
 };
@@ -111,6 +117,8 @@ export type PublicAnswerResult = {
   selectedOptionIds: string[];
   answeredCount: number;
   correctCount: number;
+  /** 仅当题目存在 APPROVED 解析时由服务端注入；DRAFT/REJECTED 不会出现在学生端。 */
+  explanation?: StudentExplanation | null;
 };
 
 export type PublicExamDraft = {
@@ -127,6 +135,26 @@ export type PublicExamResult = {
   passed: boolean;
   settlementSource: ExamSettlementSource;
   completedAt: string;
+};
+
+export type FocusSessionStatus = "IN_PROGRESS" | "COMPLETED" | "ABANDONED";
+
+export type PublicFocusSession = {
+  id: string;
+  status: FocusSessionStatus;
+  targetMinutes: number | null;
+  targetQuestionCount: number | null;
+  actualMinutes: number | null;
+  actualQuestionCount: number | null;
+  startedAt: string;
+  endedAt: string | null;
+};
+
+export type FocusOverview = {
+  currentStreak: number;
+  todayCheckedIn: boolean;
+  todayFocusMinutes: number;
+  activeFocusSession: PublicFocusSession | null;
 };
 
 export type PublicPracticeSession = {
