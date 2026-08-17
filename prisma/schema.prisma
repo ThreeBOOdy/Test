@@ -133,6 +133,8 @@ model User {
   questionRevisions QuestionRevision[]
   studentReviewRecords  StudentReviewRecord[]      @relation("StudentReviewStudent")
   authoredReviewRecords StudentReviewRecord[]      @relation("StudentReviewActor")
+  questionExplanationReviews Question[]            @relation("QuestionExplanationReviewedBy")
+  aiUsageLogs           AiUsageLog[]
   createdAt             DateTime                   @default(now())
   updatedAt             DateTime                   @updatedAt
 
@@ -319,6 +321,12 @@ model Question {
   answers              PracticeAnswer[]
   wrongQuestions       WrongQuestion[]
   revisions            QuestionRevision[]
+  explanation          String?                   @db.Text
+  explanationStatus    String                    @default("NONE")
+  explanationVersion   Int                       @default(0)
+  explanationReviewedById String?
+  explanationReviewedBy User?                    @relation("QuestionExplanationReviewedBy", fields: [explanationReviewedById], references: [id], onDelete: SetNull)
+  explanationReviewedAt DateTime?
   createdAt            DateTime                  @default(now())
   updatedAt            DateTime                  @updatedAt
 
@@ -555,6 +563,24 @@ model LoginAttempt {
 
   @@index([usernameHash, success, createdAt])
   @@index([ipHash, success, createdAt])
+}
+
+model AiUsageLog {
+  id               String    @id @default(cuid())
+  userId           String?
+  user             User?     @relation(fields: [userId], references: [id], onDelete: SetNull)
+  action           String
+  provider         String
+  model            String
+  promptTokens     Int       @default(0)
+  completionTokens Int       @default(0)
+  totalTokens      Int       @default(0)
+  latencyMs        Int?
+  requestHash      String?
+  createdAt        DateTime  @default(now())
+
+  @@index([userId, createdAt])
+  @@index([action, createdAt])
 }
 
 model SensitiveDataReauthenticationAttempt {

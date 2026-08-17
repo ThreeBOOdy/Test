@@ -174,6 +174,28 @@ describe("MySQL project configuration", () => {
     expect(statisticsService).toContain("TIMESTAMPDIFF(SECOND");
     expect(statisticsService).toContain("CAST(COALESCE");
   });
+  it("adds AI explanation fields and the AI usage log without discarding questions", () => {
+    const migration = fs.readFileSync(path.resolve("prisma/migrations/20260817000000_ai_gateway_and_usage_log/migration.sql"), "utf8");
+    const schema = fs.readFileSync(path.resolve("prisma/schema.prisma"), "utf8");
+
+    expect(migration).toContain("ALTER TABLE `Question` ADD COLUMN `explanation` TEXT NULL");
+    expect(migration).toContain("ADD COLUMN `explanationStatus` VARCHAR(191) NOT NULL DEFAULT 'NONE'");
+    expect(migration).toContain("ADD COLUMN `explanationVersion` INTEGER NOT NULL DEFAULT 0");
+    expect(migration).toContain("ADD COLUMN `explanationReviewedById` VARCHAR(191) NULL");
+    expect(migration).toContain("ADD COLUMN `explanationReviewedAt` DATETIME(3) NULL");
+    expect(migration).toContain("CREATE TABLE `AiUsageLog`");
+    expect(migration).toContain("`promptTokens` INTEGER NOT NULL DEFAULT 0");
+    expect(migration).toContain("`completionTokens` INTEGER NOT NULL DEFAULT 0");
+    expect(migration).toContain("`totalTokens` INTEGER NOT NULL DEFAULT 0");
+    expect(migration).toContain("`latencyMs` INTEGER NULL");
+    expect(migration).toContain("`requestHash` VARCHAR(191) NULL");
+    expect(migration).toContain("FOREIGN KEY (`explanationReviewedById`) REFERENCES `User`(`id`)");
+    expect(migration).toContain("FOREIGN KEY (`userId`) REFERENCES `User`(`id`)");
+    expect(migration).not.toMatch(/DROP TABLE `(Question|User)`|DELETE FROM `Question`/);
+
+    expect(schema).toMatch(/explanationStatus\s+String\s+@default\("NONE"\)/);
+    expect(schema).toContain("model AiUsageLog {");
+  });
 });
 
 describe("MySQL database URL protection", () => {
