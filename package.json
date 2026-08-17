@@ -26,7 +26,8 @@
     "db:migrate": "prisma migrate dev",
     "db:seed": "tsx prisma/seed.ts",
     "data-retention:cleanup": "node --conditions=react-server --import tsx scripts/data-retention-maintenance.ts",
-    "acceptance": "tsx scripts/full-system-acceptance.ts"
+    "acceptance": "tsx scripts/full-system-acceptance.ts",
+    "acceptance:ticket12": "tsx scripts/ticket12-acceptance.ts"
   },
   "dependencies": {
     "@prisma/adapter-mariadb": "7.9.0",

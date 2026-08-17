@@ -3,9 +3,11 @@
 import { useState } from "react";
 import Link from "next/link";
 import { Award, CheckCircle2, Circle, Map, Power, Radio, Sparkles, Target, Trophy } from "lucide-react";
+import { AiMilestoneFeedback } from "@/components/ai-milestone-feedback";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import type { MilestoneEvent } from "@/lib/domain/gamification";
 import type { PublicPlayerStatus, PublicQuest } from "@/lib/domain/rpg";
 
 export function RpgPanel({ initial }: { initial: PublicPlayerStatus }) {
@@ -14,20 +16,25 @@ export function RpgPanel({ initial }: { initial: PublicPlayerStatus }) {
   const [pendingId, setPendingId] = useState<string | null>(null);
   const [toggling, setToggling] = useState(false);
   const [mapPending, setMapPending] = useState(false);
+  const [milestone, setMilestone] = useState<MilestoneEvent | null>(null);
 
   async function refreshStatus() {
     const response = await fetch("/api/v1/rpg/status", { credentials: "include", cache: "no-store" });
     if (!response.ok) {
       const result = await response.json().catch(() => null);
       setMessage({ tone: "error", text: result?.message ?? "获取玩家状态失败" });
-      return;
+      return null;
     }
-    setStatus(await response.json());
+    const next = await response.json() as PublicPlayerStatus;
+    setStatus(next);
+    return next;
   }
 
   async function claim(quest: PublicQuest) {
     setPendingId(quest.id);
     setMessage(null);
+    setMilestone(null);
+    const previousLevel = status.level;
     try {
       const response = await fetch(`/api/v1/rpg/quests/${quest.id}/complete`, {
         method: "POST",
@@ -38,8 +45,13 @@ export function RpgPanel({ initial }: { initial: PublicPlayerStatus }) {
         setMessage({ tone: "error", text: result.message ?? "领取奖励失败" });
         return;
       }
-      await refreshStatus();
+      const next = await refreshStatus();
       setMessage({ tone: "success", text: `任务完成，获得 +${quest.xpReward} XP` });
+      if (next && next.level > previousLevel) {
+        setMilestone({ type: "LEVEL_UP", level: next.level, title: next.title });
+      } else {
+        setMilestone({ type: "QUEST_COMPLETE", questTitle: quest.title, xpReward: quest.xpReward });
+      }
     } catch {
       setMessage({ tone: "error", text: "连接失败，请稍后重试" });
     } finally {
@@ -141,6 +153,12 @@ export function RpgPanel({ initial }: { initial: PublicPlayerStatus }) {
         {message ? (
           <div role="alert" className={`mt-4 rounded-xl border px-4 py-3 text-sm font-semibold ${message.tone === "error" ? "border-rose-300/20 bg-rose-400/10 text-rose-200" : "border-emerald-300/20 bg-emerald-400/10 text-emerald-200"}`}>
             {message.text}
+          </div>
+        ) : null}
+
+        {milestone ? (
+          <div className="mt-4">
+            <AiMilestoneFeedback key={JSON.stringify(milestone)} event={milestone} />
           </div>
         ) : null}
 

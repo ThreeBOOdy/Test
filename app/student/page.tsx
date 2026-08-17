@@ -1,6 +1,7 @@
 import Link from "next/link";
 import type { LucideIcon } from "lucide-react";
 import { ArrowRight, BookCheck, Brain, CircleCheck, Clock3, Flame, Layers3, Map, Radio, Target, Timer } from "lucide-react";
+import { AiDailyEncouragement } from "@/components/ai-daily-encouragement";
 import { AppShell } from "@/components/app-shell";
 import { PageHeader } from "@/components/page-header";
 import { StatCard } from "@/components/stat-card";
@@ -16,7 +17,7 @@ import { prisma } from "@/lib/db";
 import { getCurrentUser } from "@/lib/server/session";
 import { getFocusOverview } from "@/lib/server/focus-service";
 import { getTodayReviewPlan } from "@/lib/server/review-plan-service";
-import { getPlayerStatus } from "@/lib/server/rpg-service";
+import { getPlayerStatus, getStudentGamificationVisibility } from "@/lib/server/rpg-service";
 import { getDaysAgo } from "@/lib/server/time";
 
 export default async function StudentPage() {
@@ -24,7 +25,7 @@ export default async function StudentPage() {
   if (!user) return null;
   if (user.capability !== "FULL_STUDENT") return null;
   const sevenDaysAgo = getDaysAgo(7);
-  const [sessions, wrongQuestions, levelRules, knowledgeRules, activeQuestions, focusOverview, reviewPlan, playerStatus] = await Promise.all([
+  const [sessions, wrongQuestions, levelRules, knowledgeRules, activeQuestions, focusOverview, reviewPlan, playerStatus, gamificationVisibility] = await Promise.all([
     prisma.practiceSession.findMany({ where: { userId: user.id }, include: { level: true, knowledgePoint: true }, orderBy: { startedAt: "desc" } }),
     prisma.wrongQuestion.findMany({ where: { userId: user.id, mastered: false }, select: { question: { select: { knowledgePointId: true } } } }),
     prisma.levelPracticeRule.findMany({ where: { enabled: true, level: { enabled: true } }, include: { level: true }, orderBy: { level: { sortOrder: "asc" } } }),
@@ -33,6 +34,7 @@ export default async function StudentPage() {
     getFocusOverview(user.id),
     getTodayReviewPlan(user.id),
     getPlayerStatus(user.id),
+    getStudentGamificationVisibility(user.id),
   ]);
   const completedSessions = sessions.filter((session) => session.status === "COMPLETED");
   const activeSession = sessions.find((session) => session.status === "IN_PROGRESS");
@@ -43,7 +45,8 @@ export default async function StudentPage() {
   const weeklyAnswered = weeklySessions.reduce((sum, session) => sum + session.singleCountSnapshot + session.multipleCountSnapshot, 0);
   const activeDays = new Set(weeklySessions.map((session) => session.startedAt.toLocaleDateString("en-CA", { timeZone: "Asia/Shanghai" }))).size;
   const weakKnowledgeCount = new Set(wrongQuestions.map((item) => item.question.knowledgePointId)).size;
-  const showMap = playerStatus.mapEnabled && playerStatus.gamificationEnabled;
+  const showRpgPanel = gamificationVisibility.classGamificationEnabled;
+  const showMap = playerStatus.mapEnabled && gamificationVisibility.gamificationVisible;
   const availableLevels = levelRules.filter((rule) => { const pool = activeQuestions.filter((question) => question.levelId === rule.levelId); const singles = pool.filter((question) => question.type === "SINGLE_CHOICE").length; return singles >= rule.singleCount && pool.length - singles >= rule.multipleCount && rule.singleCount + rule.multipleCount > 0; });
   const availableKnowledge = knowledgeRules.filter((rule) => { const pool = activeQuestions.filter((question) => question.levelId === rule.levelId && (question.knowledgePoint.path === rule.knowledgePoint.path || question.knowledgePoint.path.startsWith(`${rule.knowledgePoint.path}/`))); const singles = pool.filter((question) => question.type === "SINGLE_CHOICE").length; return singles >= rule.singleCount && pool.length - singles >= rule.multipleCount && rule.singleCount + rule.multipleCount > 0; }).slice(0, 6);
   const primaryHref = activeSession ? `/student/practice?session=${activeSession.id}` : "/student/practice/start";
@@ -53,7 +56,8 @@ export default async function StudentPage() {
   return <AppShell role="student" currentPath="/student"><div className="safe-bottom"><PageHeader title={`欢迎回来，${user.displayName}`} description="训练频道、进度和错题信号均来自实时数据库；继续练习会自动定位第一道未答题。" eyebrow="PERSONAL SIGNAL DESK" />
     <section className="receiver-panel relative overflow-hidden rounded-[2rem]"><div className="grid lg:grid-cols-[1.02fr_.98fr]"><div className="relative z-10 flex flex-col justify-center p-7 sm:p-10 lg:p-12"><div className="flex flex-wrap items-center gap-3"><CallsignLabel value={`STU / ${(user.displayName || user.username).toUpperCase()}`} /><div className="flex items-center gap-2 text-xs font-bold text-[var(--primary)]"><Radio className="size-4" />当前优先训练</div></div><h2 className="mt-5 text-3xl font-black tracking-[-0.05em] sm:text-4xl">{primaryTitle}</h2><p className="mt-4 max-w-xl text-sm leading-8 text-[var(--muted-foreground)]">{primaryDescription}</p><div className="mt-6 flex items-center gap-3 text-xs text-[var(--muted-foreground)]"><SignalMeter value={activeSession ? 5 : 3} label="训练信号" />{activeSession ? "训练进度已锁定" : "等待选择训练频段"}</div><div className="mt-7"><Link href={primaryHref as never} className="inline-flex min-h-12 items-center gap-3 rounded-xl border border-cyan-100/20 bg-[var(--primary)] px-6 text-sm font-bold text-[var(--primary-foreground)] shadow-[0_14px_35px_rgba(92,225,230,.14)] transition hover:-translate-y-0.5">进入训练频道<ArrowRight className="size-4" /></Link></div><FrequencyScale active={activeSession ? 6 : 3} className="mt-8 max-w-md" /></div><div className="relative min-h-64 overflow-hidden lg:min-h-[410px]"><div className="absolute inset-0 z-10 bg-[linear-gradient(90deg,var(--surface)_0%,transparent_42%),linear-gradient(0deg,rgba(3,8,13,.72),transparent_58%)]" /><Artwork src="/art/student-direction-cabin-new.webp" alt="现代测向控制舱与频谱瀑布" sizes="(max-width: 1024px) 100vw, 48vw" preload variant="spectrum" /><div className="absolute bottom-5 right-5 z-20 rounded-xl border border-cyan-300/15 bg-black/45 px-4 py-3 backdrop-blur"><div className="font-radio text-[9px] tracking-[.14em] text-[var(--muted-foreground)]">WEEKLY SIGNAL</div><div className="mt-1 font-radio text-xl font-black text-[var(--primary)]">{accuracy}%</div></div></div></div></section>
     <section className="mt-8"><Card><CardContent className="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between"><div className="flex items-start gap-4"><div className="grid size-12 place-items-center rounded-2xl border border-amber-300/20 bg-amber-400/10 text-amber-200"><Flame className="size-5" /></div><div><div className="text-xs font-bold text-[var(--primary)]">FOCUS & STREAK</div><h2 className="mt-1 text-xl font-extrabold">专注模式与连续打卡</h2><p className="mt-2 text-sm leading-7 text-[var(--muted-foreground)]">今日专注 {focusOverview.todayFocusMinutes} 分钟 · 连续打卡 {focusOverview.currentStreak} 天 · {focusOverview.todayCheckedIn ? "今日已打卡" : "今日尚未打卡"}</p></div></div><Link href={"/student/focus" as never} className="inline-flex min-h-11 items-center gap-2 rounded-xl bg-[var(--primary)] px-5 text-sm font-bold text-[var(--primary-foreground)]">进入专注模式<Timer className="size-4" /></Link></CardContent></Card></section>
-    <section className="mt-8"><RpgPanel initial={playerStatus} /></section>
+    {showRpgPanel ? <section className="mt-8"><RpgPanel initial={playerStatus} /></section> : null}
+    <section className="mt-8"><AiDailyEncouragement /></section>
     {showMap ? <section className="mt-8"><Card><CardContent className="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between"><div className="flex items-start gap-4"><div className="grid size-12 place-items-center rounded-2xl border border-cyan-300/20 bg-cyan-300/10 text-[var(--primary)]"><Map className="size-5" /></div><div><div className="text-xs font-bold text-[var(--primary)]">KNOWLEDGE MAP</div><h2 className="mt-1 text-xl font-extrabold">学习地图与副本</h2><p className="mt-2 text-sm leading-7 text-[var(--muted-foreground)]">查看知识点点亮进度，从待攻克节点进入专项练习副本。</p></div></div><Link href={"/student/map" as never} className="inline-flex min-h-11 items-center gap-2 rounded-xl bg-[var(--primary)] px-5 text-sm font-bold text-[var(--primary-foreground)]">打开学习地图<ArrowRight className="size-4" /></Link></CardContent></Card></section> : null}
     <section className="mt-8"><ReviewPlanToday plan={reviewPlan} /></section>
     <section className="mt-8"><div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between"><div><div className="text-xs font-bold text-[var(--primary)]">TRAINING CHANNELS</div><h2 className="mt-1 text-xl font-extrabold">选择训练频道</h2></div><Link href="/student/practice/start" className="text-sm font-bold text-[var(--primary)]">打开统一启动器</Link></div>{availableLevels.length || availableKnowledge.length ? <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">{availableLevels.map((rule) => <ChannelCard key={rule.id} href={`/student/practice/start?mode=level&level=${rule.level.code}`} icon={Layers3} title={`${rule.level.code}级综合训练`} description="覆盖本等级所有启用知识点，适合完整检测。" meta={`单选 ${rule.singleCount} · 多选 ${rule.multipleCount}`} />)}{availableKnowledge.map((rule) => <ChannelCard key={rule.id} href={`/student/practice/start?mode=knowledge&level=${rule.level.code}&knowledge=${rule.knowledgePoint.id}`} icon={Target} title={rule.knowledgePoint.name} description="集中处理单一知识区域，缩短信号定位路径。" meta={`${rule.level.code}级 · ${rule.singleCount + rule.multipleCount} 题`} />)}</div> : <Card><EmptySignalState title="当前没有可用训练频道" description="教师需要补充题库库存或调整抽题规则后才能开始新的练习。" /></Card>}</section>

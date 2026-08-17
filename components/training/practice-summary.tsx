@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { AiMilestoneFeedback } from "@/components/ai-milestone-feedback";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { AiTutorChat } from "@/components/training/ai-tutor-chat";
@@ -71,6 +72,11 @@ export function PracticeSummary({
             <p className="mt-1 text-sm text-[var(--muted-foreground)]">最终正确率转化为对 Boss 的伤害，达到通关线即可击败 Boss。</p>
           </div>
           <BossBattle mode="result" correct={boss.correct} total={boss.total} passingCount={boss.passingCount} />
+          {boss.correct >= boss.passingCount ? (
+            <div className="mt-4">
+              <AiMilestoneFeedback event={{ type: "BOSS_CLEAR", correct: boss.correct, total: boss.total, passed: true }} />
+            </div>
+          ) : null}
         </section>
       ) : null}
       {wrongQuestions.length > 0 ? (

@@ -296,6 +296,14 @@ describe("MySQL project configuration", () => {
     expect(schema).toMatch(/mapEnabled\s+Boolean\s+@default\(true\)/);
     expect(migration).not.toMatch(/DROP TABLE `PlayerProfile`|DELETE FROM `PlayerProfile`/);
   });
+  it("adds the teacher-controlled class gamification display switch to Grade", () => {
+    const migration = fs.readFileSync(path.resolve("prisma/migrations/20260820000000_class_gamification_switch/migration.sql"), "utf8");
+    const schema = fs.readFileSync(path.resolve("prisma/schema.prisma"), "utf8");
+
+    expect(migration).toContain("ALTER TABLE `Grade` ADD COLUMN `gamificationEnabled` BOOLEAN NOT NULL DEFAULT true");
+    expect(schema).toMatch(/gamificationEnabled\s+Boolean\s+@default\(true\)/);
+    expect(migration).not.toMatch(/DROP TABLE `Grade`|DELETE FROM `Grade`/);
+  });
 });
 
 describe("MySQL database URL protection", () => {

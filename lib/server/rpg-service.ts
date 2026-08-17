@@ -143,6 +143,23 @@ export async function getTodayQuests(
   return quests.map(toPublicQuest);
 }
 
+export async function getStudentGamificationVisibility(
+  userId: string,
+): Promise<{ classGamificationEnabled: boolean; gamificationVisible: boolean }> {
+  const [user, profile] = await Promise.all([
+    prisma.user.findUnique({
+      where: { id: userId },
+      select: { grade: { select: { gamificationEnabled: true } } },
+    }),
+    ensurePlayerProfile(prisma, userId),
+  ]);
+  const classGamificationEnabled = user?.grade?.gamificationEnabled ?? true;
+  return {
+    classGamificationEnabled,
+    gamificationVisible: profile.gamificationEnabled && classGamificationEnabled,
+  };
+}
+
 export async function completeQuest(userId: string, questId: string): Promise<PublicQuest> {
   const existing = await prisma.questLog.findFirst({ where: { id: questId, userId } });
   if (!existing) throw new ApiError("任务不存在", 404);

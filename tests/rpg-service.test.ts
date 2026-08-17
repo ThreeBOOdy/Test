@@ -10,11 +10,15 @@ const mocks = vi.hoisted(() => ({
   questFindFirst: vi.fn(),
   questUpdate: vi.fn(),
   xpLogCreate: vi.fn(),
+  userFindUnique: vi.fn(),
   transaction: vi.fn(),
 }));
 
 vi.mock("@/lib/db", () => ({
   prisma: {
+    user: {
+      findUnique: mocks.userFindUnique,
+    },
     playerProfile: {
       upsert: mocks.profileUpsert,
       update: mocks.profileUpdate,
@@ -43,6 +47,7 @@ import {
   awardWrongClearCompletion,
   completeQuest,
   getPlayerStatus,
+  getStudentGamificationVisibility,
   getTodayQuests,
   setGamificationEnabled,
   setMapEnabled,
@@ -153,6 +158,35 @@ describe("rpg service", () => {
         create: { userId: "user-1", mapEnabled: false },
       });
       expect(result.mapEnabled).toBe(false);
+    });
+  });
+
+  describe("getStudentGamificationVisibility", () => {
+    it("returns visible when both student and class are enabled", async () => {
+      mocks.userFindUnique.mockResolvedValue({ grade: { gamificationEnabled: true } });
+      mocks.profileUpsert.mockResolvedValue(profile);
+
+      const result = await getStudentGamificationVisibility("user-1");
+
+      expect(result).toEqual({ classGamificationEnabled: true, gamificationVisible: true });
+    });
+
+    it("hides gamification when the class disables it even if the student is enabled", async () => {
+      mocks.userFindUnique.mockResolvedValue({ grade: { gamificationEnabled: false } });
+      mocks.profileUpsert.mockResolvedValue(profile);
+
+      const result = await getStudentGamificationVisibility("user-1");
+
+      expect(result).toEqual({ classGamificationEnabled: false, gamificationVisible: false });
+    });
+
+    it("hides gamification when the student disables it", async () => {
+      mocks.userFindUnique.mockResolvedValue({ grade: { gamificationEnabled: true } });
+      mocks.profileUpsert.mockResolvedValue({ ...profile, gamificationEnabled: false });
+
+      const result = await getStudentGamificationVisibility("user-1");
+
+      expect(result).toEqual({ classGamificationEnabled: true, gamificationVisible: false });
     });
   });
 

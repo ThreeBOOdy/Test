@@ -1,7 +1,7 @@
 # J-Space Workspace Ledger
 
 ## Goal
-完成 11 知识点地图/副本/Boss 战（含地图/副本/Boss反馈/隐藏入口/测试）
+完成 12 整合验收：游戏化开关(学生+班级)、AI 鼓励/里程碑反馈、端到端旅程与降级验收
 
 ## Core
 - 10 RPG 数据模型 — PlayerProfile/PlayerLevel/QuestLog/XpLog 与迁移
@@ -35,4 +35,4 @@
 - ?01 当前用户量和题库量是否足够支撑 FSRS/MCP 等后期功能 — settled by: 用现有统计数据或种子数据量估算，再决定是否提前建设
 
 ## Next
-进入 12 整合验收
+提交 12 号票并运行完整回归/最终验收
