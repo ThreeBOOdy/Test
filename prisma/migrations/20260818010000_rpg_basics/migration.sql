@@ -14,7 +14,7 @@ CREATE TABLE `PlayerProfile` (
     UNIQUE INDEX `PlayerProfile_userId_key`(`userId`),
     INDEX `PlayerProfile_level_idx`(`level`),
     PRIMARY KEY (`id`)
-) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci;
 
 CREATE TABLE `PlayerLevel` (
     `id` VARCHAR(191) NOT NULL,
@@ -27,7 +27,7 @@ CREATE TABLE `PlayerLevel` (
     UNIQUE INDEX `PlayerLevel_level_key`(`level`),
     INDEX `PlayerLevel_xpRequired_idx`(`xpRequired`),
     PRIMARY KEY (`id`)
-) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci;
 
 CREATE TABLE `QuestLog` (
     `id` VARCHAR(191) NOT NULL,
@@ -45,7 +45,7 @@ CREATE TABLE `QuestLog` (
     UNIQUE INDEX `QuestLog_userId_questDate_type_key`(`userId`, `questDate`, `type`),
     INDEX `QuestLog_userId_questDate_status_idx`(`userId`, `questDate`, `status`),
     PRIMARY KEY (`id`)
-) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci;
 
 CREATE TABLE `XpLog` (
     `id` VARCHAR(191) NOT NULL,
@@ -58,7 +58,7 @@ CREATE TABLE `XpLog` (
 
     INDEX `XpLog_userId_createdAt_idx`(`userId`, `createdAt`),
     PRIMARY KEY (`id`)
-) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci;
 
 -- AddForeignKey
 ALTER TABLE `PlayerProfile` ADD CONSTRAINT `PlayerProfile_userId_fkey` FOREIGN KEY (`userId`) REFERENCES `User`(`id`) ON DELETE CASCADE ON UPDATE CASCADE;

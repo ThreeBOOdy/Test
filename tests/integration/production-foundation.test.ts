@@ -16,12 +16,25 @@ beforeAll(() => {
 });
 
 beforeEach(async () => {
+  await prisma.aiMessage.deleteMany();
+  await prisma.aiConversation.deleteMany();
+  await prisma.reviewCard.deleteMany();
+  await prisma.reviewPlan.deleteMany();
+  await prisma.focusSession.deleteMany();
+  await prisma.playerProfile.deleteMany();
+  await prisma.playerLevel.deleteMany();
+  await prisma.questLog.deleteMany();
+  await prisma.xpLog.deleteMany();
+  await prisma.aiUsageLog.deleteMany();
   await prisma.authSession.deleteMany();
+  await prisma.studentActivation.deleteMany();
   await prisma.studentImportRow.deleteMany();
   await prisma.studentImportBatch.deleteMany();
   await prisma.studentReviewRecord.deleteMany();
+  await prisma.sensitiveDataReauthenticationAttempt.deleteMany();
   await prisma.auditLog.deleteMany();
   await prisma.loginAttempt.deleteMany();
+  await prisma.examDraft.deleteMany();
   await prisma.practiceAnswer.deleteMany();
   await prisma.practiceSessionQuestion.deleteMany();
   await prisma.practiceSession.deleteMany();
@@ -38,6 +51,7 @@ beforeEach(async () => {
   await deleteKnowledgePoints();
   await prisma.level.deleteMany();
   await prisma.user.deleteMany();
+  await prisma.radioPerson.deleteMany();
   await prisma.grade.deleteMany();
 });
 

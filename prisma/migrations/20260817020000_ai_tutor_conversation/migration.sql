@@ -11,7 +11,7 @@ CREATE TABLE `AiConversation` (
     INDEX `AiConversation_questionId_updatedAt_idx`(`questionId`, `updatedAt`),
     INDEX `AiConversation_practiceSessionId_updatedAt_idx`(`practiceSessionId`, `updatedAt`),
     PRIMARY KEY (`id`)
-) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci;
 
 -- CreateTable
 CREATE TABLE `AiMessage` (
@@ -24,7 +24,7 @@ CREATE TABLE `AiMessage` (
 
     INDEX `AiMessage_conversationId_createdAt_idx`(`conversationId`, `createdAt`),
     PRIMARY KEY (`id`)
-) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci;
 
 -- AddForeignKey
 ALTER TABLE `AiConversation` ADD CONSTRAINT `AiConversation_userId_fkey` FOREIGN KEY (`userId`) REFERENCES `User`(`id`) ON DELETE CASCADE ON UPDATE CASCADE;

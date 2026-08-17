@@ -17,7 +17,7 @@ CREATE TABLE `ReviewPlan` (
     INDEX `ReviewPlan_userId_planDate_status_idx`(`userId`, `planDate`, `status`),
     INDEX `ReviewPlan_userId_type_status_idx`(`userId`, `type`, `status`),
     PRIMARY KEY (`id`)
-) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci;
 
 CREATE TABLE `ReviewCard` (
     `id` VARCHAR(191) NOT NULL,
@@ -36,7 +36,7 @@ CREATE TABLE `ReviewCard` (
     INDEX `ReviewCard_questionId_status_idx`(`questionId`, `status`),
     INDEX `ReviewCard_knowledgePointId_status_idx`(`knowledgePointId`, `status`),
     PRIMARY KEY (`id`)
-) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci;
 
 -- AddForeignKey
 ALTER TABLE `ReviewPlan` ADD CONSTRAINT `ReviewPlan_userId_fkey` FOREIGN KEY (`userId`) REFERENCES `User`(`id`) ON DELETE CASCADE ON UPDATE CASCADE;

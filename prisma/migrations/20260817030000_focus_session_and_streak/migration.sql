@@ -15,7 +15,7 @@ CREATE TABLE `FocusSession` (
     INDEX `FocusSession_userId_status_startedAt_idx`(`userId`, `status`, `startedAt`),
     INDEX `FocusSession_userId_endedAt_idx`(`userId`, `endedAt`),
     PRIMARY KEY (`id`)
-) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci;
 
 -- AddForeignKey
 ALTER TABLE `FocusSession` ADD CONSTRAINT `FocusSession_userId_fkey` FOREIGN KEY (`userId`) REFERENCES `User`(`id`) ON DELETE CASCADE ON UPDATE CASCADE;
