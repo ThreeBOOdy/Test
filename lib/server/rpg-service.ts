@@ -68,11 +68,22 @@ function toPublicQuest(row: QuestRow): PublicQuest {
 }
 
 async function ensurePlayerProfile(db: DbClient, userId: string) {
-  return db.playerProfile.upsert({
-    where: { userId },
-    update: {},
-    create: { userId },
-  });
+  try {
+    return await db.playerProfile.upsert({
+      where: { userId },
+      update: {},
+      create: { userId },
+    });
+  } catch (error) {
+    // Two concurrent requests can both try to create the first profile for the
+    // same user (e.g. StudentPage loads gamification status and player status in
+    // parallel). One upsert wins; the other sees P2002 and returns the winner.
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
+      const existing = await db.playerProfile.findUnique({ where: { userId } });
+      if (existing) return existing;
+    }
+    throw error;
+  }
 }
 
 async function ensureTodayQuests(
