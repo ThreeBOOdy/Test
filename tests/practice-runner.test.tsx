@@ -78,6 +78,52 @@ describe("PracticeRunner", () => {
     expect(screen.getByRole("heading", { name: "训练完成" })).toBeInTheDocument();
   });
 
+  it("auto-expands approved explanation after a wrong answer", async () => {
+    const user = userEvent.setup();
+    const question = practiceSessionFixture().questions[0];
+    vi.mocked(fetch).mockResolvedValue(new Response(JSON.stringify({ isCorrect: false, correctOptionIds: ["A"], selectedOptionIds: ["B"], answeredCount: 1, correctCount: 0, explanation: { summary: "因为中继台需避开航空业务", knowledge: "题干考察中继台频率规划", memory: "航空业务优先" } }), { status: 200, headers: { "Content-Type": "application/json" } }));
+    render(<PracticeRunner session={practiceSessionFixture({ questions: [question], total: 1 })} />);
+
+    await user.click(screen.getByRole("radio", { name: /每秒三十万千米/ }));
+    await user.click(screen.getAllByRole("button", { name: "提交答案" })[0]);
+
+    expect(await screen.findByText("一句话解析")).toBeInTheDocument();
+    expect(screen.getByText("知识点讲解")).toBeInTheDocument();
+    expect(screen.getByText("记忆点")).toBeInTheDocument();
+    expect(screen.queryByText("老师正在补充解析，请稍后再来看看。")).not.toBeInTheDocument();
+  });
+
+  it("keeps approved explanation collapsed after a correct answer and opens on demand", async () => {
+    const user = userEvent.setup();
+    const question = practiceSessionFixture().questions[0];
+    vi.mocked(fetch).mockResolvedValue(new Response(JSON.stringify({ isCorrect: true, correctOptionIds: ["A"], selectedOptionIds: ["A"], answeredCount: 1, correctCount: 1, explanation: { summary: "因为中继台需避开航空业务", knowledge: "题干考察中继台频率规划", memory: "航空业务优先" } }), { status: 200, headers: { "Content-Type": "application/json" } }));
+    render(<PracticeRunner session={practiceSessionFixture({ questions: [question], total: 1 })} />);
+
+    await user.click(screen.getByRole("radio", { name: /每秒三十万千米/ }));
+    await user.click(screen.getAllByRole("button", { name: "提交答案" })[0]);
+
+    const toggle = await screen.findByRole("button", { name: "查看解析" });
+    expect(toggle).toHaveAttribute("aria-expanded", "false");
+    expect(screen.queryByText("一句话解析")).not.toBeInTheDocument();
+
+    await user.click(toggle);
+    expect(screen.getByText("一句话解析")).toBeInTheDocument();
+    expect(screen.getByText("知识点讲解")).toBeInTheDocument();
+    expect(screen.getByText("记忆点")).toBeInTheDocument();
+  });
+
+  it("shows the friendly placeholder when no approved explanation is available", async () => {
+    const user = userEvent.setup();
+    const question = practiceSessionFixture().questions[0];
+    vi.mocked(fetch).mockResolvedValue(new Response(JSON.stringify({ isCorrect: false, correctOptionIds: ["A"], selectedOptionIds: ["B"], answeredCount: 1, correctCount: 0, explanation: null }), { status: 200, headers: { "Content-Type": "application/json" } }));
+    render(<PracticeRunner session={practiceSessionFixture({ questions: [question], total: 1 })} />);
+
+    await user.click(screen.getByRole("radio", { name: /每秒三十万千米/ }));
+    await user.click(screen.getAllByRole("button", { name: "提交答案" })[0]);
+
+    expect(await screen.findByText("老师正在补充解析，请稍后再来看看。")).toBeInTheDocument();
+  });
+
   it("submits mock exam answers together and shows the pass result", async () => {
     const user = userEvent.setup();
     const question = practiceSessionFixture().questions[0];
