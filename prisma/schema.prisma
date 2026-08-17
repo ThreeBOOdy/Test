@@ -75,6 +75,18 @@ enum FocusSessionStatus {
   ABANDONED
 }
 
+enum QuestType {
+  PRACTICE
+  REVIEW
+  WRONG_CLEAR
+  FOCUS
+}
+
+enum QuestStatus {
+  IN_PROGRESS
+  COMPLETED
+}
+
 enum ReviewPlanType {
   DAILY
   EXAM_SPRINT
@@ -164,6 +176,9 @@ model User {
   questionExplanationReviews Question[]                 @relation("QuestionExplanationReviewedBy")
   aiUsageLogs                AiUsageLog[]
   aiConversations            AiConversation[]
+  playerProfile              PlayerProfile?
+  questLogs                  QuestLog[]
+  xpLogs                     XpLog[]
   createdAt                  DateTime                   @default(now())
   updatedAt                  DateTime                   @updatedAt
 
@@ -446,6 +461,62 @@ model FocusSession {
 
   @@index([userId, status, startedAt])
   @@index([userId, endedAt])
+}
+
+model PlayerProfile {
+  id                  String   @id @default(cuid())
+  userId              String   @unique
+  user                User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  xp                  Int      @default(0)
+  level               Int      @default(1)
+  title               String   @default("见习报务员")
+  gamificationEnabled Boolean  @default(true)
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  @@index([level])
+}
+
+model PlayerLevel {
+  id         String   @id @default(cuid())
+  level      Int      @unique
+  title      String
+  xpRequired Int
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([xpRequired])
+}
+
+model QuestLog {
+  id          String      @id @default(cuid())
+  userId      String
+  user        User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  questDate   DateTime    @db.Date
+  type        QuestType
+  target      Int
+  progress    Int         @default(0)
+  status      QuestStatus @default(IN_PROGRESS)
+  xpReward    Int         @default(0)
+  completedAt DateTime?
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+
+  @@unique([userId, questDate, type])
+  @@index([userId, questDate, status])
+}
+
+model XpLog {
+  id         String   @id @default(cuid())
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  amount     Int
+  reason     String
+  sourceType String?
+  sourceId   String?
+  createdAt  DateTime @default(now())
+
+  @@index([userId, createdAt])
 }
 
 model ExamDraft {

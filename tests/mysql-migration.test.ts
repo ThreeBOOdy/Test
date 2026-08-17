@@ -264,6 +264,30 @@ describe("MySQL project configuration", () => {
     expect(schema).toMatch(/reviewPlans\s+ReviewPlan\[\]/);
     expect(schema).toMatch(/reviewCards\s+ReviewCard\[\]/);
   });
+  it("adds light RPG player profile, level ladder, quest log and XP audit tables", () => {
+    const migration = fs.readFileSync(path.resolve("prisma/migrations/20260818010000_rpg_basics/migration.sql"), "utf8");
+    const schema = fs.readFileSync(path.resolve("prisma/schema.prisma"), "utf8");
+
+    expect(migration).toContain("CREATE TABLE `PlayerProfile`");
+    expect(migration).toContain("CREATE TABLE `PlayerLevel`");
+    expect(migration).toContain("CREATE TABLE `QuestLog`");
+    expect(migration).toContain("CREATE TABLE `XpLog`");
+    expect(migration).toContain("ENUM('PRACTICE', 'REVIEW', 'WRONG_CLEAR', 'FOCUS')");
+    expect(migration).toContain("ENUM('IN_PROGRESS', 'COMPLETED')");
+    expect(migration).toContain("FOREIGN KEY (`userId`) REFERENCES `User`(`id`) ON DELETE CASCADE");
+    expect(migration).toContain("'player-level-1', 1, '见习报务员', 0");
+    expect(migration).toContain("'player-level-10', 10, '无线电大师', 4000");
+    expect(migration).toContain("INSERT INTO `PlayerProfile`");
+    expect(migration).not.toMatch(/DROP TABLE `(Question|User|PlayerProfile|QuestLog)`|DELETE FROM `Question`/);
+
+    expect(schema).toContain("model PlayerProfile {");
+    expect(schema).toContain("model PlayerLevel {");
+    expect(schema).toContain("model QuestLog {");
+    expect(schema).toContain("model XpLog {");
+    expect(schema).toMatch(/playerProfile\s+PlayerProfile\?/);
+    expect(schema).toMatch(/questLogs\s+QuestLog\[\]/);
+    expect(schema).toMatch(/xpLogs\s+XpLog\[\]/);
+  });
 });
 
 describe("MySQL database URL protection", () => {

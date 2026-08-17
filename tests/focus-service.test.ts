@@ -7,6 +7,11 @@ const mocks = vi.hoisted(() => ({
   focusUpdate: vi.fn(),
   practiceFindMany: vi.fn(),
   reviewFindMany: vi.fn(),
+  awardFocusCompletion: vi.fn(),
+}));
+
+vi.mock("@/lib/server/rpg-service", () => ({
+  awardFocusCompletion: mocks.awardFocusCompletion,
 }));
 
 vi.mock("@/lib/db", () => ({
@@ -72,6 +77,7 @@ describe("startFocusSession", () => {
   beforeEach(() => {
     mocks.focusFindFirst.mockReset();
     mocks.focusCreate.mockReset();
+    mocks.awardFocusCompletion.mockReset();
     mocks.focusFindFirst.mockResolvedValue(null);
     mocks.focusCreate.mockResolvedValue({ ...baseSession, id: "focus-new", targetMinutes: 30 });
   });
@@ -114,6 +120,7 @@ describe("completeFocusSession", () => {
   beforeEach(() => {
     mocks.focusFindFirst.mockReset();
     mocks.focusUpdate.mockReset();
+    mocks.awardFocusCompletion.mockReset();
     mocks.focusFindFirst.mockResolvedValue(baseSession);
     mocks.focusUpdate.mockImplementation(async (args: { data: Record<string, unknown> }) => ({
       ...baseSession,
@@ -185,6 +192,7 @@ describe("getFocusOverview", () => {
     mocks.focusUpdate.mockReset();
     mocks.practiceFindMany.mockReset();
     mocks.reviewFindMany.mockReset();
+    mocks.awardFocusCompletion.mockReset();
     mocks.focusFindFirst.mockResolvedValue(null);
     mocks.focusFindMany.mockResolvedValue([]);
     mocks.practiceFindMany.mockResolvedValue([]);

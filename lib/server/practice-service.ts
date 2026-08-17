@@ -7,6 +7,7 @@ import { selectPracticeQuestions, selectPrioritizedRandomQuestions, shuffle, sor
 import { createQuestionSnapshot, gradeQuestionSnapshot, toPublicQuestionSnapshot, type QuestionSnapshot } from "@/lib/domain/practice-snapshot";
 import { advanceWrongQuestionMastery } from "@/lib/domain/wrong-question-mastery";
 import { completeReviewCardsForSession } from "@/lib/server/review-plan-service";
+import { awardPracticeCompletion, awardWrongClearCompletion } from "@/lib/server/rpg-service";
 import { parseStudentExplanation, type StudentExplanation } from "@/lib/domain/student-explanation";
 import type { ExamRule, PracticeMode, PublicAnswerResult, PublicExamResult, PublicPracticeSession, Question, QuestionOption } from "@/lib/domain/types";
 
@@ -184,6 +185,7 @@ export async function submitPracticeAnswer(userId: string, sessionId: string, qu
       if (completedAt) {
         await settleWrongQuestionMastery(tx, userId, sessionId);
         await completeReviewCardsForSession(userId, sessionId, tx);
+        await awardPracticeCompletion(tx, userId, answeredCount, sessionId);
       }
       return { isCorrect, correctOptionIds: snapshot.correctOptionIds, selectedOptionIds, answeredCount, correctCount };
     });
@@ -264,6 +266,7 @@ async function settleMockExam(userId: string, sessionId: string, submittedAnswer
     await tx.practiceSession.update({ where: { id: sessionId }, data: { status: "COMPLETED", currentIndex: graded.length, correctCount, completedAt: now, examSettlementSource: settlementSource } });
     await settleWrongQuestionMastery(tx, userId, sessionId);
     await completeReviewCardsForSession(userId, sessionId, tx);
+    await awardPracticeCompletion(tx, userId, graded.length, sessionId);
     await tx.examDraft.deleteMany({ where: { sessionId } });
     return toPublicExamResult(correctCount, graded.length, session.passingCountSnapshot ?? graded.length, now, settlementSource);
   });
@@ -386,10 +389,12 @@ async function settleWrongQuestionMastery(tx: Prisma.TransactionClient, userId: 
     include: { answers: true },
   });
   if (!session) return;
+  let newlyMasteredCount = 0;
   for (const answer of session.answers) {
     const current = await tx.wrongQuestion.findUnique({ where: { userId_questionId: { userId, questionId: answer.questionId } } });
     if (!current && answer.isCorrect) continue;
     const next = advanceWrongQuestionMastery(current ?? { correctSessionCount: 0, mastered: false, lastCountedSessionId: null }, answer.isCorrect ? "CORRECT" : "WRONG", sessionId);
+    if (next.mastered && !(current?.mastered ?? false)) newlyMasteredCount += 1;
     const wrongReason = answer.isCorrect ? null : parseJsonStringArray(answer.selectedOptionIds, "selectedOptionIds").length ? "ANSWERED_WRONG" : "UNANSWERED";
     const shouldIncrementWrongCount = !answer.isCorrect && session.mode === "MOCK_EXAM";
     await tx.wrongQuestion.upsert({
@@ -397,6 +402,9 @@ async function settleWrongQuestionMastery(tx: Prisma.TransactionClient, userId: 
       update: { ...(answer.isCorrect ? {} : { ...(shouldIncrementWrongCount ? { wrongCount: { increment: 1 } } : {}), lastWrongReason: wrongReason, lastWrongAt: new Date() }), correctSessionCount: next.correctSessionCount, mastered: next.mastered, lastCountedSessionId: next.lastCountedSessionId, masteredAt: next.mastered ? current?.masteredAt ?? new Date() : null },
       create: { userId, questionId: answer.questionId, wrongCount: answer.isCorrect ? 1 : 1, lastWrongReason: wrongReason, correctSessionCount: next.correctSessionCount, mastered: next.mastered, lastCountedSessionId: next.lastCountedSessionId, masteredAt: next.mastered ? new Date() : null },
     });
+  }
+  if (newlyMasteredCount > 0) {
+    await awardWrongClearCompletion(tx, userId, newlyMasteredCount, sessionId);
   }
 }
 

@@ -4,6 +4,7 @@ import { ApiError } from "@/lib/domain/api-error";
 import type { FocusOverview, FocusSessionStatus, PublicFocusSession } from "@/lib/domain/types";
 import { getBusinessTimeZone } from "@/lib/server/env";
 import { getBusinessDate } from "@/lib/server/time";
+import { awardFocusCompletion } from "@/lib/server/rpg-service";
 
 export type StartFocusInput = {
   targetMinutes?: number;
@@ -74,6 +75,9 @@ export async function completeFocusSession(userId: string, sessionId: string, in
       endedAt,
     },
   });
+  if (input.completed) {
+    await awardFocusCompletion(prisma, userId, sessionId);
+  }
   return toPublicFocusSession(updated);
 }
 

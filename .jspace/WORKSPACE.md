@@ -1,9 +1,12 @@
 # J-Space Workspace Ledger
 
 ## Goal
-M1 AI 扩展完成并提交（03-09，06 含路由/UI/测试）
+M1 AI 扩展 + 10 轻度 RPG 基础完成并提交（03-10，含模型/规则/API/UI/测试）
 
 ## Core
+- 10 RPG 数据模型 — PlayerProfile/PlayerLevel/QuestLog/XpLog 与迁移
+- 10 XP 规则 — 练习/复习/专注/错题清零自动发放 XP，每日任务进度自动累计
+- 10 API/UI — 玩家状态、今日任务、领取奖励、游戏化开关 + 学生首页 RPG 面板
 - 05 学生端解析展示 — 练习/错题页只展示 APPROVED 解析
 - 安全边界 — DRAFT/REJECTED 解析永不进入学生端
 - 08 报告服务 — lib/server/ai/report.ts 基于 learning-statistics-service 生成学生周报/教师班级报告
@@ -25,9 +28,10 @@ M1 AI 扩展完成并提交（03-09，06 含路由/UI/测试）
 - ✓11 05 学生端解析展示已实现：练习提交后/错题本展示 APPROVED 解析，DRAFT/REJECTED 不注入 — verified by: tsc --noEmit + eslint + vitest cases: student-explanation-card 3, practice-runner 11 including all new explanation tests
 - ✓12 09 专注模式与连续打卡：FocusSession 模型/迁移 + streak 计算 + API + 学生首页 + 服务层测试 — verified by: prisma validate + tsc --noEmit + eslint + vitest focus-service 18/route 5/migration 22
 - ✓13 06 AI 答疑教练已实现：AiConversation/AiMessage + tutor + SSE + 反馈 + 学生端 UI + 测试 — verified by: tsc --noEmit + eslint + vitest 50 cases (ai-tutor/route/chat/mysql-migration/repository-quality)
+- ✓14 10 轻度 RPG 基础已实现：PlayerProfile/PlayerLevel/QuestLog/XpLog 模型与迁移、XP 规则接入练习/复习/专注/错题清零、状态/任务/领取/开关 API、学生首页 RPG 面板与开关 — verified by: prisma validate + tsc --noEmit + eslint + vitest 58 cases (rpg service/route/panel + focus regression + mysql-migration)
 
 ## Open
 - ?01 当前用户量和题库量是否足够支撑 FSRS/MCP 等后期功能 — settled by: 用现有统计数据或种子数据量估算，再决定是否提前建设
 
 ## Next
-进入 10 RPG 基础或 12 整合验收
+进入 11 知识点地图/副本 或 12 整合验收

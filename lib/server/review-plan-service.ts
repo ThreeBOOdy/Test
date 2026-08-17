@@ -16,6 +16,7 @@ import type {
   ReviewCardStatus,
   ReviewPlanType,
 } from "@/lib/domain/review-plan";
+import { awardReviewCompletion } from "@/lib/server/rpg-service";
 import { getBusinessDate } from "@/lib/server/time";
 
 const WEAK_KNOWLEDGE_WINDOW_DAYS = 14;
@@ -273,6 +274,7 @@ export async function completeReviewCard(userId: string, planId: string, cardId:
         data: { status: "COMPLETED", completedAt: now },
       });
     }
+    await awardReviewCompletion(tx, userId, 1, cardId);
     return toPublicCard(updated);
   });
 }
@@ -318,6 +320,7 @@ export async function completeReviewCardsForSession(
       plansCompleted += 1;
     }
   }
+  await awardReviewCompletion(db, userId, cards.length, sessionId);
   return { completed: cards.length, plansCompleted };
 }
 
