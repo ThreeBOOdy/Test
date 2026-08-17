@@ -187,6 +187,51 @@ th, td { border-color: var(--border) !important; }
 }
 
 @media (min-width: 1024px) { .safe-bottom { padding-bottom: 2rem; } }
+/* ---------- 入场与滚动显现动效 ---------- */
+.reveal { opacity: 0; transition: opacity .8s cubic-bezier(.22,1,.36,1), transform .8s cubic-bezier(.22,1,.36,1); will-change: opacity, transform; }
+.reveal--from-up { transform: translateY(30px); }
+.reveal--from-left { transform: translateX(-34px); }
+.reveal--from-right { transform: translateX(34px); }
+.reveal--from-scale { transform: scale(.94) translateY(14px); }
+.reveal--shown { opacity: 1; transform: none; }
+
+@keyframes rise-in { from { opacity: 0; transform: translateY(34px); } to { opacity: 1; transform: none; } }
+.rise { opacity: 0; animation: rise-in .9s cubic-bezier(.22,1,.36,1) forwards; }
+.rise-1 { animation-delay: .05s; } .rise-2 { animation-delay: .16s; } .rise-3 { animation-delay: .28s; }
+.rise-4 { animation-delay: .42s; } .rise-5 { animation-delay: .56s; } .rise-6 { animation-delay: .72s; }
+
+@keyframes float-y { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-9px); } }
+.float-y { animation: float-y 5.5s ease-in-out infinite; }
+
+@keyframes marquee-x { from { transform: translateX(0); } to { transform: translateX(-50%); } }
+.marquee-x { animation: marquee-x 30s linear infinite; }
+
+/* ---------- 文本与按钮质感 ---------- */
+.hero-gradient-text {
+  background: linear-gradient(100deg, var(--primary) 5%, #a5f3f0 42%, var(--signal-amber) 95%);
+  -webkit-background-clip: text; background-clip: text; color: transparent;
+  filter: drop-shadow(0 0 26px rgba(92,225,230,.22));
+}
+.glow-btn { position: relative; overflow: hidden; }
+.glow-btn::after {
+  content: ""; position: absolute; inset: 0; pointer-events: none;
+  background: linear-gradient(105deg, transparent 32%, rgba(255,255,255,.32) 50%, transparent 68%);
+  transform: translateX(-130%); transition: transform .7s cubic-bezier(.22,1,.36,1);
+}
+.glow-btn:hover::after { transform: translateX(130%); }
+
+/* ---------- 3D 倾斜卡片 ---------- */
+.tilt-card { transition: transform .45s cubic-bezier(.22,1,.36,1); transform-style: preserve-3d; }
+.tilt-card::after {
+  content: ""; position: absolute; inset: 0; border-radius: inherit; pointer-events: none; opacity: 0;
+  background: radial-gradient(420px circle at var(--tilt-glow-x, 50%) var(--tilt-glow-y, 50%), rgba(92,225,230,.14), transparent 65%);
+  transition: opacity .35s ease;
+}
+.tilt-card:hover::after { opacity: 1; }
+
+/* ---------- 玻璃拟态顶栏 ---------- */
+.glass-bar { background: rgba(4, 9, 15, .62); backdrop-filter: blur(22px) saturate(1.3); -webkit-backdrop-filter: blur(22px) saturate(1.3); }
+
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {
     scroll-behavior: auto !important;

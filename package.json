@@ -12,6 +12,7 @@
     "test:integration": "vitest run --config vitest.integration.config.ts",
     "test:e2e": "playwright test",
     "exam:settlement-worker": "node --conditions=react-server --import tsx scripts/exam-settlement-worker.ts",
+    "ai:explain": "node --conditions=react-server --import tsx scripts/ai-explanation-worker.ts",
     "test:watch": "vitest",
     "backup": "tsx scripts/backup-cli.ts backup",
     "backup:cleanup": "tsx scripts/backup-cli.ts cleanup",
@@ -41,6 +42,7 @@
     "react-dom": "19.2.7",
     "server-only": "^0.0.1",
     "tailwind-merge": "3.6.0",
+    "three": "^0.182.0",
     "zod": "4.4.3"
   },
   "devDependencies": {
@@ -52,6 +54,7 @@
     "@types/node": "26.1.1",
     "@types/react": "19.2.17",
     "@types/react-dom": "19.2.3",
+    "@types/three": "^0.182.0",
     "eslint": "9.39.2",
     "eslint-config-next": "16.2.10",
     "jsdom": "^29.1.1",

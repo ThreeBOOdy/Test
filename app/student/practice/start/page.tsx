@@ -21,7 +21,7 @@ export default async function PracticeStartPage({ searchParams }: { searchParams
   if (params.mode) {
     const launch = normalizePracticeLaunch(params);
     const session = await createPracticeSession(user.id,
-      launch.mode === "WRONG_QUESTION" ? { mode: "wrong" }
+      launch.mode === "WRONG_QUESTION" ? { mode: "wrong", questionId: launch.questionId }
         : launch.mode === "KNOWLEDGE_POINT" ? { mode: "knowledge", levelCode: launch.levelCode ?? "A", knowledgePointId: launch.knowledgePointId ?? "" }
           : launch.mode === "QUESTION_ORDER" ? { mode: "order", levelCode: launch.levelCode ?? "A" }
             : launch.mode === "RANDOM_ALL" ? { mode: "random", levelCode: launch.levelCode ?? "A" }

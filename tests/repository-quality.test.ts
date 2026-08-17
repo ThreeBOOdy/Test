@@ -113,6 +113,8 @@ describe("repository release quality", () => {
       "app/api/v1/practice-sessions/route.ts",
       "app/api/v1/practice-sessions/[id]/answers/route.ts",
       "app/api/v1/practice-sessions/[id]/submit/route.ts",
+      "app/api/v1/review-plans/today/route.ts",
+      "app/api/v1/review-plans/[planId]/cards/[cardId]/complete/route.ts",
     ];
 
     for (const file of teachingRoutes) {

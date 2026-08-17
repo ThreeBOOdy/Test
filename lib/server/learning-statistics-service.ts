@@ -10,6 +10,11 @@ export type LearningStatistics = {
   students: { displayName: string; completedSessions: number; answered: number; correct: number; accuracy: number }[];
 };
 
+export type StudentLearningStatistics = {
+  summary: { completedSessions: number; answered: number; correct: number; accuracy: number; totalMinutes: number };
+  knowledgePoints: { code: string; name: string; answered: number; correct: number; accuracy: number }[];
+};
+
 type KnowledgePointRow = { code: string; name: string; answered: Numeric; correct: Numeric };
 type StudentRow = { displayName: string; completedSessions: Numeric; answered: Numeric; correct: Numeric };
 
@@ -28,6 +33,21 @@ export async function getStudentLearningSummary(userId: string) {
     prisma.$queryRaw<Array<{ minutes: Numeric }>>(Prisma.sql`SELECT CAST(COALESCE(SUM(TIMESTAMPDIFF(SECOND, \`startedAt\`, \`completedAt\`)), 0) AS SIGNED) / 60 AS minutes FROM \`PracticeSession\` WHERE \`userId\` = ${userId} AND \`status\` = 'COMPLETED'`),
   ]);
   return { completedSessions, answered, correct, accuracy: ratio(correct, answered), totalMinutes: Math.round(Number(duration[0]?.minutes ?? 0)) };
+}
+
+export async function getStudentLearningStatistics(userId: string, since: Date): Promise<StudentLearningStatistics> {
+  const where = { ...completedSessionWhere(since), userId };
+  const [completedSessions, answered, correct, duration, knowledgeRows] = await Promise.all([
+    prisma.practiceSession.count({ where }),
+    prisma.practiceAnswer.count({ where: { session: where } }),
+    prisma.practiceAnswer.count({ where: { isCorrect: true, session: where } }),
+    prisma.$queryRaw<Array<{ minutes: Numeric }>>(Prisma.sql`SELECT CAST(COALESCE(SUM(TIMESTAMPDIFF(SECOND, \`startedAt\`, \`completedAt\`)), 0) AS SIGNED) / 60 AS minutes FROM \`PracticeSession\` WHERE \`userId\` = ${userId} AND \`status\` = 'COMPLETED' AND \`completedAt\` >= ${since}`),
+    prisma.$queryRaw<KnowledgePointRow[]>(Prisma.sql`SELECT kp.code, kp.name, CAST(COUNT(pa.id) AS SIGNED) AS answered, CAST(SUM(CASE WHEN pa.\`isCorrect\` = TRUE THEN 1 ELSE 0 END) AS SIGNED) AS correct FROM \`PracticeAnswer\` pa JOIN \`PracticeSession\` ps ON ps.id = pa.\`sessionId\` JOIN \`Question\` q ON q.id = pa.\`questionId\` JOIN \`KnowledgePoint\` kp ON kp.id = q.\`knowledgePointId\` WHERE ps.\`userId\` = ${userId} AND ps.\`status\` = 'COMPLETED' AND ps.\`completedAt\` >= ${since} GROUP BY kp.id, kp.code, kp.name ORDER BY (COUNT(pa.id) - SUM(CASE WHEN pa.\`isCorrect\` = TRUE THEN 1 ELSE 0 END)) DESC, COUNT(pa.id) DESC LIMIT 10`),
+  ]);
+  return {
+    summary: { completedSessions, answered, correct, accuracy: ratio(correct, answered), totalMinutes: Math.round(Number(duration[0]?.minutes ?? 0)) },
+    knowledgePoints: knowledgeRows.map((row) => ({ code: row.code, name: row.name, answered: Number(row.answered), correct: Number(row.correct), accuracy: ratio(Number(row.correct), Number(row.answered)) })),
+  };
 }
 
 export async function getTeacherLearningStatistics(since: Date): Promise<LearningStatistics> {
