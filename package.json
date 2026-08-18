@@ -26,6 +26,12 @@
     "db:migrate": "prisma migrate dev",
     "db:s1-precheck": "node --conditions=react-server --import tsx scripts/question-bank-s1-precheck.ts",
     "db:seed": "tsx prisma/seed.ts",
+    "slice:status": "node --conditions=react-server --import tsx scripts/slice-runner.ts status",
+    "slice:next": "node --conditions=react-server --import tsx scripts/slice-runner.ts next",
+    "slice:prompt": "node --conditions=react-server --import tsx scripts/slice-runner.ts prompt",
+    "slice:mark": "node --conditions=react-server --import tsx scripts/slice-runner.ts mark",
+    "slice:reset": "node --conditions=react-server --import tsx scripts/slice-runner.ts reset",
+    "slice:verify": "node --conditions=react-server --import tsx scripts/slice-runner.ts verify",
     "data-retention:cleanup": "node --conditions=react-server --import tsx scripts/data-retention-maintenance.ts",
     "acceptance": "tsx scripts/full-system-acceptance.ts",
     "acceptance:ticket12": "tsx scripts/ticket12-acceptance.ts"
