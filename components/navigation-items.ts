@@ -1,5 +1,5 @@
 import type { LucideIcon } from "lucide-react";
-import { BarChart3, BookCopy, BookOpen, ClipboardCheck, FileSpreadsheet, Flame, LayoutDashboard, School, Settings2, Sparkles, Target, UserRoundCog, UsersRound } from "lucide-react";
+import { BarChart3, BookCopy, BookOpen, ClipboardCheck, FileSpreadsheet, Flame, Layers3, LayoutDashboard, School, Settings2, Sparkles, Target, UserRoundCog, UsersRound } from "lucide-react";
 
 export type NavigationItem = { href: string; label: string; icon: LucideIcon };
 
@@ -14,6 +14,7 @@ export const studentNavigation: NavigationItem[] = [
 export const teacherNavigation: NavigationItem[] = [
   { href: "/teacher", label: "管理概览", icon: LayoutDashboard },
   { href: "/teacher/questions", label: "题库管理", icon: BookOpen },
+  { href: "/teacher/levels", label: "字母类维护", icon: Layers3 },
   { href: "/teacher/ai-explanations", label: "AI 解析审核", icon: Sparkles },
   { href: "/teacher/knowledge", label: "知识点目录", icon: Target },
   { href: "/teacher/rules", label: "抽题规则", icon: Settings2 },

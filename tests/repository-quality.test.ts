@@ -89,6 +89,9 @@ describe("repository release quality", () => {
 
   it("uses single-role guards for teaching and student practice routes", () => {
     const teachingRoutes = [
+      "app/api/v1/teacher/levels/route.ts",
+      "app/api/v1/teacher/levels/[id]/route.ts",
+      "app/api/v1/teacher/levels/[id]/disable/route.ts",
       "app/api/v1/teacher/knowledge-points/route.ts",
       "app/api/v1/teacher/knowledge-points/[id]/route.ts",
       "app/api/v1/teacher/practice-rules/route.ts",

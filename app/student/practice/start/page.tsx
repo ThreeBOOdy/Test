@@ -33,9 +33,9 @@ export default async function PracticeStartPage({ searchParams }: { searchParams
   const [levels, points, levelRules, knowledgeRules, examRules, questions, activeSession] = await Promise.all([
     prisma.level.findMany({ where: { enabled: true }, orderBy: [{ sortOrder: "asc" }, { code: "asc" }] }),
     prisma.knowledgePoint.findMany({ where: { enabled: true }, orderBy: [{ depth: "asc" }, { sortOrder: "asc" }, { code: "asc" }] }),
-    prisma.levelPracticeRule.findMany({ where: { enabled: true }, include: { level: true } }),
-    prisma.knowledgePracticeRule.findMany({ where: { enabled: true }, include: { level: true, knowledgePoint: true } }),
-    prisma.examRule.findMany({ where: { enabled: true }, include: { level: true } }),
+    prisma.levelPracticeRule.findMany({ where: { enabled: true, level: { enabled: true } }, include: { level: true } }),
+    prisma.knowledgePracticeRule.findMany({ where: { enabled: true, level: { enabled: true } }, include: { level: true, knowledgePoint: true } }),
+    prisma.examRule.findMany({ where: { enabled: true, level: { enabled: true } }, include: { level: true } }),
     prisma.question.findMany({ where: { status: "ACTIVE", knowledgePoint: { enabled: true } }, select: { levels: { select: { levelId: true } }, knowledgePointId: true, type: true } }),
     prisma.practiceSession.findFirst({ where: { userId: user.id, status: "IN_PROGRESS" }, orderBy: { startedAt: "desc" }, select: { id: true } }),
   ]);
@@ -46,7 +46,7 @@ export default async function PracticeStartPage({ searchParams }: { searchParams
       if (!question.levels.some((item) => item.levelId === rule.levelId)) return result;
       return { singleCount: result.singleCount + (question.type === "SINGLE_CHOICE" ? 1 : 0), multipleCount: result.multipleCount + (question.type === "MULTIPLE_CHOICE" ? 1 : 0) };
     }, { singleCount: 0, multipleCount: 0 });
-    return isPracticeRuleWithinInventory(rule, inventory);
+    return levelById.has(rule.levelId) && isPracticeRuleWithinInventory(rule, inventory);
   });
   const availableKnowledge = knowledgeRules.filter((rule) => {
     const point = pointById.get(rule.knowledgePointId);
@@ -56,7 +56,7 @@ export default async function PracticeStartPage({ searchParams }: { searchParams
   });
   const availableExams = examRules.filter((rule) => {
     const inventory = questions.reduce((result, question) => question.levels.some((item) => item.levelId === rule.levelId) ? { singleCount: result.singleCount + (question.type === "SINGLE_CHOICE" ? 1 : 0), multipleCount: result.multipleCount + (question.type === "MULTIPLE_CHOICE" ? 1 : 0) } : result, { singleCount: 0, multipleCount: 0 });
-    return rule.singleCount <= inventory.singleCount && rule.multipleCount <= inventory.multipleCount;
+    return levelById.has(rule.levelId) && rule.singleCount <= inventory.singleCount && rule.multipleCount <= inventory.multipleCount;
   });
   const selectedKnowledge = params.knowledge ?? availableKnowledge[0]?.knowledgePointId;
   return <AppShell role="student" currentPath="/student/practice/start"><div className="safe-bottom"><div className="receiver-panel instrument-grid rounded-[2rem] p-6 sm:p-8"><div className="flex flex-col gap-6 sm:flex-row sm:items-end sm:justify-between"><div><div className="flex flex-wrap items-center gap-3"><CallsignLabel value="TRAIN / MODE SELECT" /><Badge tone="blue">训练启动器</Badge></div><h1 className="mt-4 text-4xl font-black tracking-[-0.055em]">选择一条清晰的训练频段</h1><p className="mt-3 max-w-2xl text-sm leading-7 text-[var(--muted-foreground)]">所有练习模式统一在这里调谐；完成训练后可返回任务台查看成长记录或整理错题信号。</p><div className="mt-5 flex items-center gap-3 text-xs text-[var(--muted-foreground)]"><SignalMeter value={availableLevels.length ? 5 : 1} label="训练频道库存" />已发现 {availableLevels.length + availableKnowledge.length + availableExams.length} 个可用频道</div></div>{activeSession ? <Link href={`/student/practice?session=${activeSession.id}`} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-[var(--primary)] px-5 text-sm font-bold text-[var(--primary-foreground)]"><ArrowRight className="size-4" />继续上次练习</Link> : null}</div><FrequencyScale active={4} className="mt-7" /></div><div className="mt-8 grid gap-5 md:grid-cols-2 xl:grid-cols-3">{availableLevels.map((rule) => <LaunchCard key={`level-${rule.id}`} href={buildPracticeLaunchHref({ mode: "LEVEL_COMPREHENSIVE", levelCode: rule.level.code })} title={`${rule.level.code}级综合训练`} description="覆盖本等级所有启用知识点，适合完整检测。" meta={`单选 ${rule.singleCount} · 多选 ${rule.multipleCount}`} icon={BookOpenCheck} />)}{availableKnowledge.filter((rule) => rule.knowledgePointId === selectedKnowledge || !params.knowledge).slice(0, 12).map((rule) => <LaunchCard key={`knowledge-${rule.id}`} href={buildPracticeLaunchHref({ mode: "KNOWLEDGE_POINT", levelCode: rule.level.code, knowledgePointId: rule.knowledgePointId })} title={rule.knowledgePoint.name} description="聚焦一个二级知识点，快速定位薄弱环节。" meta={`${rule.level.code}级 · ${rule.singleCount + rule.multipleCount} 题`} icon={Brain} />)}{availableLevels.filter((rule) => levelById.has(rule.levelId)).map((rule) => <LaunchCard key={`order-${rule.id}`} href={buildPracticeLaunchHref({ mode: "QUESTION_ORDER", levelCode: rule.level.code })} title={`${rule.level.code}级顺序训练`} description="按题库编号自然顺序建立连续训练路径。" meta={`${rule.singleCount + rule.multipleCount} 题`} icon={ListOrdered} />)}{availableLevels.filter((rule) => levelById.has(rule.levelId)).map((rule) => <LaunchCard key={`random-${rule.id}`} href={buildPracticeLaunchHref({ mode: "RANDOM_ALL", levelCode: rule.level.code })} title={`${rule.level.code}级智能随机`} description="优先抽取尚未完成的题目，减少重复曝光。" meta={`${rule.singleCount + rule.multipleCount} 题`} icon={Shuffle} />)}{availableExams.map((rule) => <LaunchCard key={`exam-${rule.id}`} href={buildPracticeLaunchHref({ mode: "MOCK_EXAM", levelCode: rule.level.code })} title={`${rule.level.code}级模拟考试`} description="限时作答，统一交卷后查看成绩。" meta={`${rule.singleCount + rule.multipleCount} 题 · ${rule.durationMinutes} 分钟`} icon={TimerReset} art="/art/exam-countdown-console.webp" />)}</div></div></AppShell>;
