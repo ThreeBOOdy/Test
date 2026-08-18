@@ -40,4 +40,9 @@ describe("knowledge code validation", () => {
     expect(() => normalizeKnowledgeCode("4..1")).toThrow();
     expect(() => normalizeKnowledgeCode("4。1")).toThrow();
   });
+
+  it("accepts non-numeric classification codes with Chinese and slash separators", () => {
+    expect(normalizeKnowledgeCode("模块一/1.1")).toBe("模块一/1.1");
+    expect(normalizeKnowledgeCode("K.1")).toBe("K.1");
+  });
 });

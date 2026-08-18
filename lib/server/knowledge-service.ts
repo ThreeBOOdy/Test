@@ -1,7 +1,7 @@
 import "server-only";
 import { ApiError } from "@/lib/domain/api-error";
 import { prisma } from "@/lib/db";
-import { normalizeKnowledgeCode } from "@/lib/domain/knowledge-code";
+import { getKnowledgeCodePrefixes, normalizeKnowledgeCode } from "@/lib/domain/knowledge-code";
 
 export type PrismaTransaction = Parameters<Parameters<typeof prisma.$transaction>[0]>[0];
 
@@ -29,16 +29,14 @@ export async function ensureKnowledgePoint(
   typeId?: string,
 ) {
   const code = normalizeKnowledgeCode(rawCode);
-  const segments = code.split(".");
+  const codePrefixes = getKnowledgeCodePrefixes(code);
   const resolvedTypeId = typeId ?? (await getOrCreateDefaultKnowledgePointType(tx)).id;
   let parentId: string | null = null;
-  let currentCode = "";
   let current = null as Awaited<ReturnType<typeof tx.knowledgePoint.findFirst>>;
 
-  for (let index = 0; index < segments.length; index += 1) {
-    currentCode = currentCode ? `${currentCode}.${segments[index]}` : segments[index];
-    const pathCodes = segments.slice(0, index + 1).map((_, partIndex) => segments.slice(0, partIndex + 1).join("."));
-    const isLeaf = index === segments.length - 1;
+  for (let index = 0; index < codePrefixes.length; index += 1) {
+    const currentCode = codePrefixes[index];
+    const isLeaf = index === codePrefixes.length - 1;
     const existing = await tx.knowledgePoint.findFirst({ where: { typeId: resolvedTypeId, code: currentCode }, include: { _count: { select: { questions: true } } } });
     if (existing && !isLeaf && existing._count.questions > 0) {
       throw new ApiError(`知识点 ${existing.code} 已有直属题目，不能再创建下级节点`, 409);
@@ -54,7 +52,7 @@ export async function ensureKnowledgePoint(
         code: currentCode,
         name: isLeaf && leafName?.trim() ? leafName.trim() : currentCode,
         parentId,
-        path: `/${pathCodes.join("/")}`,
+        path: `/${codePrefixes.slice(0, index + 1).join("/")}`,
         depth: index,
         sortOrder: isLeaf ? leafSortOrder : 0,
         enabled: true,
