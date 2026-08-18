@@ -223,12 +223,17 @@ test.describe.serial("production business flows", () => {
     try {
       await page.locator('input[type="file"]').setInputFiles(filePath);
       await page.getByRole("button", { name: "开始预检" }).click();
+      await expect(page.getByText("单 sheet 导入向导")).toBeVisible();
+      await page.getByLabel("大类知识点（类型）").selectOption({ label: "默认（DEFAULT）" });
+      await page.getByRole("button", { name: "应用向导并重新预检" }).click();
       await expect(page.getByRole("button", { name: "确认导入 101 道题" })).toBeVisible();
       await expect(page.getByText("总行数", { exact: true }).locator("..")).toContainText("101");
       await expect(page.getByText("可导入", { exact: true }).locator("..")).toContainText("101");
       await expect(page.getByText("警告", { exact: true }).locator("..")).toContainText("101");
       await expect(page.getByText("错误", { exact: true }).locator("..")).toContainText("0");
       await page.getByRole("button", { name: "确认导入 101 道题" }).click();
+      await expect(page.getByRole("dialog", { name: "字母类归类向导" })).toBeVisible();
+      await page.getByRole("button", { name: "暂不归类" }).click();
       await expect(page.getByText("成功导入 101 道题，跳过重复 0 道")).toBeVisible();
 
       const batch = page.getByText(path.basename(filePath)).locator("xpath=ancestor::div[contains(@class,'rounded-2xl')][1]");

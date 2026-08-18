@@ -36,6 +36,8 @@ export async function POST(request: Request) {
       knowledgePointTypeName: formText(form.get("knowledgePointTypeName")) || undefined,
     };
     const hasWizardKnowledgePointType = Boolean(wizardKnowledgePointType.knowledgePointTypeId || wizardKnowledgePointType.knowledgePointTypeCode || wizardKnowledgePointType.knowledgePointTypeName);
+    const wizardCategoryCode = formText(form.get("categoryCode")) || undefined;
+    const wizardKnowledgePointName = formText(form.get("knowledgePointName")) || undefined;
     let sheetNames: string[];
 
     if (fileName.endsWith(".xlsx")) {
@@ -69,7 +71,8 @@ export async function POST(request: Request) {
             if (column) optionValues[optionId] = cellText(row.getCell(column).value).trim();
           }
           const preserveOptionOrder = ["是", "1", "true", "yes", "y"].includes(value("preserveOptionOrder").toLowerCase());
-          const importRow: ImportQuestionRow = { rowNumber, sheetName: sheet.name, ...(hasWizardKnowledgePointType ? wizardKnowledgePointType : {}), sourceBankCode: value("sourceBankCode"), categoryCode: value("categoryCode"), knowledgePointName: value("knowledgePointName"), externalQuestionCode: value("externalQuestionCode"), stem, rawAnswer: value("rawAnswer"), declaredSelectionSpec: value("declaredSelectionSpec"), preserveOptionOrder, optionValues, enabled: !["否", "0", "false"].includes(value("enabled").toLowerCase()) };
+          const isSingleSheet = workbook.worksheets.length === 1;
+          const importRow: ImportQuestionRow = { rowNumber, sheetName: sheet.name, ...(hasWizardKnowledgePointType ? wizardKnowledgePointType : {}), sourceBankCode: value("sourceBankCode"), categoryCode: isSingleSheet && wizardCategoryCode ? wizardCategoryCode : value("categoryCode"), knowledgePointName: isSingleSheet && wizardKnowledgePointName ? wizardKnowledgePointName : value("knowledgePointName"), externalQuestionCode: value("externalQuestionCode"), stem, rawAnswer: value("rawAnswer"), declaredSelectionSpec: value("declaredSelectionSpec"), preserveOptionOrder, optionValues, enabled: !["否", "0", "false"].includes(value("enabled").toLowerCase()) };
           results.push(validateImportRow(importRow));
         }
       }

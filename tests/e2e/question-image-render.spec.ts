@@ -61,11 +61,14 @@ test("question images render across bank, revisions, wrong book, and practice zo
   try {
     await login(page, "teacher", "ChangeMe123!", "/teacher/import");
     await page.locator('input[type="file"]').setInputFiles(filePath);
+    await page.getByLabel("大类知识点（类型）").selectOption({ label: "默认（DEFAULT）" });
     await page.getByLabel("分类号").fill("4.1.1");
     await page.getByLabel("知识点名称（可选）").fill("导体与绝缘体");
     await page.getByRole("button", { name: "开始预检" }).click();
     await expect(page.getByText("图片 1 张")).toBeVisible();
     await page.getByRole("button", { name: "确认导入 1 道题" }).click();
+    await expect(page.getByRole("dialog", { name: "字母类归类向导" })).toBeVisible();
+    await page.getByRole("button", { name: "暂不归类" }).click();
     await expect(page.getByText("成功导入 1 道题，跳过重复 0 道")).toBeVisible();
 
     await page.goto(`/teacher/questions?search=${encodeURIComponent(searchKeyword)}`);

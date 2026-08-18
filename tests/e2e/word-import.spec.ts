@@ -67,6 +67,7 @@ test("Word question import runs preview, commit, bank visibility, and revert as 
   try {
     await login(page, "teacher", "ChangeMe123!", "/teacher/import");
     await page.locator('input[type="file"]').setInputFiles(filePath);
+    await page.getByLabel("大类知识点（类型）").selectOption({ label: "默认（DEFAULT）" });
     await page.getByLabel("分类号").fill("4.1.1");
     await page.getByLabel("知识点名称（可选）").fill("导体与绝缘体");
     await page.getByRole("button", { name: "开始预检" }).click();
@@ -77,10 +78,12 @@ test("Word question import runs preview, commit, bank visibility, and revert as 
     await expect(page.getByText("错误", { exact: true }).locator("..")).toContainText("0");
     await expect(page.getByRole("cell").filter({ hasText: "第 1 题" }).first()).toBeVisible();
     await expect(page.getByRole("cell").filter({ hasText: "第 2 题" }).first()).toBeVisible();
-    await expect(page.getByText("A级 · 4.1.1").first()).toBeVisible();
 
     await page.getByRole("button", { name: "确认导入 2 道题" }).click();
-    await expect(page.getByText("成功导入 2 道题，跳过重复 0 道")).toBeVisible();
+    await expect(page.getByRole("dialog", { name: "字母类归类向导" })).toBeVisible();
+    await page.getByRole("checkbox", { name: "字母类 A" }).check();
+    await page.getByRole("button", { name: "拉取到所选字母类" }).click();
+    await expect(page.getByText("已拉取到 A级，共 2 条关联。")).toBeVisible();
 
     await page.goto(`/teacher/questions?search=${encodeURIComponent(searchKeyword)}`);
     const questionRow = page.getByRole("row").filter({ hasText: firstStem });
