@@ -71,6 +71,10 @@ export type ImportQuestionRow = {
   sourceBankCode?: string;
   categoryCode: string;
   knowledgePointName?: string;
+  /** 单 sheet/Word 向导选择或新建的知识点类型；多 sheet 导入由 sheetName 自动决定。 */
+  knowledgePointTypeId?: string;
+  knowledgePointTypeCode?: string;
+  knowledgePointTypeName?: string;
   externalQuestionCode?: string;
   stem: string;
   rawAnswer: string;

@@ -223,6 +223,89 @@ describe("question import preview dispatch", () => {
     expect(mocks.importBatchCreate).toHaveBeenCalledWith({ data: expect.objectContaining({ fileName: "题库.docx", totalRows: 2, validRows: 2 }) });
   });
 
+  it("stores wizard knowledge point type fields on Word rows", async () => {
+    const buffer = await buildDocx([
+      "1. 题干",
+      "A、选项A",
+      "B、选项B",
+      "答案：A",
+    ]);
+
+    const response = await previewImport(previewRequest(uploadFile(buffer, "wizard.docx"), {
+      categoryCode: "4.1.1",
+      knowledgePointTypeId: "type-dg",
+      knowledgePointTypeCode: "DG",
+      knowledgePointTypeName: "电工基础",
+    }));
+    const body = await response.json();
+
+    expect(response.status, JSON.stringify(body)).toBe(200);
+    expect(body.rows[0].row).toMatchObject({
+      categoryCode: "4.1.1",
+      knowledgePointTypeId: "type-dg",
+      knowledgePointTypeCode: "DG",
+      knowledgePointTypeName: "电工基础",
+    });
+    expect(mocks.importBatchRowCreateMany).toHaveBeenCalled();
+    const storedPayload = mocks.importBatchRowCreateMany.mock.calls[0][0].data[0].payload;
+    expect(storedPayload).toMatchObject({
+      categoryCode: "4.1.1",
+      knowledgePointTypeId: "type-dg",
+      knowledgePointTypeCode: "DG",
+      knowledgePointTypeName: "电工基础",
+    });
+  });
+
+  it("stores wizard knowledge point type fields on a single-sheet Excel file", async () => {
+    const workbook = new ExcelJS.Workbook();
+    const sheet = workbook.addWorksheet("题库");
+    sheet.addRow(["分类号", "问题", "答案", "A", "B"]);
+    sheet.addRow(["1.1", "题目", "A", "正确", "错误"]);
+    const buffer = await workbook.xlsx.writeBuffer();
+
+    const response = await previewImport(previewRequest(uploadFile(buffer, "single.xlsx"), {
+      knowledgePointTypeId: "type-dg",
+      knowledgePointTypeName: "电工基础",
+    }));
+    const body = await response.json();
+
+    expect(response.status, JSON.stringify(body)).toBe(200);
+    expect(body.rows[0].row).toMatchObject({
+      sheetName: "题库",
+      categoryCode: "1.1",
+      knowledgePointTypeId: "type-dg",
+      knowledgePointTypeName: "电工基础",
+    });
+    expect(mocks.importBatchRowCreateMany).toHaveBeenCalled();
+    const storedPayload = mocks.importBatchRowCreateMany.mock.calls[0][0].data[0].payload;
+    expect(storedPayload).toMatchObject({
+      sheetName: "题库",
+      categoryCode: "1.1",
+      knowledgePointTypeId: "type-dg",
+      knowledgePointTypeName: "电工基础",
+    });
+  });
+
+  it("rejects wizard type fields on multi-sheet Excel files", async () => {
+    const workbook = new ExcelJS.Workbook();
+    const sheetA = workbook.addWorksheet("电工");
+    sheetA.addRow(["分类号", "问题", "答案", "A", "B"]);
+    sheetA.addRow(["1.1", "题目A", "A", "正确", "错误"]);
+    const sheetB = workbook.addWorksheet("通信");
+    sheetB.addRow(["分类号", "问题", "答案", "A", "B"]);
+    sheetB.addRow(["1.1", "题目B", "B", "正确", "错误"]);
+    const buffer = await workbook.xlsx.writeBuffer();
+
+    const response = await previewImport(previewRequest(uploadFile(buffer, "multi.xlsx"), {
+      knowledgePointTypeId: "type-dg",
+    }));
+
+    expect(response.status).toBe(400);
+    expect((await response.json()).message).toContain("多 sheet 导入");
+    expect(mocks.importBatchCreate).not.toHaveBeenCalled();
+  });
+
+
   it("rejects word uploads when the category code is missing", async () => {
     const buffer = await buildDocx(["1. 题干", "A、选项A", "B、选项B", "答案：A"]);
 

@@ -1,5 +1,6 @@
 import "server-only";
 import { ApiError } from "@/lib/domain/api-error";
+import { deriveKnowledgePointTypeCode, normalizeKnowledgePointTypeCode } from "@/lib/domain/knowledge-point-type-code";
 import { prisma } from "@/lib/db";
 import { getKnowledgeCodePrefixes, normalizeKnowledgeCode } from "@/lib/domain/knowledge-code";
 
@@ -15,6 +16,67 @@ export async function getOrCreateDefaultKnowledgePointType(tx: PrismaTransaction
     data: {
       code: DEFAULT_KNOWLEDGE_POINT_TYPE_CODE,
       name: DEFAULT_KNOWLEDGE_POINT_TYPE_NAME,
+      sortOrder: 0,
+      enabled: true,
+    },
+  });
+}
+
+export type KnowledgePointTypeImportInput = {
+  id?: string | null;
+  code?: string | null;
+  name?: string | null;
+  sheetName?: string | null;
+};
+
+async function getUniqueKnowledgePointTypeCode(tx: PrismaTransaction, baseCode: string) {
+  let candidate = baseCode;
+  let suffix = 2;
+  while (await tx.knowledgePointType.findUnique({ where: { code: candidate } })) {
+    const suffixText = String(suffix);
+    const maxBase = Math.max(1, 50 - suffixText.length - 1);
+    candidate = `${baseCode.slice(0, maxBase)}_${suffixText}`;
+    suffix += 1;
+  }
+  return candidate;
+}
+
+export async function getOrCreateKnowledgePointType(tx: PrismaTransaction, input: KnowledgePointTypeImportInput = {}) {
+  const id = input.id?.trim();
+  if (id) {
+    const type = await tx.knowledgePointType.findUnique({ where: { id } });
+    if (!type) throw new ApiError("知识点类型不存在", 404);
+    if (!type.enabled) throw new ApiError("知识点类型已停用", 409);
+    return type;
+  }
+
+  const rawName = input.name?.trim() || input.sheetName?.trim();
+  if (!rawName) return getOrCreateDefaultKnowledgePointType(tx);
+
+  const byName = await tx.knowledgePointType.findFirst({ where: { name: rawName } });
+  if (byName) {
+    if (!byName.enabled) throw new ApiError("知识点类型已停用", 409);
+    return byName;
+  }
+
+  const rawCode = input.code?.trim();
+  if (rawCode) {
+    const code = normalizeKnowledgePointTypeCode(rawCode);
+    const byCode = await tx.knowledgePointType.findUnique({ where: { code } });
+    if (byCode) {
+      if (!byCode.enabled) throw new ApiError("知识点类型已停用", 409);
+      return byCode;
+    }
+  }
+
+  const code = await getUniqueKnowledgePointTypeCode(
+    tx,
+    rawCode ? normalizeKnowledgePointTypeCode(rawCode) : deriveKnowledgePointTypeCode(rawName),
+  );
+  return tx.knowledgePointType.create({
+    data: {
+      code,
+      name: rawName,
       sortOrder: 0,
       enabled: true,
     },

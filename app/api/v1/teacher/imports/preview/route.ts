@@ -30,6 +30,12 @@ export async function POST(request: Request) {
     const fileName = file.name.toLowerCase();
     const results: ValidatedQuestionRow[] = [];
     const batchImages: BatchImageRecord[] = [];
+    const wizardKnowledgePointType = {
+      knowledgePointTypeId: formText(form.get("knowledgePointTypeId")) || undefined,
+      knowledgePointTypeCode: formText(form.get("knowledgePointTypeCode")) || undefined,
+      knowledgePointTypeName: formText(form.get("knowledgePointTypeName")) || undefined,
+    };
+    const hasWizardKnowledgePointType = Boolean(wizardKnowledgePointType.knowledgePointTypeId || wizardKnowledgePointType.knowledgePointTypeCode || wizardKnowledgePointType.knowledgePointTypeName);
     let sheetNames: string[];
 
     if (fileName.endsWith(".xlsx")) {
@@ -39,6 +45,9 @@ export async function POST(request: Request) {
       await workbook.xlsx.load(buffer);
       await assertExcelHasNoImages(buffer);
       if (!workbook.worksheets.length) return NextResponse.json({ message: "Excel 中没有工作表" }, { status: 400 });
+      if (hasWizardKnowledgePointType && workbook.worksheets.length > 1) {
+        throw new ApiError("多 sheet 导入会按 sheet 名建立知识点类型，不能为整份文件指定单个知识点类型");
+      }
       sheetNames = [];
       for (const sheet of workbook.worksheets) {
         if (results.length >= 5000) break;
@@ -60,7 +69,7 @@ export async function POST(request: Request) {
             if (column) optionValues[optionId] = cellText(row.getCell(column).value).trim();
           }
           const preserveOptionOrder = ["是", "1", "true", "yes", "y"].includes(value("preserveOptionOrder").toLowerCase());
-          const importRow: ImportQuestionRow = { rowNumber, sheetName: sheet.name, sourceBankCode: value("sourceBankCode"), categoryCode: value("categoryCode"), knowledgePointName: value("knowledgePointName"), externalQuestionCode: value("externalQuestionCode"), stem, rawAnswer: value("rawAnswer"), declaredSelectionSpec: value("declaredSelectionSpec"), preserveOptionOrder, optionValues, enabled: !["否", "0", "false"].includes(value("enabled").toLowerCase()) };
+          const importRow: ImportQuestionRow = { rowNumber, sheetName: sheet.name, ...(hasWizardKnowledgePointType ? wizardKnowledgePointType : {}), sourceBankCode: value("sourceBankCode"), categoryCode: value("categoryCode"), knowledgePointName: value("knowledgePointName"), externalQuestionCode: value("externalQuestionCode"), stem, rawAnswer: value("rawAnswer"), declaredSelectionSpec: value("declaredSelectionSpec"), preserveOptionOrder, optionValues, enabled: !["否", "0", "false"].includes(value("enabled").toLowerCase()) };
           results.push(validateImportRow(importRow));
         }
       }
@@ -72,7 +81,7 @@ export async function POST(request: Request) {
       const parsed = parseWordContent(await extractDocxContent(await file.arrayBuffer()));
       for (const row of parsed.rows) {
         if (results.length >= 5000) break;
-        const importRow = { ...row, categoryCode, knowledgePointName };
+        const importRow = { ...row, categoryCode, knowledgePointName, ...wizardKnowledgePointType };
         const prepared = prepareQuestionRowImages(importRow, importRow.rowNumber);
         importRow.stem = prepared.stem;
         importRow.optionValues = prepared.optionValues;
@@ -83,7 +92,7 @@ export async function POST(request: Request) {
       }
       for (const error of parsed.errors) {
         if (results.length >= 5000) break;
-        results.push(rejectedWordRow(error, categoryCode, knowledgePointName));
+        results.push(rejectedWordRow(error, categoryCode, knowledgePointName, wizardKnowledgePointType));
       }
       results.sort((left, right) => left.row.rowNumber - right.row.rowNumber);
       sheetNames = [];
@@ -173,13 +182,19 @@ function formText(value: FormDataEntryValue | null): string {
   return typeof value === "string" ? value.trim() : "";
 }
 
-function rejectedWordRow(error: WordParseError, categoryCode: string, knowledgePointName?: string): ValidatedQuestionRow {
+function rejectedWordRow(
+  error: WordParseError,
+  categoryCode: string,
+  knowledgePointName?: string,
+  knowledgePointType: Pick<ImportQuestionRow, "knowledgePointTypeId" | "knowledgePointTypeCode" | "knowledgePointTypeName"> = {},
+): ValidatedQuestionRow {
   return {
     row: {
       rowNumber: error.rowNumber,
       locationLabel: error.locationLabel,
       categoryCode,
       knowledgePointName,
+      ...knowledgePointType,
       stem: "",
       rawAnswer: "",
       optionValues: {},

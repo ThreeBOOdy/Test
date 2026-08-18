@@ -204,7 +204,8 @@ describe("question image commit lifecycle", () => {
     expect(preview.rows[0].row.optionValues.A).toContain(`[图:${optionImage.id}]`);
 
     const result = await commitImportBatch("teacher-1", preview.batchId);
-    expect(result).toEqual({ batchId: preview.batchId, inserted: 1, skipped: 0 });
+    expect(result).toMatchObject({ batchId: preview.batchId, inserted: 1, skipped: 0 });
+    expect(result.questionIds).toHaveLength(1);
 
     const question = await prisma.question.findFirstOrThrow({
       where: { importBatchId: preview.batchId },
@@ -240,7 +241,8 @@ describe("question image commit lifecycle", () => {
     );
 
     const result = await commitImportBatch("teacher-1", preview.batchId);
-    expect(result).toEqual({ batchId: preview.batchId, inserted: 1, skipped: 0 });
+    expect(result).toMatchObject({ batchId: preview.batchId, inserted: 1, skipped: 0 });
+    expect(result.questionIds).toHaveLength(1);
     expect(await prisma.questionImage.count({ where: { question: { importBatchId: preview.batchId } } })).toBe(0);
     expect(await prisma.importBatchImage.count({ where: { batchId: preview.batchId } })).toBe(0);
   });
@@ -255,7 +257,8 @@ describe("question image commit lifecycle", () => {
     );
 
     const result = await commitImportBatch("teacher-1", batch.id);
-    expect(result).toEqual({ batchId: batch.id, inserted: 0, skipped: 1 });
+    expect(result).toMatchObject({ batchId: batch.id, inserted: 0, skipped: 1 });
+    expect(result.questionIds).toHaveLength(0);
     expect(await prisma.question.count()).toBe(1);
     expect(await prisma.questionImage.count({ where: { id: "qimg_new" } })).toBe(0);
     expect(await prisma.importBatchImage.count({ where: { batchId: batch.id } })).toBe(0);

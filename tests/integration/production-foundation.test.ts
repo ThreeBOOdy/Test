@@ -182,7 +182,8 @@ describe("production database foundation", () => {
 
     const result = await commitImportBatch(teacher.id, batch.id);
 
-    expect(result).toEqual({ batchId: batch.id, inserted: 4999, skipped: 1 });
+    expect(result).toMatchObject({ batchId: batch.id, inserted: 4999, skipped: 1 });
+    expect(result.questionIds).toHaveLength(4999);
     expect(await prisma.question.count({ where: { importBatchId: batch.id } })).toBe(4999);
     expect(await prisma.importBatch.findUniqueOrThrow({ where: { id: batch.id } })).toMatchObject({ status: "COMMITTED", insertedRows: 4999, duplicateRows: 1 });
   }, 30_000);

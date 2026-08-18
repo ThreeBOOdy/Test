@@ -6,7 +6,7 @@ import { isImportBatchExpired } from "@/lib/domain/import-batch";
 import { classifyImportDuplicate, findBatchDuplicateRows, importQuestionContentKey, importRowLocation, validateImportRow } from "@/lib/domain/question-import";
 import { revalidateCommitRowImages } from "@/lib/domain/question-image-marker";
 import type { ImportQuestionRow, ValidatedQuestionRow } from "@/lib/domain/types";
-import { ensureKnowledgePoint } from "@/lib/server/knowledge-service";
+import { ensureKnowledgePoint, getOrCreateKnowledgePointType } from "@/lib/server/knowledge-service";
 import { toQuestionSnapshot } from "@/lib/server/question-revisions";
 import { writeAuditLogInTransaction } from "@/lib/server/audit";
 
@@ -94,10 +94,19 @@ export async function commitImportBatch(importedById: string, batchId: string) {
     const invalid = validated.filter((item) => item.issues.some((issue) => issue.severity === "error"));
     if (invalid.length) throw new ApiError(`仍有 ${invalid.length} 行错误，不能确认导入`);
 
+    const typeByItem = new Map<ValidatedQuestionRow, Awaited<ReturnType<typeof getOrCreateKnowledgePointType>>>();
     const knowledgeByCode = new Map<string, Awaited<ReturnType<typeof ensureKnowledgePoint>>>();
     for (const item of validated) {
-      if (!knowledgeByCode.has(item.row.categoryCode)) {
-        knowledgeByCode.set(item.row.categoryCode, await ensureKnowledgePoint(tx, item.row.categoryCode, item.row.knowledgePointName));
+      const type = await getOrCreateKnowledgePointType(tx, {
+        id: item.row.knowledgePointTypeId,
+        code: item.row.knowledgePointTypeCode,
+        name: item.row.knowledgePointTypeName,
+        sheetName: item.row.sheetName,
+      });
+      typeByItem.set(item, type);
+      const key = `${type.id}:${item.row.categoryCode}`;
+      if (!knowledgeByCode.has(key)) {
+        knowledgeByCode.set(key, await ensureKnowledgePoint(tx, item.row.categoryCode, item.row.knowledgePointName, 0, type.id));
       }
     }
     const knowledgePoints = await tx.knowledgePoint.findMany({
@@ -107,7 +116,8 @@ export async function commitImportBatch(importedById: string, batchId: string) {
     const knowledgeById = new Map(knowledgePoints.map((point) => [point.id, point]));
 
     const questions: Prisma.QuestionCreateManyInput[] = validated.map((item) => {
-      const knowledgePoint = knowledgeByCode.get(item.row.categoryCode)!;
+      const type = typeByItem.get(item)!;
+      const knowledgePoint = knowledgeByCode.get(`${type.id}:${item.row.categoryCode}`)!;
       if ((knowledgeById.get(knowledgePoint.id)?._count.children ?? 0) > 0) {
         throw new ApiError(`${importRowLocation(item.row)} 知识点 ${knowledgePoint.code} 不是末级节点`, 409);
       }
@@ -209,6 +219,6 @@ export async function commitImportBatch(importedById: string, batchId: string) {
     if (insertedQuestions.length) await tx.questionRevision.createMany({ data: insertedQuestions.map((question) => ({ questionId: question.id, revision: question.version, snapshot: toQuestionSnapshot(question), changeSource: "IMPORT_COMMIT", actorUserId: importedById })) });
     await tx.importBatch.update({ where: { id: batch.id }, data: { insertedRows: inserted, duplicateRows: skipped } });
     await writeAuditLogInTransaction(tx, { actorUserId: importedById, action: "IMPORT_COMMIT", targetType: "ImportBatch", targetId: batch.id, metadata: { inserted, skipped, suspectedDuplicates: duplicateCounts.suspects } });
-    return { batchId: batch.id, inserted, skipped };
+    return { batchId: batch.id, inserted, skipped, questionIds: insertedQuestions.map((question) => question.id) };
   }, { timeout: 60_000 });
 }
