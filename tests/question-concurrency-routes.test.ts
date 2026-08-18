@@ -23,6 +23,7 @@ vi.mock("@/lib/db", () => ({
     knowledgePoint: { findFirst: mocks.knowledgePointFindFirst },
     $transaction: vi.fn((callback: (transaction: object) => unknown) => callback({
       question: { findFirst: mocks.questionFindFirst, findFirstOrThrow: mocks.questionFindFirst, updateMany: mocks.questionUpdateMany },
+      questionLevel: { deleteMany: vi.fn().mockResolvedValue({ count: 1 }), create: vi.fn().mockResolvedValue({ id: "question-level-1" }) },
       questionRevision: { findFirst: mocks.questionRevisionFindFirst, create: mocks.questionRevisionCreate },
       knowledgePoint: { findFirst: mocks.knowledgePointFindFirst, updateMany: mocks.knowledgePointUpdateMany, findFirstOrThrow: mocks.knowledgePointFindFirst },
       levelPracticeRule: { updateMany: mocks.levelRuleUpdateMany, findUnique: vi.fn(), create: vi.fn() },
@@ -39,7 +40,7 @@ import { PUT as savePracticeRules } from "@/app/api/v1/teacher/practice-rules/ro
 
 const headers = { "content-type": "application/json", origin: "http://localhost", host: "localhost" };
 const teacher = { id: "teacher-1", role: "TEACHER" as const, capability: "FULL_TEACHER" as const };
-const question = { id: "question-1", version: 1, levelId: "level-1", knowledgePointId: "point-1", sourceBankCode: null, externalQuestionCode: null, stem: "原题", type: "SINGLE_CHOICE" as const, optionCount: 2, correctOptionCount: 1, selectionSpec: "2选1", options: [{ id: "A", text: "A" }, { id: "B", text: "B" }], correctOptionIds: ["A"], status: "ACTIVE" as const };
+const question = { id: "question-1", version: 1, levelId: "level-1", levels: [{ levelId: "level-1" }], knowledgePointId: "point-1", sourceBankCode: null, externalQuestionCode: null, stem: "原题", type: "SINGLE_CHOICE" as const, optionCount: 2, correctOptionCount: 1, selectionSpec: "2选1", options: [{ id: "A", text: "A" }, { id: "B", text: "B" }], correctOptionIds: ["A"], status: "ACTIVE" as const };
 
 function questionRequest(version: number) {
   return new Request("http://localhost/api/v1/teacher/questions/question-1", { method: "PUT", headers, body: JSON.stringify({ levelId: "level-1", knowledgePointId: "point-1", stem: "新题", options: [{ id: "A", text: "A" }, { id: "B", text: "B" }], correctOptionIds: ["A"], status: "ACTIVE", version }) });

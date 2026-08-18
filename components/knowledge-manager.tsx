@@ -8,10 +8,10 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 
-type KnowledgeRow = { id: string; code: string; name: string; depth: number; sortOrder: number; enabled: boolean; version: number; childCount: number; questionCount: number };
-type FormState = { id?: string; code: string; name: string; sortOrder: number; enabled: boolean; version?: number };
+export type KnowledgeRow = { id: string; code: string; name: string; depth: number; sortOrder: number; enabled: boolean; version: number; childCount: number; questionCount: number };
+type FormState = { id?: string; typeId?: string; code: string; name: string; sortOrder: number; enabled: boolean; version?: number };
 
-export function KnowledgeManager({ points }: { points: KnowledgeRow[] }) {
+export function KnowledgeManager({ points, typeId }: { points: KnowledgeRow[]; typeId?: string }) {
   const router = useRouter();
   const [search, setSearch] = useState("");
   const [form, setForm] = useState<FormState | null>(null);
@@ -24,7 +24,7 @@ export function KnowledgeManager({ points }: { points: KnowledgeRow[] }) {
 
   function openCreate() {
     setMessage("");
-    setForm({ code: "", name: "", sortOrder: 0, enabled: true });
+    setForm({ typeId, code: "", name: "", sortOrder: 0, enabled: true });
   }
 
   function openEdit(point: KnowledgeRow) {

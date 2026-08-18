@@ -14,6 +14,7 @@ const mocks = vi.hoisted(() => ({
   writeAuditLog: vi.fn(),
   writeAuditLogInTransaction: vi.fn(),
   ensureKnowledgePoint: vi.fn(),
+  getOrCreateDefaultKnowledgePointType: vi.fn(),
   levelFindFirst: vi.fn(),
   knowledgePointFindFirst: vi.fn(),
   knowledgePointFindUnique: vi.fn(),
@@ -36,7 +37,7 @@ vi.mock("@/lib/server/import-service", () => ({
   revertImportBatch: mocks.revertImportBatch,
 }));
 vi.mock("@/lib/server/audit", () => ({ writeAuditLog: mocks.writeAuditLog, writeAuditLogInTransaction: mocks.writeAuditLogInTransaction }));
-vi.mock("@/lib/server/knowledge-service", () => ({ ensureKnowledgePoint: mocks.ensureKnowledgePoint }));
+vi.mock("@/lib/server/knowledge-service", () => ({ ensureKnowledgePoint: mocks.ensureKnowledgePoint, getOrCreateDefaultKnowledgePointType: mocks.getOrCreateDefaultKnowledgePointType }));
 vi.mock("@/lib/db", () => ({
   prisma: {
     importBatch: { findMany: mocks.importBatchFindMany, count: mocks.importBatchCount },
@@ -46,7 +47,7 @@ vi.mock("@/lib/db", () => ({
     $transaction: vi.fn((input: ((transaction: object) => unknown) | Promise<unknown>[]) => Array.isArray(input) ? Promise.all(input) : input({
       question: { findFirst: mocks.questionFindFirst, create: mocks.questionCreate },
       questionRevision: { create: mocks.questionRevisionCreate },
-      knowledgePoint: { findUnique: mocks.knowledgePointFindUnique },
+      knowledgePoint: { findFirst: mocks.knowledgePointFindFirst, findUnique: mocks.knowledgePointFindUnique },
       auditLog: { create: mocks.auditLogCreate },
     })),
   },
@@ -96,11 +97,12 @@ describe("single-role API access", () => {
     mocks.commitImportBatch.mockResolvedValue({ inserted: 1, skipped: 0 });
     mocks.approveRegistration.mockResolvedValue({ id: "student-1", studentStatus: "ACTIVE" });
     mocks.levelFindFirst.mockResolvedValue({ id: "level-1", enabled: true });
-    mocks.knowledgePointFindFirst.mockResolvedValue({ id: "point-1", enabled: true, _count: { children: 0 } });
+    mocks.knowledgePointFindFirst.mockImplementation((args) => (args?.where?.id ? { id: "point-1", enabled: true, _count: { children: 0 } } : null));
     mocks.knowledgePointFindUnique.mockResolvedValue(null);
+    mocks.getOrCreateDefaultKnowledgePointType.mockResolvedValue({ id: "type-1" });
     mocks.questionFindFirst.mockResolvedValue(null);
     mocks.questionCreate.mockResolvedValue({ id: "question-1", version: 1, levelId: "level-1", knowledgePointId: "point-1", sourceBankCode: null, externalQuestionCode: null, stem: "题目", options: [], correctOptionIds: [], status: "ACTIVE" });
-    mocks.ensureKnowledgePoint.mockResolvedValue({ id: "point-1", version: 1 });
+    mocks.ensureKnowledgePoint.mockResolvedValue({ id: "point-1", typeId: "type-1", version: 1 });
   });
 
   it("allows only administrators to review registrations", async () => {
