@@ -24,7 +24,6 @@ export type WeakKnowledgeCandidate = {
 export type QuestionCandidate = {
   id: string;
   knowledgePointId: string;
-  levelId: string;
 };
 
 export type BuildReviewCardsInput = {

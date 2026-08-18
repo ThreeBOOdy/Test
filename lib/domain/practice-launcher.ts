@@ -39,7 +39,7 @@ export function normalizePracticeLaunch(params: PracticeLaunchParams): PracticeL
   const mode = PARAM_TO_MODE[params.mode ?? "level"] ?? "LEVEL_COMPREHENSIVE";
   if (mode === "WRONG_QUESTION") return { mode, questionId: params.question || undefined };
   if (mode === "KNOWLEDGE_POINT") {
-    return { mode, levelCode: params.level ?? "A", knowledgePointId: params.knowledge ?? "" };
+    return { mode, levelCode: params.level, knowledgePointId: params.knowledge ?? "" };
   }
-  return { mode, levelCode: params.level ?? "A" };
+  return { mode, levelCode: params.level };
 }

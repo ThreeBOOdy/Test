@@ -115,7 +115,6 @@ export function validateImportRow(row: ImportQuestionRow): ValidatedQuestionRow 
   const type = inferQuestionType(correctOptionCount);
   const declaredSpec = parseSelectionSpec(row.declaredSelectionSpec);
 
-  if (!row.levelCode.trim()) issues.push({ severity: "error", field: "等级", message: "等级不能为空" });
   if (!row.categoryCode.trim()) issues.push({ severity: "error", field: "分类号", message: "分类号不能为空" });
   if (!row.stem.trim()) issues.push({ severity: "error", field: "问题", message: "题干不能为空" });
   if (optionCount < 2) issues.push({ severity: "error", field: "选项", message: "至少需要两个有效选项" });

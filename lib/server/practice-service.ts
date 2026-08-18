@@ -83,7 +83,7 @@ async function createWrongQuestionSession(userId: string, questionId?: string): 
     ? wrongQuestions.filter((item) => item.questionId === questionId)
     : shuffle(wrongQuestions).slice(0, 20);
   if (!selected.length) throw new ApiError(questionId ? "该错题不在待巩固列表" : "当前没有待巩固错题", 409);
-  const snapshots = selected.map(({ question }) => createQuestionSnapshot({ ...toDomainQuestion(question), levelCode: question.levels[0]?.level.code ?? "未归类", knowledgeName: question.knowledgePoint.name }));
+  const snapshots = selected.map(({ question }) => createQuestionSnapshot({ ...toDomainQuestion(question), levelId: question.levels[0]?.levelId ?? "", levelCode: question.levels[0]?.level.code ?? "未归类", knowledgeName: question.knowledgePoint.name }));
   return persistPracticeSession(userId, "WRONG_QUESTION", null, null, snapshots);
 }
 
@@ -313,7 +313,7 @@ function createSnapshots(records: QuestionRecord[], questions: Question[]) {
   const recordMap = new Map(records.map((record) => [record.id, record]));
   return questions.map((question) => {
     const record = recordMap.get(question.id)!;
-    return createQuestionSnapshot({ ...question, levelCode: record.levels[0]?.level.code ?? "未归类", knowledgeName: record.knowledgePoint.name });
+    return createQuestionSnapshot({ ...question, levelId: record.levels[0]?.levelId ?? "", levelCode: record.levels[0]?.level.code ?? "未归类", knowledgeName: record.knowledgePoint.name });
   });
 }
 
@@ -418,5 +418,5 @@ function sessionTitle(mode: PracticeMode, snapshots: QuestionSnapshot[]) {
 }
 
 function toDomainQuestion(record: QuestionRecord): Question {
-  return { id: record.id, levelId: record.levels[0]?.levelId ?? "", knowledgePointId: record.knowledgePointId, sourceBankCode: record.sourceBankCode ?? undefined, externalQuestionCode: record.externalQuestionCode ?? undefined, stem: record.stem, type: record.type, optionCount: record.optionCount, correctOptionCount: record.correctOptionCount, selectionSpec: record.selectionSpec, preserveOptionOrder: record.preserveOptionOrder, options: record.options as QuestionOption[], correctOptionIds: parseJsonStringArray(record.correctOptionIds, "correctOptionIds"), status: record.status };
+  return { id: record.id, levelIds: record.levels.map((item) => item.levelId), knowledgePointId: record.knowledgePointId, sourceBankCode: record.sourceBankCode ?? undefined, externalQuestionCode: record.externalQuestionCode ?? undefined, stem: record.stem, type: record.type, optionCount: record.optionCount, correctOptionCount: record.correctOptionCount, selectionSpec: record.selectionSpec, preserveOptionOrder: record.preserveOptionOrder, options: record.options as QuestionOption[], correctOptionIds: parseJsonStringArray(record.correctOptionIds, "correctOptionIds"), status: record.status };
 }

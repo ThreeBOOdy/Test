@@ -59,7 +59,7 @@ export function selectPracticeQuestions(
   const knowledgeSet = new Set(input.knowledgePointIds ?? []);
   const eligible = questions.filter((question) => {
     if (question.status !== "ACTIVE") return false;
-    if (input.mode !== "WRONG_QUESTION" && question.levelId !== input.levelId) return false;
+    if (input.mode !== "WRONG_QUESTION" && !question.levelIds.includes(input.levelId)) return false;
     if (input.mode === "KNOWLEDGE_POINT" && !knowledgeSet.has(question.knowledgePointId)) return false;
     return true;
   });

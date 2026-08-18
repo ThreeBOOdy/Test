@@ -38,4 +38,10 @@ describe("practice UI state", () => {
     expect(normalizePracticeLaunch({ mode: "knowledge", level: "A", knowledge: "kp-1" })).toEqual({ mode: "KNOWLEDGE_POINT", levelCode: "A", knowledgePointId: "kp-1" });
     expect(normalizePracticeLaunch({ mode: "wrong", question: "q-1" })).toEqual({ mode: "WRONG_QUESTION", questionId: "q-1" });
   });
+
+  it("does not default missing launcher levels to A", () => {
+    expect(normalizePracticeLaunch({ mode: "random" })).toEqual({ mode: "RANDOM_ALL", levelCode: undefined });
+    expect(normalizePracticeLaunch({ mode: "knowledge", knowledge: "kp-1" })).toEqual({ mode: "KNOWLEDGE_POINT", levelCode: undefined, knowledgePointId: "kp-1" });
+    expect(normalizePracticeLaunch({ mode: "exam" })).toEqual({ mode: "MOCK_EXAM", levelCode: undefined });
+  });
 });

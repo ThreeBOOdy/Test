@@ -424,7 +424,7 @@ async function verifyRestoredApplication(options: Options) {
   const baseUrlValue = option(options, "base-url", process.env.BACKUP_RESTORE_BASE_URL);
   const username = option(options, "smoke-username", process.env.BACKUP_RESTORE_SMOKE_USERNAME);
   const password = option(options, "smoke-password", process.env.BACKUP_RESTORE_SMOKE_PASSWORD);
-  const levelCode = option(options, "smoke-level", process.env.BACKUP_RESTORE_SMOKE_LEVEL_CODE ?? "A");
+  const levelCode = option(options, "smoke-level", process.env.BACKUP_RESTORE_SMOKE_LEVEL_CODE ?? "");
   const baseUrl = new URL(baseUrlValue);
   const origin = baseUrl.origin;
 

@@ -3,7 +3,7 @@ import { InsufficientQuestionError, isAnswerCorrect, selectPracticeQuestions, se
 import type { Question } from "../lib/domain/types";
 
 function question(id: string, type: Question["type"], levelId = "A", knowledgePointId = "kp-1"): Question {
-  return { id, type, levelId, knowledgePointId, stem: id, optionCount: 4, correctOptionCount: type === "SINGLE_CHOICE" ? 1 : 2, selectionSpec: type === "SINGLE_CHOICE" ? "4选1" : "4选2", options: [{ id: "A", text: "A" }, { id: "B", text: "B" }, { id: "C", text: "C" }, { id: "D", text: "D" }], correctOptionIds: type === "SINGLE_CHOICE" ? ["A"] : ["A", "C"], status: "ACTIVE" };
+  return { id, type, levelIds: [levelId], knowledgePointId, stem: id, optionCount: 4, correctOptionCount: type === "SINGLE_CHOICE" ? 1 : 2, selectionSpec: type === "SINGLE_CHOICE" ? "4选1" : "4选2", options: [{ id: "A", text: "A" }, { id: "B", text: "B" }, { id: "C", text: "C" }, { id: "D", text: "D" }], correctOptionIds: type === "SINGLE_CHOICE" ? ["A"] : ["A", "C"], status: "ACTIVE" };
 }
 
 const bank = [
@@ -24,6 +24,16 @@ describe("practice engine", () => {
   it("limits knowledge practice to selected descendants", () => {
     const result = selectPracticeQuestions(bank, { mode: "KNOWLEDGE_POINT", levelId: "A", knowledgePointIds: ["kp-1"], rule: { singleCount: 2, multipleCount: 2 } }, () => 0.25);
     expect(result.questions.every((item) => item.knowledgePointId === "kp-1")).toBe(true);
+  });
+
+  it("supports dynamic letter-class codes such as K", () => {
+    const kBank = [
+      ...Array.from({ length: 3 }, (_, index) => question(`k-s-${index}`, "SINGLE_CHOICE", "K")),
+      ...Array.from({ length: 2 }, (_, index) => question(`k-m-${index}`, "MULTIPLE_CHOICE", "K")),
+    ];
+    const result = selectPracticeQuestions(kBank, { mode: "LEVEL_COMPREHENSIVE", levelId: "K", rule: { singleCount: 3, multipleCount: 2 } }, () => 0.5);
+    expect(result.questions).toHaveLength(5);
+    expect(result.questions.every((item) => item.levelIds.includes("K"))).toBe(true);
   });
 
   it("fails instead of silently lowering requested counts", () => {

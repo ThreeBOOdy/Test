@@ -72,7 +72,7 @@ async function main() {
     knowledgePointIds.set(point.id, storedPoint.id);
   }
 
-  const levelByQuestionId = new Map(questions.map((question) => [question.id, levelIds.get(question.levelId) ?? question.levelId]));
+  const levelByQuestionId = new Map(questions.map((question) => [question.id, levelIds.get(question.levelIds[0]) ?? question.levelIds[0]]));
   await prisma.$transaction(async (tx) => {
     await tx.question.createMany({
       data: questions.map((question) => ({

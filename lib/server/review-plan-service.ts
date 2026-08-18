@@ -181,7 +181,7 @@ export async function generateReviewPlan(
   const questions = weakPointIds.length
     ? await prisma.question.findMany({
         where: { status: "ACTIVE", knowledgePoint: { enabled: true, id: { in: weakPointIds } } },
-        select: { id: true, knowledgePointId: true, levelId: true },
+        select: { id: true, knowledgePointId: true },
       })
     : [];
 

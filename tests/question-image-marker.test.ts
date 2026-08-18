@@ -30,7 +30,6 @@ function image(overrides: Partial<DocxImage> = {}): DocxImage {
 function wordRow(overrides: Partial<ImportQuestionRow> = {}): ImportQuestionRow {
   return {
     rowNumber: 1,
-    levelCode: "A",
     categoryCode: "4.1.1",
     stem: "题干",
     rawAnswer: "A",

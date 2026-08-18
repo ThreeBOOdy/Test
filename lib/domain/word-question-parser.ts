@@ -224,7 +224,6 @@ function parseStructuredLines(lines: readonly WordParseLine[]): WordParseResult 
     const row: ImportQuestionRow = {
       rowNumber,
       locationLabel: `第 ${questionNumber} 题`,
-      levelCode: "",
       categoryCode: "",
       stem,
       rawAnswer,

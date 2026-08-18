@@ -57,7 +57,6 @@ describe("word question parser", () => {
 
     expect(rows[0].sheetName).toBeUndefined();
     expect(rows[0].externalQuestionCode).toBeUndefined();
-    expect(rows[0].levelCode).toBe("");
     expect(rows[0].categoryCode).toBe("");
   });
 
@@ -396,7 +395,7 @@ describe("word parser unsupported types and block errors", () => {
     expect(rows.map((row) => row.locationLabel)).toEqual(["第 1 题", "第 3 题"]);
     expect(rows.map((row) => row.rowNumber)).toEqual([1, 3]);
 
-    const validated = rows.map((row) => validateImportRow({ ...row, levelCode: "A", categoryCode: "4.1.1" }));
+    const validated = rows.map((row) => validateImportRow({ ...row, categoryCode: "4.1.1" }));
     expect(validated.every((item) => item.issues.every((issue) => issue.severity !== "error"))).toBe(true);
   });
 
@@ -415,7 +414,7 @@ describe("word parser unsupported types and block errors", () => {
     expect(rows.map((row) => row.locationLabel)).toEqual(["第 1 题", "第 2 题"]);
     expect(rows.every((row) => row.rawAnswer === "")).toBe(true);
     for (const row of rows) {
-      const validated = validateImportRow({ ...row, levelCode: "A", categoryCode: "4.1.1" });
+      const validated = validateImportRow({ ...row, categoryCode: "4.1.1" });
       expect(validated.issues).toContainEqual(expect.objectContaining({ severity: "error", field: "答案", message: "答案不能为空" }));
     }
   });

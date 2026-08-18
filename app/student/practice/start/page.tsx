@@ -23,11 +23,11 @@ export default async function PracticeStartPage({ searchParams }: { searchParams
     const launch = normalizePracticeLaunch(params);
     const session = await createPracticeSession(user.id,
       launch.mode === "WRONG_QUESTION" ? { mode: "wrong", questionId: launch.questionId }
-        : launch.mode === "KNOWLEDGE_POINT" ? { mode: "knowledge", levelCode: launch.levelCode ?? "A", knowledgePointId: launch.knowledgePointId ?? "" }
-          : launch.mode === "QUESTION_ORDER" ? { mode: "order", levelCode: launch.levelCode ?? "A" }
-            : launch.mode === "RANDOM_ALL" ? { mode: "random", levelCode: launch.levelCode ?? "A" }
-              : launch.mode === "MOCK_EXAM" ? { mode: "exam", levelCode: launch.levelCode ?? "A" }
-                : { mode: "level", levelCode: launch.levelCode ?? "A" });
+        : launch.mode === "KNOWLEDGE_POINT" ? { mode: "knowledge", levelCode: launch.levelCode ?? "", knowledgePointId: launch.knowledgePointId ?? "" }
+          : launch.mode === "QUESTION_ORDER" ? { mode: "order", levelCode: launch.levelCode ?? "" }
+            : launch.mode === "RANDOM_ALL" ? { mode: "random", levelCode: launch.levelCode ?? "" }
+              : launch.mode === "MOCK_EXAM" ? { mode: "exam", levelCode: launch.levelCode ?? "" }
+                : { mode: "level", levelCode: launch.levelCode ?? "" });
     redirect(`/student/practice?session=${session.id}`);
   }
   const [levels, points, levelRules, knowledgeRules, examRules, questions, activeSession] = await Promise.all([

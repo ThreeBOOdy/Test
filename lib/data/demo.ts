@@ -59,7 +59,7 @@ function createQuestions(): Question[] {
         const options = (rawOptions as string[]).map((text, optionIndex) => ({ id: String.fromCharCode(65 + optionIndex), text }));
         result.push({
           id: `${level.code}-S-${cycle}-${index}`,
-          levelId: level.id,
+          levelIds: [level.id],
           knowledgePointId: leafKnowledgeIds[(index + cycle + levelIndex) % leafKnowledgeIds.length],
           sourceBankCode: `LK${1000 + levelIndex * 100 + cycle * 10 + index}`,
           externalQuestionCode: `MC1-${1000 + levelIndex * 100 + cycle * 10 + index}`,
@@ -78,7 +78,7 @@ function createQuestions(): Question[] {
         const correctIds = correct as string[];
         result.push({
           id: `${level.code}-M-${cycle}-${index}`,
-          levelId: level.id,
+          levelIds: [level.id],
           knowledgePointId: leafKnowledgeIds[(index + cycle + levelIndex) % leafKnowledgeIds.length],
           sourceBankCode: `LK${2000 + levelIndex * 100 + cycle * 10 + index}`,
           externalQuestionCode: `MC${correctIds.length}-${2000 + levelIndex * 100 + cycle * 10 + index}`,

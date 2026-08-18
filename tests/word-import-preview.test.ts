@@ -215,21 +215,18 @@ describe("question import preview dispatch", () => {
     expect(body.stats.totalRows).toBe(2);
     expect(body.stats.validRows).toBe(2);
     expect(body.rows.map((item: { row: { locationLabel: string } }) => item.row.locationLabel)).toEqual(["第 1 题", "第 2 题"]);
-    expect(body.rows[0].row).toMatchObject({ levelCode: "A", categoryCode: "4.1.1", knowledgePointName: "力学基础" });
+    expect(body.rows[0].row).toMatchObject({ categoryCode: "4.1.1", knowledgePointName: "力学基础" });
+    expect(body.rows[0].row).not.toHaveProperty("levelCode");
     expect(body.rows[0].row.sheetName).toBeUndefined();
     expect(body.rows[0].row.externalQuestionCode).toBeUndefined();
     expect(body.sheetNames).toEqual([]);
     expect(mocks.importBatchCreate).toHaveBeenCalledWith({ data: expect.objectContaining({ fileName: "题库.docx", totalRows: 2, validRows: 2 }) });
   });
 
-  it("rejects word uploads when the level or category code is missing", async () => {
+  it("rejects word uploads when the category code is missing", async () => {
     const buffer = await buildDocx(["1. 题干", "A、选项A", "B、选项B", "答案：A"]);
 
-    const withoutLevel = await previewImport(previewRequest(uploadFile(buffer, "q.docx"), { categoryCode: "4.1.1" }));
-    expect(withoutLevel.status).toBe(400);
-    expect((await withoutLevel.json()).message).toContain("等级");
-
-    const withoutCategory = await previewImport(previewRequest(uploadFile(buffer, "q.docx"), { levelCode: "A" }));
+    const withoutCategory = await previewImport(previewRequest(uploadFile(buffer, "q.docx")));
     expect(withoutCategory.status).toBe(400);
     expect((await withoutCategory.json()).message).toContain("分类号");
   });

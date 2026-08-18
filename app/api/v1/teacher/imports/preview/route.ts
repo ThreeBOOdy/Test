@@ -14,7 +14,7 @@ import { assertSameOrigin } from "@/lib/server/http";
 import { ApiError, apiErrorResponse, requireTeacher } from "@/lib/server/api";
 
 const aliases: Record<string, string[]> = {
-  levelCode: ["等级", "级别", "level"], sourceBankCode: ["题库编号", "题库", "bank"], categoryCode: ["分类号", "知识点编号", "category"], knowledgePointName: ["知识点名称", "知识点", "categoryName"], externalQuestionCode: ["题目编号", "编号", "questionCode"], stem: ["问题", "题干", "题目"], rawAnswer: ["答案", "正确答案"], declaredSelectionSpec: ["选项规格", "规格"], preserveOptionOrder: ["保持选项顺序", "固定选项顺序", "preserveOptionOrder"], enabled: ["是否启用", "启用"],
+  sourceBankCode: ["题库编号", "题库", "bank"], categoryCode: ["分类号", "知识点编号", "category"], knowledgePointName: ["知识点名称", "知识点", "categoryName"], externalQuestionCode: ["题目编号", "编号", "questionCode"], stem: ["问题", "题干", "题目"], rawAnswer: ["答案", "正确答案"], declaredSelectionSpec: ["选项规格", "规格"], preserveOptionOrder: ["保持选项顺序", "固定选项顺序", "preserveOptionOrder"], enabled: ["是否启用", "启用"],
 };
 
 export async function POST(request: Request) {
@@ -45,7 +45,7 @@ export async function POST(request: Request) {
         const headers = new Map<string, number>();
         sheet.getRow(1).eachCell((cell, column) => headers.set(cellText(cell.value).trim(), column));
         const columnOf = (key: string) => aliases[key]?.map((alias) => headers.get(alias)).find(Boolean);
-        const missing = ["levelCode", "categoryCode", "stem", "rawAnswer"].filter((key) => !columnOf(key));
+        const missing = ["categoryCode", "stem", "rawAnswer"].filter((key) => !columnOf(key));
         if (missing.length) throw new ApiError(`${sheet.name} 缺少必要表头：${missing.map((key) => aliases[key][0]).join("、")}`);
         sheetNames.push(sheet.name);
         const maxRows = Math.min(sheet.rowCount, 5001);
@@ -60,21 +60,19 @@ export async function POST(request: Request) {
             if (column) optionValues[optionId] = cellText(row.getCell(column).value).trim();
           }
           const preserveOptionOrder = ["是", "1", "true", "yes", "y"].includes(value("preserveOptionOrder").toLowerCase());
-          const importRow: ImportQuestionRow = { rowNumber, sheetName: sheet.name, levelCode: value("levelCode"), sourceBankCode: value("sourceBankCode"), categoryCode: value("categoryCode"), knowledgePointName: value("knowledgePointName"), externalQuestionCode: value("externalQuestionCode"), stem, rawAnswer: value("rawAnswer"), declaredSelectionSpec: value("declaredSelectionSpec"), preserveOptionOrder, optionValues, enabled: !["否", "0", "false"].includes(value("enabled").toLowerCase()) };
+          const importRow: ImportQuestionRow = { rowNumber, sheetName: sheet.name, sourceBankCode: value("sourceBankCode"), categoryCode: value("categoryCode"), knowledgePointName: value("knowledgePointName"), externalQuestionCode: value("externalQuestionCode"), stem, rawAnswer: value("rawAnswer"), declaredSelectionSpec: value("declaredSelectionSpec"), preserveOptionOrder, optionValues, enabled: !["否", "0", "false"].includes(value("enabled").toLowerCase()) };
           results.push(validateImportRow(importRow));
         }
       }
     } else if (fileName.endsWith(".docx")) {
       source = "WORD";
-      const levelCode = formText(form.get("levelCode"));
       const categoryCode = formText(form.get("categoryCode"));
       const knowledgePointName = formText(form.get("knowledgePointName")) || undefined;
-      if (!levelCode) throw new ApiError("Word 导入需要选择等级");
       if (!categoryCode) throw new ApiError("Word 导入需要填写分类号");
       const parsed = parseWordContent(await extractDocxContent(await file.arrayBuffer()));
       for (const row of parsed.rows) {
         if (results.length >= 5000) break;
-        const importRow = { ...row, levelCode, categoryCode, knowledgePointName };
+        const importRow = { ...row, categoryCode, knowledgePointName };
         const prepared = prepareQuestionRowImages(importRow, importRow.rowNumber);
         importRow.stem = prepared.stem;
         importRow.optionValues = prepared.optionValues;
@@ -85,7 +83,7 @@ export async function POST(request: Request) {
       }
       for (const error of parsed.errors) {
         if (results.length >= 5000) break;
-        results.push(rejectedWordRow(error, levelCode, categoryCode, knowledgePointName));
+        results.push(rejectedWordRow(error, categoryCode, knowledgePointName));
       }
       results.sort((left, right) => left.row.rowNumber - right.row.rowNumber);
       sheetNames = [];
@@ -175,12 +173,11 @@ function formText(value: FormDataEntryValue | null): string {
   return typeof value === "string" ? value.trim() : "";
 }
 
-function rejectedWordRow(error: WordParseError, levelCode: string, categoryCode: string, knowledgePointName?: string): ValidatedQuestionRow {
+function rejectedWordRow(error: WordParseError, categoryCode: string, knowledgePointName?: string): ValidatedQuestionRow {
   return {
     row: {
       rowNumber: error.rowNumber,
       locationLabel: error.locationLabel,
-      levelCode,
       categoryCode,
       knowledgePointName,
       stem: "",

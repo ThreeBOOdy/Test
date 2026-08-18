@@ -14,7 +14,7 @@ export type QuestionOption = {
 
 export type Question = {
   id: string;
-  levelId: string;
+  levelIds: string[];
   knowledgePointId: string;
   sourceBankCode?: string;
   externalQuestionCode?: string;
@@ -68,7 +68,6 @@ export type ImportQuestionRow = {
   rowNumber: number;
   locationLabel?: string;
   sheetName?: string;
-  levelCode: string;
   sourceBankCode?: string;
   categoryCode: string;
   knowledgePointName?: string;
@@ -106,7 +105,8 @@ export type ValidatedQuestionRow = {
   type: QuestionType;
   issues: ValidationIssue[];
 };
-export type PublicQuestion = Omit<Question, "correctOptionIds" | "status" | "correctOptionCount" | "selectionSpec" | "explanation"> & {
+export type PublicQuestion = Omit<Question, "levelIds" | "correctOptionIds" | "status" | "correctOptionCount" | "selectionSpec" | "explanation"> & {
+  levelId: string;
   knowledgeName: string;
   levelCode: string;
 };

@@ -3,7 +3,7 @@ import { classifyImportDuplicate, findBatchDuplicateRows, importRowLocation, nor
 import type { ImportQuestionRow } from "../lib/domain/types";
 
 function row(overrides: Partial<ImportQuestionRow> = {}): ImportQuestionRow {
-  return { rowNumber: 2, sheetName: "题库", levelCode: "A", categoryCode: "4.1.1", externalQuestionCode: "MC2-0916", stem: "测试题目", rawAnswer: "AC", declaredSelectionSpec: "4选2", optionValues: { A: "选项A", B: "选项B", C: "选项C", D: "选项D" }, ...overrides };
+  return { rowNumber: 2, sheetName: "题库", categoryCode: "4.1.1", externalQuestionCode: "MC2-0916", stem: "测试题目", rawAnswer: "AC", declaredSelectionSpec: "4选2", optionValues: { A: "选项A", B: "选项B", C: "选项C", D: "选项D" }, ...overrides };
 }
 
 describe("question import validation", () => {
@@ -19,6 +19,11 @@ describe("question import validation", () => {
     expect(result.type).toBe("MULTIPLE_CHOICE");
     expect(result.selectionSpec).toBe("4选2");
     expect(result.issues).toHaveLength(0);
+  });
+
+  it("does not require a letter class on imported rows", () => {
+    const result = validateImportRow(row());
+    expect(result.issues.some((issue) => issue.field === "等级")).toBe(false);
   });
 
   it("rejects mismatched declared specification", () => {
@@ -57,6 +62,13 @@ describe("question import validation", () => {
     const duplicate = validateImportRow(row({ sheetName: "题库二", rowNumber: 2, externalQuestionCode: "Q-1" }));
 
     expect(findBatchDuplicateRows([first, duplicate])).toEqual(new Map([["题库二!2", "题库一!2"]]));
+  });
+
+  it("treats externalQuestionCode as a global identity key across categories and types", () => {
+    const first = validateImportRow(row({ sheetName: "电工", categoryCode: "4.1.1", externalQuestionCode: "GLOBAL-1" }));
+    const duplicate = validateImportRow(row({ sheetName: "通信", categoryCode: "1.1", externalQuestionCode: "GLOBAL-1" }));
+
+    expect(findBatchDuplicateRows([first, duplicate])).toEqual(new Map([["通信!2", "电工!2"]]));
   });
 
   it("prioritizes the Word location label for row locations", () => {
