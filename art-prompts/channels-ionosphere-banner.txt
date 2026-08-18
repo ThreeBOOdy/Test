@@ -1,0 +1,4 @@
+[Template: illustration-art-style / 插画与艺术风格 · ref case 346, case 6]
+[用途] 训练频道区/数据带 宽幅背景横幅 → public/art/channels-ionosphere-banner.webp (21:9)
+
+Elegant minimal wide banner illustration explaining ionospheric skywave propagation for a professional radio training platform. A slim dark Earth horizon curve at the bottom edge, a single restrained transmitter tower on the left emitting three clean signal rays that bounce off a glowing translucent ionosphere layer and return to a small receiver on the right, thin precise ray paths in signal cyan (#5CE1E6), one faint amber (#E8B96B) ground-wave arc hugging the horizon, vast deep navy negative space in the center for overlaying statistics, subtle fine grid lines like a spectrum analyzer graticule, flat editorial infographic-illustration hybrid with soft depth, no people, no logos, no letters, no numbers, no readable text, no clouds clutter, no watermark. Ultra-wide 21:9 composition, very dark and quiet, high detail.

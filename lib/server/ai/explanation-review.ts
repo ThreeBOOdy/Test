@@ -39,7 +39,7 @@ type ExplanationListRow = {
   updatedAt: Date;
   reviewedAt: Date | null;
   explanationReviewedBy: { displayName: string } | null;
-  level: { id: string; code: string; name: string };
+  levels: Array<{ level: { id: string; code: string; name: string } }>;
   knowledgePoint: { id: string; code: string; name: string };
 };
 
@@ -112,7 +112,7 @@ function toReviewListItem(row: ExplanationListRow): ExplanationReviewListItem {
     updatedAt: row.updatedAt.toISOString(),
     reviewedAt: row.reviewedAt ? row.reviewedAt.toISOString() : null,
     reviewedByName: row.explanationReviewedBy?.displayName ?? null,
-    level: row.level,
+    level: row.levels[0]?.level ?? { id: "", code: "", name: "未归类" },
     knowledgePoint: row.knowledgePoint,
   };
 }
@@ -134,7 +134,7 @@ export async function listExplanationReviews(params: ListExplanationReviewsParam
   const status = params.status && params.status !== "ALL" ? params.status : undefined;
   const where: Prisma.QuestionWhereInput = {
     ...(status ? { explanationStatus: status } : {}),
-    ...(params.levelId ? { levelId: params.levelId } : {}),
+    ...(params.levelId ? { levels: { some: { levelId: params.levelId } } } : {}),
     ...(params.search
       ? {
           OR: [
@@ -149,7 +149,7 @@ export async function listExplanationReviews(params: ListExplanationReviewsParam
     prisma.question.findMany({
       where,
       include: {
-        level: { select: { id: true, code: true, name: true } },
+        levels: { include: { level: { select: { id: true, code: true, name: true } } } },
         knowledgePoint: { select: { id: true, code: true, name: true } },
         explanationReviewedBy: { select: { displayName: true } },
       },
@@ -172,7 +172,7 @@ export async function getExplanationReviewDetail(questionId: string) {
   const row = await prisma.question.findUnique({
     where: { id: questionId },
     include: {
-      level: { select: { id: true, code: true, name: true } },
+      levels: { include: { level: { select: { id: true, code: true, name: true } } } },
       knowledgePoint: { select: { id: true, code: true, name: true } },
       explanationReviewedBy: { select: { id: true, displayName: true } },
     },

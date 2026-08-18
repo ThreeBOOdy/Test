@@ -24,6 +24,7 @@
     "security:rotate-student-data": "node --conditions=react-server --import tsx scripts/rotate-student-data-keys.ts",
     "db:generate": "prisma generate",
     "db:migrate": "prisma migrate dev",
+    "db:s1-precheck": "node --conditions=react-server --import tsx scripts/question-bank-s1-precheck.ts",
     "db:seed": "tsx prisma/seed.ts",
     "data-retention:cleanup": "node --conditions=react-server --import tsx scripts/data-retention-maintenance.ts",
     "acceptance": "tsx scripts/full-system-acceptance.ts",

@@ -105,13 +105,12 @@ export async function POST(request: Request) {
     const existingQuestions = codedRows.length
       ? await prisma.question.findMany({
         where: {
-          level: { code: { in: [...new Set(codedRows.map((item) => item.row.levelCode.trim()))] } },
           externalQuestionCode: { in: [...new Set(codedRows.map((item) => item.row.externalQuestionCode!.trim()))] },
         },
-        include: { level: { select: { code: true } }, images: { select: { id: true, contentHash: true } } },
+        select: { externalQuestionCode: true, stem: true, options: true, correctOptionIds: true, images: { select: { id: true, contentHash: true } } },
       })
       : [];
-    const existingByCode = new Map(existingQuestions.map((question) => [`${question.level.code}|${question.externalQuestionCode}`, question]));
+    const existingByCode = new Map(existingQuestions.map((question) => [question.externalQuestionCode, question]));
     const unnumberedRows = results.filter((item) => !item.row.externalQuestionCode?.trim());
     const existingForSuspects = unnumberedRows.length
       ? await prisma.question.findMany({
@@ -126,7 +125,7 @@ export async function POST(request: Request) {
     for (const item of results) {
       if (item.issues.some((issue) => issue.severity === "error")) continue;
       const existing = item.row.externalQuestionCode?.trim()
-        ? existingByCode.get(`${item.row.levelCode.trim()}|${item.row.externalQuestionCode.trim()}`)
+        ? existingByCode.get(item.row.externalQuestionCode.trim())
         : existingForSuspects.find((question) => classifyImportDuplicate({ ...item.row, options: item.options, correctOptionIds: item.correctOptionIds }, question, hashById, imagesHashById(question)) === "SUSPECT");
       if (!existing) continue;
       const kind = classifyImportDuplicate({ ...item.row, options: item.options, correctOptionIds: item.correctOptionIds }, existing, hashById, imagesHashById(existing));

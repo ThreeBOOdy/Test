@@ -21,7 +21,7 @@ export function MobileNavigation({ role, currentPath }: { role: "student" | "tea
   }, [open]);
 
   return <>
-    <nav className={cn("fixed inset-x-3 bottom-3 z-40 grid overflow-hidden rounded-2xl border border-cyan-300/15 bg-[color:rgba(6,12,19,.94)] p-2 shadow-[0_24px_70px_rgba(0,0,0,.5)] backdrop-blur-2xl lg:hidden", "grid-cols-4")} style={{ paddingBottom: "max(.5rem, env(safe-area-inset-bottom))" }} aria-label="移动端主导航">
+    <nav className={cn("fixed inset-x-3 bottom-3 z-40 grid overflow-hidden rounded-2xl border border-cyan-600/15 bg-[color:rgba(255,255,255,.94)] p-2 shadow-[0_18px_50px_rgba(21,33,43,.18)] backdrop-blur-2xl lg:hidden", "grid-cols-4")} style={{ paddingBottom: "max(.5rem, env(safe-area-inset-bottom))" }} aria-label="移动端主导航">
       {items.map((item) => <MobileNavLink key={item.href} item={item} active={currentPath === item.href} onClick={() => setOpen(false)} />)}
       {hasMore ? <button type="button" aria-label="打开更多导航" aria-expanded={open} aria-controls="mobile-nav-sheet" onClick={() => setOpen(true)} className="flex min-h-12 flex-col items-center justify-center gap-1 rounded-xl px-2 py-2 font-radio text-[9px] font-bold tracking-[.04em] text-[var(--muted-foreground)] hover:bg-[var(--surface-soft)] hover:text-[var(--foreground)]"><Menu className="size-4" />更多</button> : null}
     </nav>
@@ -31,5 +31,5 @@ export function MobileNavigation({ role, currentPath }: { role: "student" | "tea
 
 function MobileNavLink({ item, active, onClick, expanded = false }: { item: NavigationItem; active: boolean; onClick: () => void; expanded?: boolean }) {
   const Icon = item.icon;
-  return <Link href={item.href as never} aria-label={item.label} onClick={onClick} className={cn("relative flex min-h-12 items-center justify-center gap-1 rounded-xl border border-transparent px-2 py-2 font-radio text-[9px] font-bold tracking-[.03em] transition-[background-color,border-color,color]", expanded ? "flex-row justify-start text-xs" : "flex-col", active ? "border-cyan-300/15 bg-cyan-300/10 text-[var(--primary)]" : "text-[var(--muted-foreground)] hover:bg-[var(--surface-soft)] hover:text-[var(--foreground)]")}><Icon className="size-4 shrink-0" /><span>{item.label}</span>{active ? <span className="absolute inset-x-4 bottom-0 h-px bg-[var(--primary)] shadow-[0_0_8px_rgba(92,225,230,.65)]" /> : null}</Link>;
+  return <Link href={item.href as never} aria-label={item.label} onClick={onClick} className={cn("relative flex min-h-12 items-center justify-center gap-1 rounded-xl border border-transparent px-2 py-2 font-radio text-[9px] font-bold tracking-[.03em] transition-[background-color,border-color,color]", expanded ? "flex-row justify-start text-xs" : "flex-col", active ? "border-cyan-600/15 bg-cyan-500/10 text-[var(--primary)]" : "text-[var(--muted-foreground)] hover:bg-[var(--surface-soft)] hover:text-[var(--foreground)]")}><Icon className="size-4 shrink-0" /><span>{item.label}</span>{active ? <span className="absolute inset-x-4 bottom-0 h-px bg-[var(--primary)] shadow-[0_0_8px_rgba(10,134,152,.5)]" /> : null}</Link>;
 }

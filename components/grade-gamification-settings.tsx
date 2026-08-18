@@ -83,7 +83,7 @@ export function GradeGamificationSettings() {
         </div>
 
         {error ? (
-          <div role="alert" className="mt-4 rounded-xl border border-rose-300/20 bg-rose-400/10 px-4 py-3 text-sm font-semibold text-rose-200">
+          <div role="alert" className="mt-4 rounded-xl border border-rose-600/20 bg-rose-500/10 px-4 py-3 text-sm font-semibold text-rose-700">
             {error}
           </div>
         ) : null}

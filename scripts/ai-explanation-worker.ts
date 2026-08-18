@@ -38,7 +38,7 @@ async function findPendingQuestions(take: number) {
       correctOptionIds: true,
       explanationVersion: true,
       type: true,
-      level: { select: { name: true } },
+      levels: { include: { level: { select: { name: true } } } },
       knowledgePoint: { select: { name: true } },
     },
   });
@@ -52,7 +52,7 @@ function toExplanationQuestion(row: PendingQuestionRow): ExplanationQuestion {
     stem: row.stem,
     options: row.options,
     correctOptionIds: row.correctOptionIds,
-    levelName: row.level.name,
+    levelName: row.levels[0]?.level.name ?? "未归类",
     knowledgePointName: row.knowledgePoint.name,
     type: row.type,
     explanationVersion: row.explanationVersion,

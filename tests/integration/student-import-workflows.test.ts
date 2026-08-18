@@ -54,8 +54,9 @@ beforeEach(async () => {
 
 async function deleteKnowledgePoints() {
   while (await prisma.knowledgePoint.count()) {
-    const deleted = await prisma.knowledgePoint.deleteMany({ where: { children: { none: {} } } });
-    if (!deleted.count) throw new Error("Unable to delete knowledge point tree");
+    const leaves = await prisma.knowledgePoint.findMany({ where: { children: { none: {} } }, select: { id: true } });
+    if (!leaves.length) throw new Error("Unable to delete knowledge point tree");
+    await prisma.knowledgePoint.deleteMany({ where: { id: { in: leaves.map((leaf) => leaf.id) } } });
   }
 }
 

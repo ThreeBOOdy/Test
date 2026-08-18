@@ -58,8 +58,9 @@ beforeEach(async () => {
 
 async function deleteKnowledgePoints() {
   while (await prisma.knowledgePoint.count()) {
-    const deleted = await prisma.knowledgePoint.deleteMany({ where: { children: { none: {} } } });
-    if (!deleted.count) throw new Error("Unable to delete knowledge point tree");
+    const leaves = await prisma.knowledgePoint.findMany({ where: { children: { none: {} } }, select: { id: true } });
+    if (!leaves.length) throw new Error("Unable to delete knowledge point tree");
+    await prisma.knowledgePoint.deleteMany({ where: { id: { in: leaves.map((leaf) => leaf.id) } } });
   }
 }
 
@@ -68,11 +69,12 @@ describe("AI learning report generation", () => {
     const teacher = await prisma.user.create({ data: { username: "report-teacher", displayName: "Report Teacher", passwordHash: "test", role: "TEACHER" } });
     const student = await prisma.user.create({ data: { username: "report-student", displayName: "Report Student", passwordHash: "test", role: "STUDENT" } });
     const level = await prisma.level.create({ data: { code: "A", name: "A Level" } });
-    const point = await prisma.knowledgePoint.create({ data: { code: "1.1", name: "中继台频率", path: "/1/1.1", depth: 1 } });
+    const defaultType = await prisma.knowledgePointType.upsert({ where: { code: "DEFAULT" }, update: {}, create: { code: "DEFAULT", name: "默认" } });
+  const point = await prisma.knowledgePoint.create({ data: { typeId: defaultType.id, code: "1.1", name: "中继台频率", path: "/1/1.1", depth: 1 } });
     const question = await prisma.question.create({
       data: {
-        levelId: level.id,
         knowledgePointId: point.id,
+        levels: { create: { levelId: level.id } },
         externalQuestionCode: "AI-REPORT-1",
         stem: "中继台下行频率应避开哪些业务频率？",
         type: "SINGLE_CHOICE",

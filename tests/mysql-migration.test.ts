@@ -304,6 +304,28 @@ describe("MySQL project configuration", () => {
     expect(schema).toMatch(/gamificationEnabled\s+Boolean\s+@default\(true\)/);
     expect(migration).not.toMatch(/DROP TABLE `Grade`|DELETE FROM `Grade`/);
   });
+  it("defines the S1 flexible question bank data model and safe backfill migration", () => {
+    const migration = fs.readFileSync(path.resolve("prisma/migrations/20260821000000_question_bank_abc_flexibility_s1/migration.sql"), "utf8");
+    const schema = fs.readFileSync(path.resolve("prisma/schema.prisma"), "utf8");
+
+    expect(migration).toContain("CREATE TABLE `KnowledgePointType`");
+    expect(migration).toContain("CREATE TABLE `QuestionLevel`");
+    expect(migration).toContain("INSERT INTO `KnowledgePointType`");
+    expect(migration).toContain("UPDATE `KnowledgePoint` SET `typeId`");
+    expect(migration).toContain("INSERT INTO `QuestionLevel`");
+    expect(migration).toContain("ALTER TABLE `Question` DROP COLUMN `levelId`");
+    expect(migration).toContain("CREATE UNIQUE INDEX `Question_externalQuestionCode_key` ON `Question`(`externalQuestionCode`)");
+    expect(migration).toContain("CREATE UNIQUE INDEX `KnowledgePoint_typeId_code_key` ON `KnowledgePoint`(`typeId`, `code`)");
+    expect(migration).not.toMatch(/DROP TABLE `(Question|KnowledgePoint|Level)`|DELETE FROM `(Question|KnowledgePoint|Level)`/);
+
+    expect(schema).toContain("model KnowledgePointType {");
+    expect(schema).toContain("model QuestionLevel {");
+    expect(schema).toMatch(/typeId\s+String/);
+    expect(schema).toMatch(/levels\s+QuestionLevel\[\]/);
+    expect(schema).toMatch(/externalQuestionCode\s+String\?\s+@unique/);
+    expect(schema).toMatch(/@@unique\(\[typeId, code\]\)/);
+    expect(schema).not.toContain("levelId                 String\n");
+  });
 });
 
 describe("MySQL database URL protection", () => {

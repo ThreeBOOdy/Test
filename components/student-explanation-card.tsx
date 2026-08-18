@@ -18,19 +18,19 @@ export function StudentExplanationCard({ explanation, autoExpand = false, classN
 
   if (!content) {
     return (
-      <div className={cn("mt-5 rounded-2xl border border-dashed border-slate-300/25 bg-white/[.03] px-4 py-3 text-sm leading-6 text-slate-400", className)} role="status">
+      <div className={cn("mt-5 rounded-2xl border border-dashed border-[var(--border)] bg-[var(--surface-soft)] px-4 py-3 text-sm leading-6 text-[var(--muted-foreground)]", className)} role="status">
         老师正在补充解析，请稍后再来看看。
       </div>
     );
   }
 
   return (
-    <div className={cn("mt-5 overflow-hidden rounded-2xl border border-cyan-300/15 bg-cyan-400/5", className)}>
+    <div className={cn("mt-5 overflow-hidden rounded-2xl border border-cyan-600/15 bg-cyan-500/[.05]", className)}>
       <button
         type="button"
         onClick={() => setExpanded((value) => !value)}
         aria-expanded={expanded}
-        className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left text-sm font-bold text-cyan-100 transition hover:bg-white/[.03]"
+        className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left text-sm font-bold text-cyan-800 transition hover:bg-cyan-500/[.06]"
       >
         <span className="flex items-center gap-2">
           <BookOpen className="size-4" />
@@ -39,23 +39,23 @@ export function StudentExplanationCard({ explanation, autoExpand = false, classN
         {expanded ? <ChevronUp className="size-4" /> : <ChevronDown className="size-4" />}
       </button>
       {expanded ? (
-        <div className="space-y-4 border-t border-cyan-300/10 px-4 py-4">
+        <div className="space-y-4 border-t border-cyan-600/10 bg-[var(--surface)] px-4 py-4">
           {content.summary ? (
             <section>
-              <h4 className="text-xs font-bold uppercase tracking-wide text-cyan-300/80">一句话解析</h4>
-              <p className="mt-1 text-sm leading-6 text-slate-200">{content.summary}</p>
+              <h4 className="text-xs font-bold uppercase tracking-wide text-[var(--primary)]">一句话解析</h4>
+              <p className="mt-1 text-sm leading-6 text-[var(--foreground)]">{content.summary}</p>
             </section>
           ) : null}
           {content.knowledge ? (
             <section>
-              <h4 className="text-xs font-bold uppercase tracking-wide text-cyan-300/80">知识点讲解</h4>
-              <p className="mt-1 text-sm leading-6 text-slate-200">{content.knowledge}</p>
+              <h4 className="text-xs font-bold uppercase tracking-wide text-[var(--primary)]">知识点讲解</h4>
+              <p className="mt-1 text-sm leading-6 text-[var(--foreground)]">{content.knowledge}</p>
             </section>
           ) : null}
           {content.memory ? (
             <section>
-              <h4 className="text-xs font-bold uppercase tracking-wide text-cyan-300/80">记忆点</h4>
-              <p className="mt-1 text-sm leading-6 text-slate-200">{content.memory}</p>
+              <h4 className="text-xs font-bold uppercase tracking-wide text-[var(--primary)]">记忆点</h4>
+              <p className="mt-1 text-sm leading-6 text-[var(--foreground)]">{content.memory}</p>
             </section>
           ) : null}
         </div>

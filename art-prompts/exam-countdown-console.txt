@@ -1,0 +1,4 @@
+[Template: illustration-art-style / 插画与艺术风格 · ref case 346, case 6]
+[用途] 模拟考试入口/结果页氛围图 → public/art/exam-countdown-console.webp (16:10 或方形裁切)
+
+Premium editorial sci-fi illustration for a timed radio exam mode inside a professional training platform. A close three-quarter view of a precision dark-graphite receiver console: one central analog VU meter needle frozen mid-scale, a small round countdown dial glowing warm amber (#E8B96B), a restrained cyan (#5CE1E6) waveform on a miniature oscilloscope screen, brushed metal knobs and a telegraph key at the edge, shallow depth of field, deep navy background dissolving into darkness on the left for interface copy, quiet focused exam-session tension without alarm, realistic materials, soft controlled bloom, no people, no hands, no logos, no letters, no numbers, no readable text or dial markings with glyphs, no watermark. Cinematic close-up composition, high detail, dark calm grade.

@@ -35,7 +35,7 @@ export function AiDailyEncouragement() {
     <Card>
       <CardContent>
         <div className="flex items-start gap-4">
-          <div className="grid size-10 shrink-0 place-items-center rounded-2xl border border-cyan-300/20 bg-cyan-300/10 text-[var(--primary)]">
+          <div className="grid size-10 shrink-0 place-items-center rounded-2xl border border-cyan-600/15 bg-cyan-500/10 text-[var(--primary)]">
             <Sparkles className="size-4" />
           </div>
           <div>

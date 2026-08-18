@@ -29,7 +29,7 @@ type PlanWithCards = Prisma.ReviewPlanGetPayload<{
         knowledgePoint: { select: { name: true } };
         question: {
           include: {
-            level: { select: { code: true } };
+            levels: { include: { level: { select: { code: true } } } };
             knowledgePoint: { select: { name: true } };
           };
         };
@@ -45,7 +45,7 @@ const planInclude = {
       knowledgePoint: { select: { name: true } },
       question: {
         include: {
-          level: { select: { code: true } },
+          levels: { include: { level: { select: { code: true } } } },
           knowledgePoint: { select: { name: true } },
         },
       },
@@ -66,7 +66,7 @@ function daysBetween(startDate: string, endDate: string) {
 function toPublicPlan(plan: PlanWithCards): PublicReviewPlan {
   const cards = plan.cards.map((card) => {
     const knowledgeName = card.question.knowledgePoint.name;
-    const levelCode = card.question.level.code;
+    const levelCode = card.question.levels[0]?.level.code ?? "未归类";
     const launchHref = card.source === "WRONG_QUESTION"
       ? buildPracticeLaunchHref({ mode: "WRONG_QUESTION", questionId: card.questionId })
       : buildPracticeLaunchHref({
@@ -244,7 +244,7 @@ export async function completeReviewCard(userId: string, planId: string, cardId:
         include: {
           question: {
             include: {
-              level: { select: { code: true } },
+              levels: { include: { level: { select: { code: true } } } },
               knowledgePoint: { select: { name: true } },
             },
           },
@@ -260,7 +260,7 @@ export async function completeReviewCard(userId: string, planId: string, cardId:
       include: {
         question: {
           include: {
-            level: { select: { code: true } },
+            levels: { include: { level: { select: { code: true } } } },
             knowledgePoint: { select: { name: true } },
           },
         },
@@ -335,7 +335,7 @@ function toPublicCard(card: {
   question: {
     stem: string;
     knowledgePointId: string;
-    level: { code: string };
+    levels: Array<{ level: { code: string } }>;
     knowledgePoint: { name: string };
   };
 }): PublicReviewCard {
@@ -343,7 +343,7 @@ function toPublicCard(card: {
     ? buildPracticeLaunchHref({ mode: "WRONG_QUESTION", questionId: card.questionId })
     : buildPracticeLaunchHref({
         mode: "KNOWLEDGE_POINT",
-        levelCode: card.question.level.code,
+        levelCode: card.question.levels[0]?.level.code ?? "未归类",
         knowledgePointId: card.knowledgePointId ?? card.question.knowledgePointId,
       });
   return {
@@ -351,7 +351,7 @@ function toPublicCard(card: {
     questionId: card.questionId,
     knowledgePointId: card.knowledgePointId,
     knowledgeName: card.question.knowledgePoint.name,
-    levelCode: card.question.level.code,
+    levelCode: card.question.levels[0]?.level.code ?? "未归类",
     stem: card.question.stem,
     source: card.source,
     priority: card.priority,

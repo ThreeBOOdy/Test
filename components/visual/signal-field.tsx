@@ -9,9 +9,9 @@ type SignalFieldProps = {
   intensity?: "hero" | "ambient";
 };
 
-const CYAN = new THREE.Color("#5ce1e6");
-const AMBER = new THREE.Color("#e8b96b");
-const VIOLET = new THREE.Color("#8d7cf7");
+const CYAN = new THREE.Color("#0a8698");
+const AMBER = new THREE.Color("#d18a2a");
+const VIOLET = new THREE.Color("#7a6ce0");
 
 /**
  * Three.js 无线电信号场:
@@ -38,7 +38,7 @@ export function SignalField({ className, intensity = "hero" }: SignalFieldProps)
     host.appendChild(renderer.domElement);
 
     const scene = new THREE.Scene();
-    scene.fog = new THREE.Fog(0x020508, 14, 38);
+    scene.fog = new THREE.Fog(0xf6f7f4, 14, 38);
 
     const camera = new THREE.PerspectiveCamera(55, 1, 0.1, 100);
     camera.position.set(0, 5.8, 13.5);
@@ -82,8 +82,8 @@ export function SignalField({ className, intensity = "hero" }: SignalFieldProps)
       size: hero ? 0.075 : 0.06,
       vertexColors: true,
       transparent: true,
-      opacity: hero ? 0.9 : 0.5,
-      blending: THREE.AdditiveBlending,
+      opacity: hero ? 0.55 : 0.32,
+      blending: THREE.NormalBlending,
       depthWrite: false,
       sizeAttenuation: true,
     });
@@ -101,7 +101,7 @@ export function SignalField({ className, intensity = "hero" }: SignalFieldProps)
     const rings: { mesh: THREE.Mesh; speed: number }[] = [];
     for (const def of ringDefs) {
       const geo = new THREE.TorusGeometry(def.radius, def.tube, 8, 128);
-      const mat = new THREE.MeshBasicMaterial({ color: def.color, transparent: true, opacity: hero ? def.opacity : def.opacity * 0.45, blending: THREE.AdditiveBlending, depthWrite: false });
+      const mat = new THREE.MeshBasicMaterial({ color: def.color, transparent: true, opacity: hero ? def.opacity : def.opacity * 0.45, blending: THREE.NormalBlending, depthWrite: false });
       const mesh = new THREE.Mesh(geo, mat);
       mesh.rotation.x = Math.PI / 2 + def.tilt * 0.35;
       mesh.rotation.y = def.tilt;
@@ -113,13 +113,13 @@ export function SignalField({ className, intensity = "hero" }: SignalFieldProps)
 
     // 环心信标
     const beaconGeo = new THREE.SphereGeometry(0.16, 16, 16);
-    const beaconMat = new THREE.MeshBasicMaterial({ color: AMBER, transparent: true, opacity: hero ? 0.95 : 0.4, blending: THREE.AdditiveBlending, depthWrite: false });
+    const beaconMat = new THREE.MeshBasicMaterial({ color: AMBER, transparent: true, opacity: hero ? 0.85 : 0.38, blending: THREE.NormalBlending, depthWrite: false });
     const beacon = new THREE.Mesh(beaconGeo, beaconMat);
     ringGroup.add(beacon);
 
     // ---------- 巡航扫描束(周期性扫过波面的光带) ----------
     const beamGeo = new THREE.PlaneGeometry(width, 0.9);
-    const beamMat = new THREE.MeshBasicMaterial({ color: CYAN, transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide });
+    const beamMat = new THREE.MeshBasicMaterial({ color: CYAN, transparent: true, opacity: 0, blending: THREE.NormalBlending, depthWrite: false, side: THREE.DoubleSide });
     const beam = new THREE.Mesh(beamGeo, beamMat);
     beam.rotation.x = -Math.PI / 2;
     beam.position.y = -0.6;

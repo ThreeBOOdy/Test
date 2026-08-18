@@ -62,8 +62,9 @@ beforeEach(async () => {
 
 async function deleteKnowledgePoints() {
   while (await prisma.knowledgePoint.count()) {
-    const deleted = await prisma.knowledgePoint.deleteMany({ where: { children: { none: {} } } });
-    if (!deleted.count) throw new Error("Unable to delete knowledge point tree");
+    const leaves = await prisma.knowledgePoint.findMany({ where: { children: { none: {} } }, select: { id: true } });
+    if (!leaves.length) throw new Error("Unable to delete knowledge point tree");
+    await prisma.knowledgePoint.deleteMany({ where: { id: { in: leaves.map((leaf) => leaf.id) } } });
   }
 }
 
@@ -161,11 +162,12 @@ describe("import batch image preview pipeline", () => {
     await createTeacher("teacher-1");
     mocks.getCurrentUser.mockResolvedValue(teacherUser("teacher-1"));
     const level = await prisma.level.create({ data: { code: "A", name: "A Level" } });
-    const point = await prisma.knowledgePoint.create({ data: { code: "4.1.1", name: "Point", path: "/4/4.1.1", depth: 1 } });
+    const defaultType = await prisma.knowledgePointType.upsert({ where: { code: "DEFAULT" }, update: {}, create: { code: "DEFAULT", name: "默认" } });
+  const point = await prisma.knowledgePoint.create({ data: { typeId: defaultType.id, code: "4.1.1", name: "Point", path: "/4/4.1.1", depth: 1 } });
     await prisma.question.create({
       data: {
-        levelId: level.id,
         knowledgePointId: point.id,
+        levels: { create: { levelId: level.id } },
         stem: "含图题干[图:qimg_existing]",
         type: "SINGLE_CHOICE",
         optionCount: 2,

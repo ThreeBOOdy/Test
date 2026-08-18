@@ -13,15 +13,15 @@ export default async function QuestionsPage({ searchParams }: { searchParams: Pr
   const where = {
     ...(params.search ? { OR: [{ stem: { contains: params.search } }, { externalQuestionCode: { contains: params.search } }] } : {}),
     ...(params.status && ["ACTIVE", "DISABLED", "ARCHIVED"].includes(params.status) ? { status: params.status as "ACTIVE" | "DISABLED" | "ARCHIVED" } : {}),
-    ...(params.level ? { levelId: params.level } : {}),
+    ...(params.level ? { levels: { some: { levelId: params.level } } } : {}),
   };
   const [questions, total, levels, knowledgePoints] = await Promise.all([
-    prisma.question.findMany({ where, include: { level: true, knowledgePoint: true }, orderBy: { createdAt: "desc" }, skip, take: pageSize }),
+    prisma.question.findMany({ where, include: { levels: { include: { level: true } }, knowledgePoint: true }, orderBy: { createdAt: "desc" }, skip, take: pageSize }),
     prisma.question.count({ where }),
     prisma.level.findMany({ orderBy: [{ sortOrder: "asc" }, { code: "asc" }] }),
     prisma.knowledgePoint.findMany({ include: { _count: { select: { children: true } } }, orderBy: [{ depth: "asc" }, { sortOrder: "asc" }, { code: "asc" }] }),
   ]);
-  const rows = questions.map((question) => ({ id: question.id, levelId: question.levelId, knowledgePointId: question.knowledgePointId, levelCode: question.level.code, knowledgeCode: question.knowledgePoint.code, knowledgeName: question.knowledgePoint.name, sourceBankCode: question.sourceBankCode ?? "", externalQuestionCode: question.externalQuestionCode ?? "", stem: question.stem, type: question.type, selectionSpec: question.selectionSpec, preserveOptionOrder: question.preserveOptionOrder, options: question.options as unknown as QuestionOption[], correctOptionIds: parseJsonStringArray(question.correctOptionIds, "correctOptionIds"), status: question.status, version: question.version }));
+  const rows = questions.map((question) => ({ id: question.id, levelId: question.levels[0]?.levelId ?? "", knowledgePointId: question.knowledgePointId, levelCode: question.levels.map((item) => item.level.code).join("、") || "未归类", knowledgeCode: question.knowledgePoint.code, knowledgeName: question.knowledgePoint.name, sourceBankCode: question.sourceBankCode ?? "", externalQuestionCode: question.externalQuestionCode ?? "", stem: question.stem, type: question.type, selectionSpec: question.selectionSpec, preserveOptionOrder: question.preserveOptionOrder, options: question.options as unknown as QuestionOption[], correctOptionIds: parseJsonStringArray(question.correctOptionIds, "correctOptionIds"), status: question.status, version: question.version }));
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
   return <AppShell role="teacher" currentPath="/teacher/questions"><div className="safe-bottom"><PageHeader title="题库管理" description={`共 ${total} 道题目，当前第 ${page} 页。`} /><QuestionManager rows={rows} levels={levels.map((level) => ({ id: level.id, code: level.code, name: level.name, enabled: level.enabled }))} knowledgePoints={knowledgePoints.filter((point) => point._count.children === 0).map((point) => ({ id: point.id, code: point.code, name: point.name, enabled: point.enabled }))} /><PaginationNav page={page} totalPages={totalPages} path="/teacher/questions" params={{ search: params.search, status: params.status, level: params.level }} /></div></AppShell>;
 }

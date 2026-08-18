@@ -10,8 +10,8 @@ import type { KnowledgeMapNode, KnowledgeMapStatus, PublicKnowledgeMap } from "@
 import { cn } from "@/lib/utils";
 
 const STATUS_META: Record<KnowledgeMapStatus, { label: string; className: string; icon: typeof Circle }> = {
-  mastered: { label: "已点亮", className: "border-emerald-300/20 bg-emerald-400/10 text-emerald-200", icon: CheckCircle2 },
-  weak: { label: "待攻克", className: "border-amber-300/20 bg-amber-400/10 text-amber-200", icon: AlertTriangle },
+  mastered: { label: "已点亮", className: "border-emerald-600/20 bg-emerald-500/10 text-emerald-700", icon: CheckCircle2 },
+  weak: { label: "待攻克", className: "border-amber-600/20 bg-amber-500/10 text-amber-700", icon: AlertTriangle },
   unvisited: { label: "未探索", className: "border-[var(--border)] bg-[var(--surface-soft)] text-[var(--muted-foreground)]", icon: Circle },
 };
 
@@ -70,7 +70,7 @@ export function KnowledgeMapView({ initial }: { initial: PublicKnowledgeMap }) {
       </div>
 
       {message ? (
-        <div role="alert" className={cn("mt-4 rounded-xl border px-4 py-3 text-sm font-semibold", message.tone === "error" ? "border-rose-300/20 bg-rose-400/10 text-rose-200" : "border-emerald-300/20 bg-emerald-400/10 text-emerald-200")}>
+        <div role="alert" className={cn("mt-4 rounded-xl border px-4 py-3 text-sm font-semibold", message.tone === "error" ? "border-rose-600/20 bg-rose-500/10 text-rose-700" : "border-emerald-600/20 bg-emerald-500/10 text-emerald-700")}>
           {message.text}
         </div>
       ) : null}
@@ -83,7 +83,7 @@ export function KnowledgeMapView({ initial }: { initial: PublicKnowledgeMap }) {
               技能树 / 副本入口
             </div>
             <div className="flex items-center gap-4 text-xs text-[var(--muted-foreground)]">
-              <span className="flex items-center gap-1.5"><CheckCircle2 className="size-3.5 text-emerald-300" />已点亮</span>
+              <span className="flex items-center gap-1.5"><CheckCircle2 className="size-3.5 text-emerald-600" />已点亮</span>
               <span className="flex items-center gap-1.5"><AlertTriangle className="size-3.5 text-amber-300" />待攻克</span>
               <span className="flex items-center gap-1.5"><Circle className="size-3.5" />未探索</span>
             </div>

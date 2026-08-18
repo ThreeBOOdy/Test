@@ -101,7 +101,7 @@ export function AiExplanationReviewManager({ rows }: { rows: ExplanationReviewRo
 
     {selected ? <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-slate-950/45 p-4 sm:p-8" role="dialog" aria-modal="true" aria-label="AI 解析审核"><div className="my-auto w-full max-w-4xl rounded-[24px] bg-[var(--surface-soft)] p-5 shadow-2xl sm:p-7"><div className="mb-6 flex items-center justify-between"><h2 className="text-xl font-extrabold">AI 解析审核</h2><Button type="button" variant="ghost" size="sm" onClick={() => setSelected(null)} aria-label="关闭"><X className="size-5" /></Button></div>
       {!detail ? <div className="flex items-center justify-center gap-3 py-12 text-sm text-[var(--muted-foreground)]"><Loader2 className="size-5 animate-spin" />加载解析详情…</div> : <>
-        {message ? <div className="mb-4 rounded-xl bg-rose-400/10 px-4 py-3 text-sm font-semibold text-rose-200">{message}</div> : null}
+        {message ? <div className="mb-4 rounded-xl bg-rose-500/10 px-4 py-3 text-sm font-semibold text-rose-700">{message}</div> : null}
         <div className="mb-5 grid gap-3 rounded-2xl border border-[var(--border)] bg-[var(--surface-soft)] p-4 sm:grid-cols-2">
           <Info label="题目编号" value={detail.externalQuestionCode || "-"} />
           <Info label="等级 / 知识点" value={`${detail.level.code}级 · ${detail.knowledgePoint.code} ${detail.knowledgePoint.name}`} />
@@ -112,7 +112,7 @@ export function AiExplanationReviewManager({ rows }: { rows: ExplanationReviewRo
           <div className="mb-3 text-sm font-bold">题干</div>
           <div className="whitespace-pre-wrap text-sm leading-relaxed">{detail.stem}</div>
           <div className="mt-4 grid gap-2">
-            {detail.options.map((option) => <div key={option.id} className={`rounded-xl border px-3 py-2 text-sm ${detail.correctOptionIds.includes(option.id) ? "border-emerald-300/30 bg-emerald-400/10 text-emerald-100" : "border-[var(--border)] bg-[var(--surface-soft)]"}`}>{option.id}. {option.text}{detail.correctOptionIds.includes(option.id) ? " ✓" : ""}</div>)}
+            {detail.options.map((option) => <div key={option.id} className={`rounded-xl border px-3 py-2 text-sm ${detail.correctOptionIds.includes(option.id) ? "border-emerald-600/25 bg-emerald-500/10 text-emerald-800" : "border-[var(--border)] bg-[var(--surface-soft)]"}`}>{option.id}. {option.text}{detail.correctOptionIds.includes(option.id) ? " ✓" : ""}</div>)}
           </div>
         </div>
         <div className="grid gap-4">

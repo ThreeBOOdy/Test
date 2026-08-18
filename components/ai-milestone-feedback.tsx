@@ -45,7 +45,7 @@ export function AiMilestoneFeedback({ event }: { event: MilestoneEvent }) {
       <div>
         <p className="text-sm font-semibold leading-6">{feedback}</p>
         {model && model !== "fallback" ? (
-          <p className="mt-1 text-xs text-amber-200/60">AI 生成，仅供参考</p>
+          <p className="mt-1 text-xs text-amber-700/70">AI 生成，仅供参考</p>
         ) : null}
       </div>
     </div>

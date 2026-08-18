@@ -36,12 +36,13 @@ export async function POST(request: Request) {
     if (point._count.children > 0) throw new ApiError("题目必须归属末级知识点");
     const question = await prisma.$transaction(async (tx) => {
       if (input.externalQuestionCode) {
-        const duplicate = await tx.question.findFirst({ where: { levelId: input.levelId, externalQuestionCode: input.externalQuestionCode } });
-        if (duplicate) throw new ApiError("该等级下已存在相同题目编号", 409);
+        const duplicate = await tx.question.findFirst({ where: { externalQuestionCode: input.externalQuestionCode } });
+        if (duplicate) throw new ApiError("题库中已存在相同题目编号", 409);
       }
       const created = await tx.question.create({
         data: {
-          levelId: input.levelId, knowledgePointId: input.knowledgePointId,
+          knowledgePointId: input.knowledgePointId,
+          levels: { create: { levelId: input.levelId } },
           sourceBankCode: input.sourceBankCode || null, externalQuestionCode: input.externalQuestionCode || null, stem: input.stem,
           type: normalized.type, optionCount: normalized.optionCount, correctOptionCount: normalized.correctOptionCount, selectionSpec: normalized.selectionSpec, preserveOptionOrder: input.preserveOptionOrder,
           options: normalized.options as Prisma.InputJsonValue, correctOptionIds: normalized.correctOptionIds as Prisma.InputJsonValue, status: input.status,

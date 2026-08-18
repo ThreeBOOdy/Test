@@ -88,7 +88,7 @@ export function AiStudentWeeklyReport() {
               <Section title="下一步建议" items={report.content.nextSteps} empty="暂无建议，先保持当前节奏。" />
             </div>
             {report.content.encouragement ? (
-              <div className="rounded-2xl border border-cyan-300/20 bg-cyan-400/10 px-4 py-3 text-sm font-semibold text-cyan-100">
+              <div className="rounded-2xl border border-cyan-600/20 bg-cyan-500/10 px-4 py-3 text-sm font-semibold text-cyan-800">
                 {report.content.encouragement}
               </div>
             ) : null}

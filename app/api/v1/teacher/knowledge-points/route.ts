@@ -3,7 +3,7 @@ import { z } from "zod";
 import { prisma } from "@/lib/db";
 import { readJsonBody } from "@/lib/domain/request-body";
 import { normalizeKnowledgeCode } from "@/lib/domain/knowledge-code";
-import { ensureKnowledgePoint } from "@/lib/server/knowledge-service";
+import { ensureKnowledgePoint, getOrCreateDefaultKnowledgePointType } from "@/lib/server/knowledge-service";
 import { assertSameOrigin } from "@/lib/server/http";
 import { writeAuditLogInTransaction } from "@/lib/server/audit";
 import { ApiError, apiErrorResponse, requireTeacher } from "@/lib/server/api";
@@ -17,9 +17,10 @@ export async function POST(request: Request) {
     const input = schema.parse(await readJsonBody(request));
     const code = normalizeKnowledgeCode(input.code);
     const point = await prisma.$transaction(async (tx) => {
-      const existing = await tx.knowledgePoint.findUnique({ where: { code } });
+      const type = await getOrCreateDefaultKnowledgePointType(tx);
+      const existing = await tx.knowledgePoint.findFirst({ where: { typeId: type.id, code } });
       if (existing) throw new ApiError("分类号已存在", 409);
-      const created = await ensureKnowledgePoint(tx, code, input.name, input.sortOrder);
+      const created = await ensureKnowledgePoint(tx, code, input.name, input.sortOrder, type.id);
       await writeAuditLogInTransaction(tx, { actorUserId: user.id, action: "KNOWLEDGE_CREATE", targetType: "KnowledgePoint", targetId: created.id, metadata: { version: created.version } });
       return created;
     });

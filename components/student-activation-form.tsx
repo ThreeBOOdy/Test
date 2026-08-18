@@ -50,7 +50,7 @@ export function StudentActivationForm() {
   }
 
   return <form onSubmit={submit} className="mt-7 space-y-4">
-    <p className="rounded-xl border border-cyan-300/20 bg-cyan-300/[.07] p-3 text-sm leading-6 text-cyan-100">请同时输入管理员提供的初始密码和激活码，设置新密码后选择人物身份。激活码只能使用一次。</p>
+    <p className="rounded-xl border border-cyan-600/20 bg-cyan-500/[.06] p-3 text-sm leading-6 text-cyan-900">请同时输入管理员提供的初始密码和激活码，设置新密码后选择人物身份。激活码只能使用一次。</p>
     <label className="block"><span className="mb-2 block text-sm font-extrabold">初始密码</span><input aria-label="初始密码" type="password" value={initialPassword} onChange={(event) => setInitialPassword(event.target.value)} className={inputClass} required autoComplete="current-password" /></label>
     <label className="block"><span className="mb-2 block text-sm font-extrabold">激活码</span><input aria-label="激活码" value={activationCode} onChange={(event) => setActivationCode(event.target.value)} className={inputClass} required autoComplete="one-time-code" /></label>
     <label className="block"><span className="mb-2 block text-sm font-extrabold">新密码</span><input aria-label="新密码" type="password" value={newPassword} onChange={(event) => setNewPassword(event.target.value)} className={inputClass} required minLength={8} autoComplete="new-password" /></label>

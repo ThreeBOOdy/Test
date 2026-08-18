@@ -115,7 +115,7 @@ export function RpgPanel({ initial }: { initial: PublicPlayerStatus }) {
       <CardContent>
         <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
           <div className="flex items-start gap-4">
-            <div className="grid size-12 place-items-center rounded-2xl border border-amber-300/20 bg-amber-400/10 text-amber-200">
+            <div className="grid size-12 place-items-center rounded-2xl border border-amber-600/20 bg-amber-500/10 text-amber-700">
               <Trophy className="size-5" />
             </div>
             <div>
@@ -129,7 +129,7 @@ export function RpgPanel({ initial }: { initial: PublicPlayerStatus }) {
           </div>
           <div className="flex shrink-0 flex-wrap items-center gap-2">
             {status.gamificationEnabled && status.mapEnabled ? (
-              <Link href={"/student/map" as never} className="inline-flex min-h-9 items-center gap-1.5 rounded-xl border border-cyan-300/20 bg-cyan-300/10 px-3 text-xs font-bold text-[var(--primary)] transition hover:bg-cyan-300/20">
+              <Link href={"/student/map" as never} className="inline-flex min-h-9 items-center gap-1.5 rounded-xl border border-cyan-600/20 bg-cyan-500/10 px-3 text-xs font-bold text-[var(--primary)] transition hover:bg-cyan-500/15">
                 <Map className="size-3" />
                 学习地图
               </Link>
@@ -151,7 +151,7 @@ export function RpgPanel({ initial }: { initial: PublicPlayerStatus }) {
         </div>
 
         {message ? (
-          <div role="alert" className={`mt-4 rounded-xl border px-4 py-3 text-sm font-semibold ${message.tone === "error" ? "border-rose-300/20 bg-rose-400/10 text-rose-200" : "border-emerald-300/20 bg-emerald-400/10 text-emerald-200"}`}>
+          <div role="alert" className={`mt-4 rounded-xl border px-4 py-3 text-sm font-semibold ${message.tone === "error" ? "border-rose-600/20 bg-rose-500/10 text-rose-700" : "border-emerald-600/20 bg-emerald-500/10 text-emerald-700"}`}>
             {message.text}
           </div>
         ) : null}
@@ -184,7 +184,7 @@ function QuestRow({ quest, pending, onClaim }: { quest: PublicQuest; pending: bo
     <div className={`rounded-2xl p-4 ${done ? "bg-emerald-400/5" : "bg-[var(--surface-soft)]"}`}>
       <div className="flex items-center justify-between gap-3">
         <div className="flex min-w-0 items-start gap-3">
-          <div className={`mt-0.5 grid size-9 shrink-0 place-items-center rounded-xl border ${done ? "border-emerald-300/20 bg-emerald-400/10 text-emerald-200" : "border-cyan-300/20 bg-cyan-300/10 text-[var(--primary)]"}`}>
+          <div className={`mt-0.5 grid size-9 shrink-0 place-items-center rounded-xl border ${done ? "border-emerald-600/20 bg-emerald-500/10 text-emerald-700" : "border-cyan-600/15 bg-cyan-500/10 text-[var(--primary)]"}`}>
             {done ? <CheckCircle2 className="size-4" /> : <Icon className="size-4" />}
           </div>
           <div className="min-w-0">
@@ -192,10 +192,10 @@ function QuestRow({ quest, pending, onClaim }: { quest: PublicQuest; pending: bo
             <div className="mt-1 text-xs leading-6 text-[var(--muted-foreground)]">{quest.description}</div>
             <div className="mt-2 flex flex-wrap items-center gap-2">
               <Badge tone={done ? "green" : "blue"}>{quest.progress} / {quest.target}</Badge>
-              <span className="text-xs font-semibold text-amber-200">+{quest.xpReward} XP</span>
+              <span className="text-xs font-semibold text-amber-700">+{quest.xpReward} XP</span>
             </div>
             <div className="mt-2 h-1.5 w-full max-w-xs overflow-hidden rounded-full bg-black/30">
-              <div className={`h-full rounded-full ${done ? "bg-emerald-300" : "bg-[var(--primary)]"}`} style={{ width: `${progressPercent}%` }} />
+              <div className={`h-full rounded-full ${done ? "bg-emerald-500" : "bg-[var(--primary)]"}`} style={{ width: `${progressPercent}%` }} />
             </div>
           </div>
         </div>

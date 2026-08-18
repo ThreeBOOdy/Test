@@ -109,7 +109,7 @@ export function FocusSessionPanel({ initial }: { initial: FocusOverview }) {
                 {active ? "保持专注直到目标达成；提前结束不会破坏连续打卡记录。" : "设定目标时长或目标题量，完成后自动计入今日打卡。"}
               </p>
             </div>
-            {active ? <div className="grid size-12 place-items-center rounded-2xl border border-cyan-300/20 bg-cyan-300/10 text-[var(--primary)]"><Hourglass className="size-5" /></div> : <div className="grid size-12 place-items-center rounded-2xl border border-cyan-300/20 bg-cyan-300/10 text-[var(--primary)]"><TimerReset className="size-5" /></div>}
+            {active ? <div className="grid size-12 place-items-center rounded-2xl border border-cyan-600/15 bg-cyan-500/10 text-[var(--primary)]"><Hourglass className="size-5" /></div> : <div className="grid size-12 place-items-center rounded-2xl border border-cyan-600/15 bg-cyan-500/10 text-[var(--primary)]"><TimerReset className="size-5" /></div>}
           </div>
 
           {active ? (
@@ -173,7 +173,7 @@ export function FocusSessionPanel({ initial }: { initial: FocusOverview }) {
           )}
 
           {message ? (
-            <div role="alert" className={`mt-4 rounded-xl border px-4 py-3 text-sm font-semibold ${message.tone === "error" ? "border-rose-300/20 bg-rose-400/10 text-rose-200" : "border-emerald-300/20 bg-emerald-400/10 text-emerald-200"}`}>
+            <div role="alert" className={`mt-4 rounded-xl border px-4 py-3 text-sm font-semibold ${message.tone === "error" ? "border-rose-600/20 bg-rose-500/10 text-rose-700" : "border-emerald-600/20 bg-emerald-500/10 text-emerald-700"}`}>
               {message.text}
             </div>
           ) : null}
@@ -181,8 +181,8 @@ export function FocusSessionPanel({ initial }: { initial: FocusOverview }) {
       </Card>
 
       <div className="grid gap-4">
-        <Card><CardContent><div className="flex items-start gap-4"><div className="grid size-11 place-items-center rounded-2xl border border-amber-300/20 bg-amber-400/10 text-amber-200"><Flame className="size-5" /></div><div><div className="text-sm font-extrabold">连续打卡</div><div className="mt-1 text-3xl font-black text-[var(--primary)]">{overview.currentStreak} 天</div><div className="mt-1 text-xs text-[var(--muted-foreground)]">{overview.todayCheckedIn ? "今日已打卡" : "今日尚未打卡"}</div></div></div></CardContent></Card>
-        <Card><CardContent><div className="flex items-start gap-4"><div className="grid size-11 place-items-center rounded-2xl border border-cyan-300/20 bg-cyan-300/10 text-cyan-200"><CalendarCheck className="size-5" /></div><div><div className="text-sm font-extrabold">今日专注</div><div className="mt-1 text-3xl font-black text-[var(--primary)]">{overview.todayFocusMinutes} 分钟</div><div className="mt-1 text-xs text-[var(--muted-foreground)]">仅统计已完成的专注</div></div></div></CardContent></Card>
+        <Card><CardContent><div className="flex items-start gap-4"><div className="grid size-11 place-items-center rounded-2xl border border-amber-600/20 bg-amber-500/10 text-amber-700"><Flame className="size-5" /></div><div><div className="text-sm font-extrabold">连续打卡</div><div className="mt-1 text-3xl font-black text-[var(--primary)]">{overview.currentStreak} 天</div><div className="mt-1 text-xs text-[var(--muted-foreground)]">{overview.todayCheckedIn ? "今日已打卡" : "今日尚未打卡"}</div></div></div></CardContent></Card>
+        <Card><CardContent><div className="flex items-start gap-4"><div className="grid size-11 place-items-center rounded-2xl border border-cyan-600/15 bg-cyan-500/10 text-cyan-700"><CalendarCheck className="size-5" /></div><div><div className="text-sm font-extrabold">今日专注</div><div className="mt-1 text-3xl font-black text-[var(--primary)]">{overview.todayFocusMinutes} 分钟</div><div className="mt-1 text-xs text-[var(--muted-foreground)]">仅统计已完成的专注</div></div></div></CardContent></Card>
       </div>
     </div>
   );

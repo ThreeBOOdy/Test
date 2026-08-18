@@ -68,7 +68,7 @@ function ReviewCardRow({ card, pending, onComplete }: { card: PublicReviewCard; 
   return (
     <div className="flex items-center justify-between gap-3 rounded-2xl bg-[var(--surface-soft)] p-4">
       <div className="flex min-w-0 items-start gap-3">
-        <div className={`mt-0.5 grid size-9 shrink-0 place-items-center rounded-xl border ${isDone ? "border-emerald-300/20 bg-emerald-400/10 text-emerald-200" : "border-cyan-300/20 bg-cyan-300/10 text-[var(--primary)]"}`}>
+        <div className={`mt-0.5 grid size-9 shrink-0 place-items-center rounded-xl border ${isDone ? "border-emerald-600/20 bg-emerald-500/10 text-emerald-700" : "border-cyan-600/15 bg-cyan-500/10 text-[var(--primary)]"}`}>
           {isDone ? <CheckCircle2 className="size-4" /> : <Icon className="size-4" />}
         </div>
         <div className="min-w-0">

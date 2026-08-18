@@ -35,7 +35,7 @@ export default async function AiExplanationsPage({ searchParams }: { searchParam
               <Link
                 key={tab.value}
                 href={`/teacher/ai-explanations?status=${tab.value}${params.search ? `&search=${encodeURIComponent(params.search)}` : ""}${params.levelId ? `&levelId=${encodeURIComponent(params.levelId)}` : ""}` as never}
-                className={`rounded-full border px-4 py-2 text-sm font-bold transition ${currentStatus === tab.value ? "border-cyan-300/30 bg-cyan-400/10 text-cyan-100" : "border-[var(--border)] bg-[var(--surface-soft)] text-[var(--muted-foreground)] hover:text-[var(--foreground)]"}`}
+                className={`rounded-full border px-4 py-2 text-sm font-bold transition ${currentStatus === tab.value ? "border-cyan-600/30 bg-cyan-500/10 text-cyan-800" : "border-[var(--border)] bg-[var(--surface-soft)] text-[var(--muted-foreground)] hover:text-[var(--foreground)]"}`}
               >
                 {tab.label}
               </Link>

@@ -18,7 +18,6 @@ type CreatePracticeRequest =
 
 type QuestionRecord = {
   id: string;
-  levelId: string;
   knowledgePointId: string;
   sourceBankCode: string | null;
   externalQuestionCode: string | null;
@@ -31,7 +30,7 @@ type QuestionRecord = {
   options: unknown;
   correctOptionIds: unknown;
   status: "ACTIVE" | "DISABLED" | "ARCHIVED";
-  level: { code: string };
+  levels: Array<{ levelId: string; level: { code: string } }>;
   knowledgePoint: { name: string };
 };
 
@@ -78,13 +77,13 @@ async function createMockExamSession(userId: string, levelId: string) {
 async function createWrongQuestionSession(userId: string, questionId?: string): Promise<PublicPracticeSession> {
   const wrongQuestions = await prisma.wrongQuestion.findMany({
     where: { userId, mastered: false, question: { status: "ACTIVE", knowledgePoint: { enabled: true } } },
-    include: { question: { include: { level: { select: { code: true } }, knowledgePoint: { select: { name: true } } } } },
+    include: { question: { include: { levels: { include: { level: { select: { code: true } } } }, knowledgePoint: { select: { name: true } } } } },
   });
   const selected = questionId
     ? wrongQuestions.filter((item) => item.questionId === questionId)
     : shuffle(wrongQuestions).slice(0, 20);
   if (!selected.length) throw new ApiError(questionId ? "该错题不在待巩固列表" : "当前没有待巩固错题", 409);
-  const snapshots = selected.map(({ question }) => createQuestionSnapshot({ ...toDomainQuestion(question), levelCode: question.level.code, knowledgeName: question.knowledgePoint.name }));
+  const snapshots = selected.map(({ question }) => createQuestionSnapshot({ ...toDomainQuestion(question), levelCode: question.levels[0]?.level.code ?? "未归类", knowledgeName: question.knowledgePoint.name }));
   return persistPracticeSession(userId, "WRONG_QUESTION", null, null, snapshots);
 }
 
@@ -281,13 +280,13 @@ async function getCompletedExamResult(userId: string, sessionId: string): Promis
 async function findQuestionRecords(levelId: string, knowledgePointId?: string, knowledgePath?: string) {
   const knowledgeWhere = knowledgePointId && knowledgePath ? { OR: [{ id: knowledgePointId }, { path: { startsWith: `${knowledgePath}/` } }] } : undefined;
   return prisma.question.findMany({
-    where: { levelId, status: "ACTIVE", knowledgePoint: knowledgeWhere ? { is: knowledgeWhere } : { is: { enabled: true } } },
-    include: { level: { select: { code: true } }, knowledgePoint: { select: { name: true } } },
+    where: { levels: { some: { levelId } }, status: "ACTIVE", knowledgePoint: knowledgeWhere ? { is: knowledgeWhere } : { is: { enabled: true } } },
+    include: { levels: { where: { levelId }, include: { level: { select: { code: true } } } }, knowledgePoint: { select: { name: true } } },
   });
 }
 
 async function findAnsweredQuestionIds(userId: string, levelId: string) {
-  const answers = await prisma.practiceAnswer.findMany({ where: { session: { userId }, question: { levelId } }, select: { questionId: true }, distinct: ["questionId"] });
+  const answers = await prisma.practiceAnswer.findMany({ where: { session: { userId }, question: { levels: { some: { levelId } } } }, select: { questionId: true }, distinct: ["questionId"] });
   return new Set(answers.map((answer) => answer.questionId));
 }
 
@@ -314,7 +313,7 @@ function createSnapshots(records: QuestionRecord[], questions: Question[]) {
   const recordMap = new Map(records.map((record) => [record.id, record]));
   return questions.map((question) => {
     const record = recordMap.get(question.id)!;
-    return createQuestionSnapshot({ ...question, levelCode: record.level.code, knowledgeName: record.knowledgePoint.name });
+    return createQuestionSnapshot({ ...question, levelCode: record.levels[0]?.level.code ?? "未归类", knowledgeName: record.knowledgePoint.name });
   });
 }
 
@@ -418,6 +417,6 @@ function sessionTitle(mode: PracticeMode, snapshots: QuestionSnapshot[]) {
   return `${first.levelCode}级综合练习`;
 }
 
-function toDomainQuestion(record: Omit<QuestionRecord, "level" | "knowledgePoint"> | QuestionRecord): Question {
-  return { id: record.id, levelId: record.levelId, knowledgePointId: record.knowledgePointId, sourceBankCode: record.sourceBankCode ?? undefined, externalQuestionCode: record.externalQuestionCode ?? undefined, stem: record.stem, type: record.type, optionCount: record.optionCount, correctOptionCount: record.correctOptionCount, selectionSpec: record.selectionSpec, preserveOptionOrder: record.preserveOptionOrder, options: record.options as QuestionOption[], correctOptionIds: parseJsonStringArray(record.correctOptionIds, "correctOptionIds"), status: record.status };
+function toDomainQuestion(record: QuestionRecord): Question {
+  return { id: record.id, levelId: record.levels[0]?.levelId ?? "", knowledgePointId: record.knowledgePointId, sourceBankCode: record.sourceBankCode ?? undefined, externalQuestionCode: record.externalQuestionCode ?? undefined, stem: record.stem, type: record.type, optionCount: record.optionCount, correctOptionCount: record.correctOptionCount, selectionSpec: record.selectionSpec, preserveOptionOrder: record.preserveOptionOrder, options: record.options as QuestionOption[], correctOptionIds: parseJsonStringArray(record.correctOptionIds, "correctOptionIds"), status: record.status };
 }

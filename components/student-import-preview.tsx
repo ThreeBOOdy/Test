@@ -329,7 +329,7 @@ export function StudentImportPreview() {
         </div>
       ) : null}
 
-      {credentials.length ? <div className="mt-4 overflow-auto rounded-xl border border-amber-300/30 bg-amber-300/[.08] p-4"><p className="text-sm font-extrabold">一次性激活凭据（仅此展示）</p><table className="mt-3 min-w-[680px] w-full text-left text-sm"><thead><tr><th>导入用户名</th><th>初始密码</th><th>激活码</th><th>过期时间</th></tr></thead><tbody>{credentials.map((credential) => <tr key={credential.username} className="border-t border-amber-200/20"><td className="py-2">{credential.username}</td><td className="py-2 font-mono">{credential.initialPassword}</td><td className="py-2 font-mono">{credential.activationCode}</td><td className="py-2">{new Date(credential.expiresAt).toLocaleDateString("zh-CN")}</td></tr>)}</tbody></table></div> : null}
+      {credentials.length ? <div className="mt-4 overflow-auto rounded-xl border border-amber-600/25 bg-amber-500/[.07] p-4"><p className="text-sm font-extrabold">一次性激活凭据（仅此展示）</p><table className="mt-3 min-w-[680px] w-full text-left text-sm"><thead><tr><th>导入用户名</th><th>初始密码</th><th>激活码</th><th>过期时间</th></tr></thead><tbody>{credentials.map((credential) => <tr key={credential.username} className="border-t border-amber-600/15"><td className="py-2">{credential.username}</td><td className="py-2 font-mono">{credential.initialPassword}</td><td className="py-2 font-mono">{credential.activationCode}</td><td className="py-2">{new Date(credential.expiresAt).toLocaleDateString("zh-CN")}</td></tr>)}</tbody></table></div> : null}
       {message ? <div role="status" className="mt-4 rounded-xl bg-[var(--surface-soft)] p-3">{message}</div> : null}
     </>
   );

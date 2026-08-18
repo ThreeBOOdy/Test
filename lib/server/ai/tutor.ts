@@ -202,7 +202,7 @@ export async function getAiTutorContext(
   const question = await prisma.question.findUnique({
     where: { id: questionId },
     include: {
-      level: { select: { name: true } },
+      levels: { include: { level: { select: { name: true } } } },
       knowledgePoint: { select: { id: true, name: true } },
     },
   });
@@ -244,7 +244,7 @@ export async function getAiTutorContext(
       stem: question.stem,
       options: question.options,
       correctOptionIds: question.correctOptionIds,
-      levelName: question.level.name,
+      levelName: question.levels[0]?.level.name ?? "未归类",
       knowledgePointName: question.knowledgePoint.name,
       type: question.type,
       explanation: question.explanationStatus === "APPROVED" ? question.explanation : null,

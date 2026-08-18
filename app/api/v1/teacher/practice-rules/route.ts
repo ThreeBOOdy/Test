@@ -20,8 +20,8 @@ async function assertInventory(input: z.infer<typeof schema>) {
   for (const rule of input.levelRules) {
     if (rule.singleCount === 0 && rule.multipleCount === 0) throw new ApiError("等级综合练习的单选和多选不能同时为 0");
     const [singleAvailable, multipleAvailable] = await Promise.all([
-      prisma.question.count({ where: { levelId: rule.levelId, status: "ACTIVE", type: "SINGLE_CHOICE", knowledgePoint: { enabled: true } } }),
-      prisma.question.count({ where: { levelId: rule.levelId, status: "ACTIVE", type: "MULTIPLE_CHOICE", knowledgePoint: { enabled: true } } }),
+      prisma.question.count({ where: { levels: { some: { levelId: rule.levelId } }, status: "ACTIVE", type: "SINGLE_CHOICE", knowledgePoint: { enabled: true } } }),
+      prisma.question.count({ where: { levels: { some: { levelId: rule.levelId } }, status: "ACTIVE", type: "MULTIPLE_CHOICE", knowledgePoint: { enabled: true } } }),
     ]);
     if (rule.singleCount > singleAvailable || rule.multipleCount > multipleAvailable) throw new ApiError(`等级题量超过库存：单选 ${singleAvailable}，多选 ${multipleAvailable}`);
   }
@@ -30,16 +30,16 @@ async function assertInventory(input: z.infer<typeof schema>) {
     if (!point || !point.enabled) throw new ApiError("知识点不存在或已停用", 404);
     if (point.depth !== 2 || point._count.children > 0) throw new ApiError("专项练习规则只能配置二级末级知识点");
     const [singleAvailable, multipleAvailable] = await Promise.all([
-      prisma.question.count({ where: { levelId: rule.levelId, knowledgePointId: point.id, status: "ACTIVE", type: "SINGLE_CHOICE" } }),
-      prisma.question.count({ where: { levelId: rule.levelId, knowledgePointId: point.id, status: "ACTIVE", type: "MULTIPLE_CHOICE" } }),
+      prisma.question.count({ where: { levels: { some: { levelId: rule.levelId } }, knowledgePointId: point.id, status: "ACTIVE", type: "SINGLE_CHOICE" } }),
+      prisma.question.count({ where: { levels: { some: { levelId: rule.levelId } }, knowledgePointId: point.id, status: "ACTIVE", type: "MULTIPLE_CHOICE" } }),
     ]);
     if (rule.singleCount > singleAvailable || rule.multipleCount > multipleAvailable) throw new ApiError(`${point.code} 题量超过库存：单选 ${singleAvailable}，多选 ${multipleAvailable}`);
   }
   for (const rule of input.examRules) {
     try { validateExamRule(rule); } catch (error) { throw new ApiError(error instanceof Error ? error.message : "模拟考试规则无效"); }
     const [singleAvailable, multipleAvailable] = await Promise.all([
-      prisma.question.count({ where: { levelId: rule.levelId, status: "ACTIVE", type: "SINGLE_CHOICE", knowledgePoint: { enabled: true } } }),
-      prisma.question.count({ where: { levelId: rule.levelId, status: "ACTIVE", type: "MULTIPLE_CHOICE", knowledgePoint: { enabled: true } } }),
+      prisma.question.count({ where: { levels: { some: { levelId: rule.levelId } }, status: "ACTIVE", type: "SINGLE_CHOICE", knowledgePoint: { enabled: true } } }),
+      prisma.question.count({ where: { levels: { some: { levelId: rule.levelId } }, status: "ACTIVE", type: "MULTIPLE_CHOICE", knowledgePoint: { enabled: true } } }),
     ]);
     if (rule.singleCount > singleAvailable || rule.multipleCount > multipleAvailable) throw new ApiError(`模拟考试题量超过库存：单选 ${singleAvailable}，多选 ${multipleAvailable}`);
   }

@@ -1,10 +1,10 @@
-﻿{
+{
   "name": "波段研习 · 无线电考证智能题库",
   "short_name": "波段研习",
   "description": "按等级和知识点随机练习的无线电考证题库系统",
   "start_url": "/student",
   "display": "standalone",
-  "background_color": "#eef3f7",
-  "theme_color": "#071727",
+  "background_color": "#f6f7f4",
+  "theme_color": "#f6f7f4",
   "icons": [{ "src": "/app-icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }]
 }

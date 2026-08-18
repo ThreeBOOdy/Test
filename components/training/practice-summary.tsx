@@ -32,7 +32,7 @@ export function PracticeSummary({
       <div className="grid min-h-[76vh] items-center">
         <div className="grid overflow-hidden rounded-[2rem] border border-[var(--border)] bg-[var(--surface)] shadow-[var(--shadow-card)] md:grid-cols-[.8fr_1.2fr]">
           <div className="relative min-h-64 bg-[var(--surface-soft)]">
-            <Artwork src="/art/training-complete.webp" alt="无线电信号完成校准" sizes="(max-width: 768px) 100vw, 40vw" variant="complete" />
+            <Artwork src={passingCount === undefined ? "/art/training-complete.webp" : "/art/exam-countdown-result.webp"} alt={passingCount === undefined ? "无线电信号完成校准" : "模拟考试结算控制台与倒计时表盘"} sizes="(max-width: 768px) 100vw, 40vw" variant="complete" />
           </div>
           <div className="p-7 sm:p-10">
             <div className="text-xs font-bold uppercase tracking-[.22em] text-[var(--primary)]">Calibration complete</div>

@@ -1,2 +1,2 @@
 import{AppShell}from"@/components/app-shell";import{PageHeader}from"@/components/page-header";import{StudentImportPreview}from"@/components/student-import-preview";
-export default function StudentImportPage(){return <AppShell role="admin" currentPath="/admin/student-import"><PageHeader title="学生账号导入" description="上传 Excel 后服务端分页展示预检结果，可逐行编辑并重新校验；未通过的批次不能提交。"/><div className="mt-6"><StudentImportPreview/></div></AppShell>}
+export default function StudentImportPage(){return <AppShell role="admin" currentPath="/admin/student-import"><PageHeader title="学生账号导入" description="上传 Excel 后自动检查每一行，可逐个修改并重新校验；全部通过后才能正式提交。"/><div className="mt-6"><StudentImportPreview/></div></AppShell>}

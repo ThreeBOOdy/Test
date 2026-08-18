@@ -9,11 +9,13 @@
 2026-08-02 新增 Word 题库导入能力（仅接受选择题，判断题/填空/简答/材料题一律报错不入库），按 6 张分票完成并验收，设计文档与 ADR 见 `docs/word-question-import-design.md` 与 `docs/adr/0001-word-import-choice-only-boundary.md`。
 
 2026-08-13 移除单课程硬编码边界：删除 `Course` 模型与所有表的 `courseId` 列、复合外键和复合唯一键，系统回归单一领域（等级 + 知识点直接承载题库数据）。多课程/课程切换能力暂不建设，后续需要时再重新设计。
+2026-08-18 完成奖项级前端动效层与正式美术资源扩展：参考 webdesignclip / reeoo 等获奖作品集语言，为首页与核心训练页面叠加扰码调谐文本、磁吸按钮、跟随光标、滚动进度、全宽跑马灯带、逐行遮罩标题、巨型描边序号、数字滚动与胶片噪点等动效；新增 `scramble-text`、`magnetic`、`cursor-glow`、`count-up` 四个交互组件与配套 CSS 基元；新增 6 张 GPT-Image2 风格库生成的正式美术资源，并接入首页 Hero、训练频道区、信号数据带、模拟考试入口与结算页。
 
 ## 当前版本组成
 
 - **生产增强**：会话版本、登录限流、审计日志、练习快照、服务端 Excel 批次、分页、教学统计、健康检查、CI、备份恢复和生产部署。
 - **认证与视觉**：浏览器会话检查、登录体验、无线电主题视觉资源和统一页面风格。
+- **奖项级动效层（Award Layer）**：参考获奖作品集站点动效语言，新增扰码调谐文本、磁吸按钮、跟随光标、滚动进度、全宽跑马灯带、逐行遮罩标题、巨型描边序号、数字滚动与胶片噪点；新增 `scramble-text` / `magnetic` / `cursor-glow` / `count-up` 四个交互组件，首页 Hero、训练频道区、信号数据带、模拟考试入口与结算页接入 6 张新正式美术资源。
 - **训练 UI 重构**：题目导航、草稿选择状态、频谱进度、即时判题、完成摘要，以及教师移动端“更多”功能面板。
 - **学生账号体系**：自主注册、管理员审核、拒绝修改与重新提交、一年默认有效期、长期账号、敏感资料加密和 Excel 批量导入。
 - **兼容修复**：导航配置拆出 Client Component 边界，现有视觉资源替代缺失插画，端到端测试同步新版交互文案。
@@ -42,7 +44,7 @@
 - 分票清单：`.scratch/current-source-complete-review/issues/`
 - 验收与阻断修复记录：`docs/operations/final-acceptance-repair-runbook.md`
 
-重跑验收需要三个隔离数据库（`practice_ci_integration`、`practice_ci_migration`、`practice_acceptance_e2e`）以及恢复演练的 `BACKUP_*` 环境变量，完整步骤见 `docs/operations/final-acceptance-repair-runbook.md`。
+重跑验收需要显式提供两套隔离数据库（集成库如 `practice_ci_integration` / `practice_acceptance_integration`，E2E 库如 `practice_ci_e2e` / `practice_acceptance_e2e`）以及恢复演练的 `BACKUP_*` 环境变量，完整步骤见 `docs/operations/final-acceptance-repair-runbook.md`。
 
 ### Word 题库导入分票（2026-08-02）
 
@@ -222,6 +224,7 @@ flowchart LR
 | --- | --- | --- |
 | 全栈框架 | Next.js 16 | 页面、服务端组件、API Route Handlers |
 | 前端 | React 19、TypeScript 6 | 页面与交互组件 |
+| 动效 | Three.js、CSS Keyframes、IntersectionObserver、requestAnimationFrame | 信号粒子场、扰码调谐、磁吸按钮、跟随光标与滚动数字 |
 | 样式 | Tailwind CSS 4 | 响应式界面和移动端布局 |
 | 数据库 | MySQL 8.0.46 | 题库、练习、答案、错题和账号数据 |
 | ORM | Prisma 7、`@prisma/adapter-mariadb` | 类型安全查询、关系和迁移 |
@@ -270,7 +273,7 @@ app/
 └── teacher/                # 教师概览、题库、知识点、规则、导入、学生和统计
 components/
 ├── training/               # 答题选项、题目导航和完成摘要
-├── visual/                 # 无线电主题背景、插画降级和频谱进度
+├── visual/                 # 无线电主题背景、插画降级、频谱进度与奖项级动效组件
 ├── ui/                     # 基础 UI 组件
 ├── app-shell.tsx           # 桌面侧栏、身份信息和统一页面框架
 ├── mobile-navigation.tsx   # 学生底栏与教师“更多”功能面板
@@ -298,7 +301,15 @@ scripts/                    # MySQL 初始化、备份和恢复脚本
 docker-compose.prod.yml     # 应用、迁移、数据库和 Caddy 生产编排
 Caddyfile                   # HTTPS 反向代理配置
 .github/workflows/ci.yml    # GitHub Actions 全量质量门禁
+art-prompts/                # GPT-Image2 风格库生成的全部美术提示词
 ```
+
+### 视觉与美术资产
+
+- **动效基元**：`components/visual/` 除既有 `signal-field`（Three.js 信号粒子场）、`reveal`、`tilt-card` 等外，新增 `scramble-text`（扰码调谐文本）、`magnetic`（磁吸按钮）、`cursor-glow`（跟随光标与滚动进度）、`count-up`（数字滚动）。
+- **样式层**：`app/globals.css` 的 AWARD LAYER 追加奖项级动效基元（胶片噪点、逐行遮罩标题、全宽跑马灯带、巨型描边序号、竖排装饰字、滚动提示、磁吸、跟随光标、扫描分隔线），全部尊重 `prefers-reduced-motion`。
+- **正式美术资源**：`public/art/` 现有 15 张 webp；最新 6 张由 GPT-Image2 生成——`home-spectrum-observatory(.alt)`（首页 Hero）、`channels-ionosphere-banner(.alt)`（训练频道区/信号数据带）、`exam-countdown-console`（模拟考试入口）、`exam-countdown-result`（模拟考试结算页）。
+- **提示词仓库**：`art-prompts/` 保存全部美术资源的 GPT-Image2 风格库提示词（模板 `illustration-art-style`），可复现或迭代生成。
 
 ### 关键调用链
 
@@ -674,7 +685,7 @@ npm.cmd run lint
 npm.cmd run build
 ```
 
-运行全系统验收（需要三个隔离数据库与恢复演练环境，见 `docs/operations/final-acceptance-repair-runbook.md`）：
+运行全系统验收（需要显式提供两套隔离数据库与恢复演练环境，见 `docs/operations/final-acceptance-repair-runbook.md`）：
 
 ```powershell
 npm.cmd run acceptance
@@ -713,12 +724,14 @@ npm.cmd run acceptance
 - 选项随机化与冻结、唯一进行中练习、答题幂等、错题三刷状态机。
 - 模拟考试草稿版本冲突、到期自动结算、未作答与主动放弃。
 - 加密备份、保留清理、离线副本与隔离恢复演练。
+- 奖项级动效层：扰码调谐文本、磁吸按钮、跟随光标、滚动进度、数字滚动与首页/启动器/结算页美术接入的视觉契约。
 
 当前版本验证基线：
 
-- Vitest 单元、UI 与仓库规则测试：73 个测试文件，476 项通过、1 项跳过。
-- MySQL 集成测试：8 个文件、66 项通过，覆盖学生注册、导入、审核、敏感数据、题库、练习、考试与清理。
+- Vitest 单元、UI 与仓库规则测试：101 个测试文件（最近一次全量运行在并行高负载下 7 个文件出现 vitest worker 启动超时；已抽验 2 个文件单独重跑通过）。
+- MySQL 集成测试：11 个测试文件，覆盖学生注册、导入、审核、敏感数据、题库、练习、考试与清理（需 MySQL 8.0.46，MariaDB 无法执行本项目迁移）。
 - Playwright 端到端测试：5/5 通过（管理员导入并激活学生、练习断网恢复与错题三会话掌握、教师 Excel 批次预检/报告/提交/撤销、Word 题库导入闭环、含图题目渲染）。
+- 奖项级视觉契约：`visual-system-contract`、`core-visual-journeys`、`radio-design-system` 等测试锁定首页/启动器/结算页的动效组件与美术接入。
 - ESLint、Prisma Schema 校验和 Next.js 生产构建。
 - `npm audit`：当前报告 1 个高危依赖告警；尚未执行可能引入破坏性升级的 `npm audit fix --force`。
 

@@ -19,7 +19,7 @@ export async function revertImportBatch(batchId: string, actorUserId: string) {
     if (batch.status !== "COMMITTED") throw new ApiError("只有已提交批次可以撤销", 409);
     const questionsToArchive = await tx.question.findMany({
       where: { importBatchId: batchId, status: { not: "ARCHIVED" } },
-      select: { id: true, version: true, levelId: true, knowledgePointId: true, sourceBankCode: true, externalQuestionCode: true, stem: true, preserveOptionOrder: true, options: true, correctOptionIds: true },
+      select: { id: true, version: true, knowledgePointId: true, sourceBankCode: true, externalQuestionCode: true, stem: true, preserveOptionOrder: true, options: true, correctOptionIds: true },
     });
     const archived = await tx.question.updateMany({ where: { id: { in: questionsToArchive.map((question) => question.id) } }, data: { status: "ARCHIVED", version: { increment: 1 } } });
     if (questionsToArchive.length) {
@@ -94,13 +94,6 @@ export async function commitImportBatch(importedById: string, batchId: string) {
     const invalid = validated.filter((item) => item.issues.some((issue) => issue.severity === "error"));
     if (invalid.length) throw new ApiError(`仍有 ${invalid.length} 行错误，不能确认导入`);
 
-    const levelCodes = [...new Set(validated.map((item) => item.row.levelCode))];
-    const levels = await tx.level.findMany({ where: { code: { in: levelCodes }, enabled: true } });
-    const levelByCode = new Map(levels.map((level) => [level.code, level]));
-    for (const item of validated) {
-      if (!levelByCode.has(item.row.levelCode)) throw new ApiError(`${importRowLocation(item.row)} 等级 ${item.row.levelCode} 不存在或已停用`, 409);
-    }
-
     const knowledgeByCode = new Map<string, Awaited<ReturnType<typeof ensureKnowledgePoint>>>();
     for (const item of validated) {
       if (!knowledgeByCode.has(item.row.categoryCode)) {
@@ -114,13 +107,11 @@ export async function commitImportBatch(importedById: string, batchId: string) {
     const knowledgeById = new Map(knowledgePoints.map((point) => [point.id, point]));
 
     const questions: Prisma.QuestionCreateManyInput[] = validated.map((item) => {
-      const level = levelByCode.get(item.row.levelCode)!;
       const knowledgePoint = knowledgeByCode.get(item.row.categoryCode)!;
       if ((knowledgeById.get(knowledgePoint.id)?._count.children ?? 0) > 0) {
         throw new ApiError(`${importRowLocation(item.row)} 知识点 ${knowledgePoint.code} 不是末级节点`, 409);
       }
       return {
-        levelId: level.id,
         knowledgePointId: knowledgePoint.id,
         sourceBankCode: item.row.sourceBankCode || null,
         externalQuestionCode: item.row.externalQuestionCode || null,
@@ -139,10 +130,10 @@ export async function commitImportBatch(importedById: string, batchId: string) {
 
     const codedQuestions = questions.filter((question) => question.externalQuestionCode);
     const existingCoded = codedQuestions.length ? await tx.question.findMany({
-      where: { OR: codedQuestions.map((question) => ({ levelId: question.levelId, externalQuestionCode: question.externalQuestionCode! })) },
-      select: { levelId: true, externalQuestionCode: true, stem: true, options: true, correctOptionIds: true, images: { select: { id: true, contentHash: true } } },
+      where: { externalQuestionCode: { in: codedQuestions.map((question) => question.externalQuestionCode!) } },
+      select: { externalQuestionCode: true, stem: true, options: true, correctOptionIds: true, images: { select: { id: true, contentHash: true } } },
     }) : [];
-    const existingByCode = new Map(existingCoded.map((question) => [`${question.levelId}|${question.externalQuestionCode}`, question]));
+    const existingByCode = new Map(existingCoded.map((question) => [question.externalQuestionCode, question]));
     const unnumberedQuestions = questions.filter((question) => !question.externalQuestionCode);
     const existingForSuspects = unnumberedQuestions.length ? await tx.question.findMany({
       where: {},
@@ -156,13 +147,13 @@ export async function commitImportBatch(importedById: string, batchId: string) {
     const duplicateCounts = { exact: 0, conflicts: 0, suspects: 0 };
     for (const question of questions) {
       const existing = question.externalQuestionCode
-        ? existingByCode.get(`${question.levelId}|${question.externalQuestionCode}`)
+        ? existingByCode.get(question.externalQuestionCode)
         : existingForSuspects.find((candidate) => classifyImportDuplicate(question, candidate, hashById, imagesHashById(candidate)) === "SUSPECT");
       if (!existing) continue;
       const kind = classifyImportDuplicate(question, existing, hashById, imagesHashById(existing));
       if (kind === "EXACT") {
         duplicateCounts.exact += 1;
-        exactQuestionCodes.add(`${question.levelId}|${question.externalQuestionCode}`);
+        exactQuestionCodes.add(question.externalQuestionCode!);
       }
       if (kind === "CONFLICT") duplicateCounts.conflicts += 1;
       if (kind === "SUSPECT") duplicateCounts.suspects += 1;
@@ -171,10 +162,10 @@ export async function commitImportBatch(importedById: string, batchId: string) {
       throw new ApiError(`题库已发生变化：内容冲突 ${duplicateCounts.conflicts} 行、无编号疑似重复 ${duplicateCounts.suspects} 行；请人工处理后重新预检`, 409);
     }
 
-    const questionsToInsert = questions.filter((question) => !question.externalQuestionCode || !exactQuestionCodes.has(`${question.levelId}|${question.externalQuestionCode}`));
+    const questionsToInsert = questions.filter((question) => !question.externalQuestionCode || !exactQuestionCodes.has(question.externalQuestionCode));
     const inserted = questionsToInsert.length ? (await tx.question.createMany({ data: questionsToInsert })).count : 0;
     const skipped = questions.length - inserted;
-    const insertedQuestions = inserted ? await tx.question.findMany({ where: { importBatchId: batch.id }, select: { id: true, version: true, levelId: true, knowledgePointId: true, sourceBankCode: true, externalQuestionCode: true, stem: true, preserveOptionOrder: true, options: true, correctOptionIds: true, status: true } }) : [];
+    const insertedQuestions = inserted ? await tx.question.findMany({ where: { importBatchId: batch.id }, select: { id: true, version: true, knowledgePointId: true, sourceBankCode: true, externalQuestionCode: true, stem: true, preserveOptionOrder: true, options: true, correctOptionIds: true, status: true } }) : [];
     if (inserted) {
       const imagesByRowNumber = new Map<number, (typeof batch.images)[number][]>();
       for (const image of batch.images) {
@@ -182,23 +173,22 @@ export async function commitImportBatch(importedById: string, batchId: string) {
         list.push(image);
         imagesByRowNumber.set(image.rowNumber, list);
       }
-      const identityOf = (item: ValidatedQuestionRow, levelId: string) => item.row.externalQuestionCode?.trim()
-        ? `code:${levelId}|${item.row.externalQuestionCode.trim()}`
+      const identityOf = (item: ValidatedQuestionRow) => item.row.externalQuestionCode?.trim()
+        ? `code:${item.row.externalQuestionCode.trim()}`
         : `content:${importQuestionContentKey({ stem: item.row.stem, options: item.options, correctOptionIds: item.correctOptionIds }, hashById)}`;
       const insertedIdentityOf = (question: (typeof insertedQuestions)[number]) => question.externalQuestionCode?.trim()
-        ? `code:${question.levelId}|${question.externalQuestionCode.trim()}`
+        ? `code:${question.externalQuestionCode.trim()}`
         : `content:${importQuestionContentKey({ stem: question.stem, options: question.options, correctOptionIds: question.correctOptionIds }, hashById)}`;
       const questionIdByIdentity = new Map(insertedQuestions.map((question) => [insertedIdentityOf(question), question.id]));
       const questionImages: Prisma.QuestionImageCreateManyInput[] = [];
       for (const item of validated) {
         const rowImages = imagesByRowNumber.get(item.row.rowNumber);
         if (!rowImages?.length) continue;
-        const level = levelByCode.get(item.row.levelCode)!;
         const isExactDuplicate = item.row.externalQuestionCode?.trim()
-          ? exactQuestionCodes.has(`${level.id}|${item.row.externalQuestionCode.trim()}`)
+          ? exactQuestionCodes.has(item.row.externalQuestionCode.trim())
           : false;
         if (isExactDuplicate) continue;
-        const questionId = questionIdByIdentity.get(identityOf(item, level.id));
+        const questionId = questionIdByIdentity.get(identityOf(item));
         if (!questionId) throw new ApiError("图片归属的题目未写入，请重新预检", 409);
         for (const image of rowImages) {
           questionImages.push({

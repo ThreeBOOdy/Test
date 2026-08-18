@@ -62,15 +62,17 @@ beforeEach(async () => {
 
 async function deleteKnowledgePoints() {
   while (await prisma.knowledgePoint.count()) {
-    const deleted = await prisma.knowledgePoint.deleteMany({ where: { children: { none: {} } } });
-    if (!deleted.count) throw new Error("Unable to delete knowledge point tree");
+    const leaves = await prisma.knowledgePoint.findMany({ where: { children: { none: {} } }, select: { id: true } });
+    if (!leaves.length) throw new Error("Unable to delete knowledge point tree");
+    await prisma.knowledgePoint.deleteMany({ where: { id: { in: leaves.map((leaf) => leaf.id) } } });
   }
 }
 
 async function createStoredImage(overrides: { id?: string; field?: string; sortOrder?: number } = {}) {
   const level = await prisma.level.create({ data: { code: "A", name: "A Level" } });
-  const point = await prisma.knowledgePoint.create({ data: { code: "1.1", name: "Point", path: "/1/1.1", depth: 1 } });
-  const question = await prisma.question.create({ data: { levelId: level.id, knowledgePointId: point.id, externalQuestionCode: "IMG-Q-1", stem: "含图题干", type: "SINGLE_CHOICE", optionCount: 2, correctOptionCount: 1, selectionSpec: "2选1", options: [{ id: "A", text: "A" }, { id: "B", text: "B" }], correctOptionIds: ["A"] } });
+  const defaultType = await prisma.knowledgePointType.upsert({ where: { code: "DEFAULT" }, update: {}, create: { code: "DEFAULT", name: "默认" } });
+  const point = await prisma.knowledgePoint.create({ data: { typeId: defaultType.id, code: "1.1", name: "Point", path: "/1/1.1", depth: 1 } });
+  const question = await prisma.question.create({ data: { knowledgePointId: point.id, levels: { create: { levelId: level.id } }, externalQuestionCode: "IMG-Q-1", stem: "含图题干", type: "SINGLE_CHOICE", optionCount: 2, correctOptionCount: 1, selectionSpec: "2选1", options: [{ id: "A", text: "A" }, { id: "B", text: "B" }], correctOptionIds: ["A"] } });
   const image = await prisma.questionImage.create({ data: {
     id: overrides.id ?? "img-1",
     questionId: question.id,

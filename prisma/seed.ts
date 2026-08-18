@@ -60,17 +60,23 @@ async function main() {
     if (examRule) await prisma.examRule.upsert({ where: { levelId: storedLevel.id }, update: {}, create: { levelId: storedLevel.id, ...examRule } });
   }
 
+  const defaultKnowledgePointType = await prisma.knowledgePointType.upsert({
+    where: { code: "DEFAULT" },
+    update: {},
+    create: { code: "DEFAULT", name: "默认" },
+  });
+
   for (const point of knowledgePoints.toSorted((left, right) => left.depth - right.depth)) {
     const parentId = point.parentId ? knowledgePointIds.get(point.parentId) ?? point.parentId : null;
-    const storedPoint = await prisma.knowledgePoint.upsert({ where: { code: point.code }, update: { name: point.name, parentId, path: point.path, depth: point.depth, sortOrder: point.sortOrder, enabled: point.enabled }, create: { ...point, parentId } });
+    const storedPoint = await prisma.knowledgePoint.upsert({ where: { typeId_code: { typeId: defaultKnowledgePointType.id, code: point.code } }, update: { name: point.name, parentId, path: point.path, depth: point.depth, sortOrder: point.sortOrder, enabled: point.enabled }, create: { ...point, parentId, typeId: defaultKnowledgePointType.id } });
     knowledgePointIds.set(point.id, storedPoint.id);
   }
 
+  const levelByQuestionId = new Map(questions.map((question) => [question.id, levelIds.get(question.levelId) ?? question.levelId]));
   await prisma.$transaction(async (tx) => {
     await tx.question.createMany({
       data: questions.map((question) => ({
         id: question.id,
-        levelId: levelIds.get(question.levelId) ?? question.levelId,
         knowledgePointId: knowledgePointIds.get(question.knowledgePointId) ?? question.knowledgePointId,
         sourceBankCode: question.sourceBankCode,
         externalQuestionCode: question.externalQuestionCode,
@@ -85,8 +91,15 @@ async function main() {
       })),
       skipDuplicates: true,
     });
-    const seededQuestions = await tx.question.findMany({ select: { id: true, version: true, levelId: true, knowledgePointId: true, sourceBankCode: true, externalQuestionCode: true, stem: true, options: true, correctOptionIds: true, status: true } });
-    await tx.questionRevision.createMany({ data: seededQuestions.map((question) => ({ questionId: question.id, revision: question.version, snapshot: { levelId: question.levelId, knowledgePointId: question.knowledgePointId, sourceBankCode: question.sourceBankCode, externalQuestionCode: question.externalQuestionCode, stem: question.stem, options: question.options, correctOptionIds: question.correctOptionIds, status: question.status }, changeSource: "SEED" })), skipDuplicates: true });
+    const seededQuestions = await tx.question.findMany({ select: { id: true, version: true, knowledgePointId: true, sourceBankCode: true, externalQuestionCode: true, stem: true, options: true, correctOptionIds: true, status: true } });
+    await tx.questionLevel.createMany({
+      data: seededQuestions.flatMap((question) => {
+        const levelId = levelByQuestionId.get(question.id);
+        return levelId ? [{ questionId: question.id, levelId }] : [];
+      }),
+      skipDuplicates: true,
+    });
+    await tx.questionRevision.createMany({ data: seededQuestions.map((question) => ({ questionId: question.id, revision: question.version, snapshot: { knowledgePointId: question.knowledgePointId, sourceBankCode: question.sourceBankCode, externalQuestionCode: question.externalQuestionCode, stem: question.stem, options: question.options, correctOptionIds: question.correctOptionIds, status: question.status }, changeSource: "SEED" })), skipDuplicates: true });
   });
 
   console.log(`Seed complete: ${levels.length} levels, ${knowledgePoints.length} knowledge points, ${questions.length} questions.`);

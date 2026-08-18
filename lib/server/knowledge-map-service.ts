@@ -28,7 +28,7 @@ export async function getStudentKnowledgeMap(userId: string): Promise<PublicKnow
     }),
     prisma.question.findMany({
       where: { status: "ACTIVE", knowledgePoint: { enabled: true } },
-      select: { levelId: true, knowledgePointId: true, type: true },
+      select: { levels: { select: { levelId: true } }, knowledgePointId: true, type: true },
     }),
     prisma.playerProfile.upsert({
       where: { userId },
@@ -54,7 +54,7 @@ export async function getStudentKnowledgeMap(userId: string): Promise<PublicKnow
 
   const pointById = new Map(points.map((point) => [point.id, point]));
   const practiceHrefs = new Map<string, string>();
-  const inventoryQuestions = questions.map((question) => ({ ...question, status: "ACTIVE" as const }));
+  const inventoryQuestions = questions.flatMap((question) => question.levels.map((item) => ({ knowledgePointId: question.knowledgePointId, type: question.type, status: "ACTIVE" as const, levelId: item.levelId })));
   for (const rule of rules) {
     const point = pointById.get(rule.knowledgePointId);
     if (!point || point.depth !== 2) continue;

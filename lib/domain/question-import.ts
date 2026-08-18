@@ -92,7 +92,7 @@ export function findBatchDuplicateRows(rows: ValidatedQuestionRow[], hashById?: 
   for (const item of rows) {
     if (item.issues.some((issue) => issue.severity === "error")) continue;
     const code = item.row.externalQuestionCode?.trim();
-    const identity = code ? `code:${item.row.levelCode.trim()}|${code}` : `content:${importQuestionContentKey({ stem: item.row.stem, options: item.options, correctOptionIds: item.correctOptionIds }, hashById)}`;
+    const identity = code ? `code:${code}` : `content:${importQuestionContentKey({ stem: item.row.stem, options: item.options, correctOptionIds: item.correctOptionIds }, hashById)}`;
     const location = importRowLocation(item.row);
     const firstRow = firstRowByIdentity.get(identity);
     if (firstRow) duplicates.set(location, firstRow);

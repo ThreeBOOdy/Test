@@ -1,11 +1,18 @@
 # J-Space Workspace Ledger
 
 ## Goal
-完成 12 整合验收：游戏化开关(学生+班级)、AI 鼓励/里程碑反馈、端到端旅程与降级验收
+输出题库导入ABC分类灵活化规格文档并拆分为独立可执行分片
 
 ## Core
-- 10 RPG 数据模型 — PlayerProfile/PlayerLevel/QuestLog/XpLog 与迁移
+- 字母类可扩展+导入后归类 — Level 动态 A/B/C/K，题目先入公共池
+- 知识点类型独立字典+动态插入树 — 多sheet用sheet名，单sheet向导问大类小类，格式不写死
+- 导入无类别+全局唯一 — 题目先进公共池，导入后拉取到自定义类题库
+- 自定义类别字典 — Level 可扩展，归类向导动态列出，不限 ABC 三类
+- externalQuestionCode 全局唯一 — 同一题号只允许一条题目，不再按等级重复导入
+- 导入无等级，题目先进公共池 — 归类在导入后通过拉取完成
+- QuestionLevel 多等级可见 — 同一道题只存一条记录，A/B/C 练习按关联等级抽题
 - 10 XP 规则 — 练习/复习/专注/错题清零自动发放 XP，每日任务进度自动累计
+- 10 RPG 数据模型 — PlayerProfile/PlayerLevel/QuestLog/XpLog 与迁移
 - 10 API/UI — 玩家状态、今日任务、领取奖励、游戏化开关 + 学生首页 RPG 面板
 - 05 学生端解析展示 — 练习/错题页只展示 APPROVED 解析
 - 安全边界 — DRAFT/REJECTED 解析永不进入学生端
@@ -30,9 +37,14 @@
 - ✓13 06 AI 答疑教练已实现：AiConversation/AiMessage + tutor + SSE + 反馈 + 学生端 UI + 测试 — verified by: tsc --noEmit + eslint + vitest 50 cases (ai-tutor/route/chat/mysql-migration/repository-quality)
 - ✓14 10 轻度 RPG 基础已实现：PlayerProfile/PlayerLevel/QuestLog/XpLog 模型与迁移、XP 规则接入练习/复习/专注/错题清零、状态/任务/领取/开关 API、学生首页 RPG 面板与开关 — verified by: prisma validate + tsc --noEmit + eslint + vitest 58 cases (rpg service/route/panel + focus regression + mysql-migration)
 - ✓15 11 知识点地图/副本/Boss 战已实现：学习地图/掌握状态/待攻克副本入口/Boss血条与结算/隐藏入口开关（mapEnabled） — verified by: prisma validate + tsc --noEmit + eslint + vitest 89 files 534+92 cases
+- ✓16 规格文档已写入 docs/question-bank-abc-flexibility-spec.md，含 S1-S7 分片 — verified by: read the spec file; sections cover background/model/duplicates/import/practice/impact/tests/slices
+- ✓17 规格文档已修订为‘导入无等级 + 导入后拉取归类’模型，分片扩为 S1-S8 — verified by: read the revised spec; sections cover import/pull/duplicates/practice/impact/tests/slices
+- ✓18 规格文档第三版完成：自定义类别字典+导入后归类向导，分片 S1-S9 — verified by: read the v3 spec; sections cover categories/import/wizard/practice/impact/tests/slices
+- ✓19 规格文档第四版完成：字母类可扩展+知识点类型字典+动态导入向导，分片 S1-S11 — verified by: read the v4 spec; sections cover letter classes/kp types/import wizard/tree insertion/practice/impact/tests/slices
+- ✓20 规格补充 7.5：字母类拉取具体实现方案（commit返回questionIds+批量接口+未归类筛选+省事措施） — verified by: read the updated spec; section 7.5 covers commit response/batch API/UI/convenience
 
 ## Open
 - ?01 当前用户量和题库量是否足够支撑 FSRS/MCP 等后期功能 — settled by: 用现有统计数据或种子数据量估算，再决定是否提前建设
 
 ## Next
-提交 12 号票并运行完整回归/最终验收
+等待用户确认后进入 S1 实现
