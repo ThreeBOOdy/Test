@@ -63,6 +63,10 @@ import { POST as commitImportBatch } from "@/app/api/v1/teacher/imports/commit/r
 import { POST as previewImportBatch } from "@/app/api/v1/teacher/imports/preview/route";
 import { POST as createQuestion } from "@/app/api/v1/teacher/questions/route";
 import { PUT as updateQuestion } from "@/app/api/v1/teacher/questions/[id]/route";
+import { POST as assignQuestionLevel } from "@/app/api/v1/teacher/questions/[id]/levels/route";
+import { POST as removeQuestionLevel } from "@/app/api/v1/teacher/questions/[id]/levels/remove/route";
+import { POST as batchAssignQuestionLevels } from "@/app/api/v1/teacher/questions/levels/batch/route";
+import { POST as batchRemoveQuestionLevels } from "@/app/api/v1/teacher/questions/levels/remove/route";
 import { POST as createKnowledgePoint } from "@/app/api/v1/teacher/knowledge-points/route";
 import { PUT as updateKnowledgePoint } from "@/app/api/v1/teacher/knowledge-points/[id]/route";
 import { PUT as savePracticeRules } from "@/app/api/v1/teacher/practice-rules/route";
@@ -202,6 +206,10 @@ describe("single-role API access", () => {
       () => savePracticeRules(new Request("http://localhost/api/v1/teacher/practice-rules", { method: "PUT", headers: mutationHeaders, body: JSON.stringify({ levelRules: [], knowledgeRules: [], examRules: [] }) })),
       () => createQuestion(new Request("http://localhost/api/v1/teacher/questions", { method: "POST", headers: mutationHeaders, body: JSON.stringify({ levelId: "level-1", knowledgePointId: "point-1", stem: "题目", options: [{ id: "A", text: "正确" }, { id: "B", text: "错误" }], correctOptionIds: ["A"] }) })),
       () => updateQuestion(new Request("http://localhost/api/v1/teacher/questions/question-1", { method: "PUT", headers: mutationHeaders, body: JSON.stringify({ levelId: "level-1", knowledgePointId: "point-1", stem: "题目", options: [{ id: "A", text: "正确" }, { id: "B", text: "错误" }], correctOptionIds: ["A"], status: "ACTIVE" }) }), { params: Promise.resolve({ id: "question-1" }) }),
+      () => assignQuestionLevel(new Request("http://localhost/api/v1/teacher/questions/question-1/levels", { method: "POST", headers: mutationHeaders, body: JSON.stringify({ levelIds: ["level-1"] }) }), { params: Promise.resolve({ id: "question-1" }) }),
+      () => removeQuestionLevel(new Request("http://localhost/api/v1/teacher/questions/question-1/levels/remove", { method: "POST", headers: mutationHeaders, body: JSON.stringify({ levelIds: ["level-1"] }) }), { params: Promise.resolve({ id: "question-1" }) }),
+      () => batchAssignQuestionLevels(new Request("http://localhost/api/v1/teacher/questions/levels/batch", { method: "POST", headers: mutationHeaders, body: JSON.stringify({ questionIds: ["question-1"], levelIds: ["level-1"] }) })),
+      () => batchRemoveQuestionLevels(new Request("http://localhost/api/v1/teacher/questions/levels/remove", { method: "POST", headers: mutationHeaders, body: JSON.stringify({ questionIds: ["question-1"], levelIds: ["level-1"] }) })),
     ];
 
     for (const user of [administrator, student]) {
