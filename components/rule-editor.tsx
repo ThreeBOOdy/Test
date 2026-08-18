@@ -19,7 +19,8 @@ export function RuleEditor({ levels, points, questions, initialLevelRules, initi
   const [saved, setSaved] = useState(false);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState("");
-  const leaves = points.filter((point) => point.depth === 2);
+  const parentIds = new Set(points.map((point) => point.parentId).filter((id): id is string => id !== null));
+  const leaves = points.filter((point) => !parentIds.has(point.id));
 
   async function save() {
     setPending(true); setError("");

@@ -61,8 +61,8 @@ const rules = [
 ];
 
 const questions = [
-  { levelId: "level-a", knowledgePointId: "kp-1-1", type: "SINGLE_CHOICE" },
-  { levelId: "level-a", knowledgePointId: "kp-1-2", type: "SINGLE_CHOICE" },
+  { levels: [{ levelId: "level-a" }], knowledgePointId: "kp-1-1", type: "SINGLE_CHOICE" },
+  { levels: [{ levelId: "level-a" }], knowledgePointId: "kp-1-2", type: "SINGLE_CHOICE" },
 ];
 
 describe("knowledge map service", () => {
@@ -92,11 +92,15 @@ describe("knowledge map service", () => {
     expect(weakChild?.status).toBe("weak");
     expect(weakChild?.practiceHref).toContain("/student/practice/start?mode=knowledge");
     expect(weakChild?.practiceHref).toContain("knowledge=kp-1-2");
+
+    const shallowChild = root.children.find((child) => child.id === "kp-1-1");
+    expect(shallowChild?.hasPractice).toBe(true);
+    expect(shallowChild?.practiceHref).toContain("knowledge=kp-1-1");
   });
 
   it("does not offer a dungeon when the knowledge rule inventory is insufficient", async () => {
     mocks.questionFindMany.mockResolvedValue([
-      { levelId: "level-a", knowledgePointId: "kp-1-1", type: "SINGLE_CHOICE" },
+      { levels: [{ levelId: "level-a" }], knowledgePointId: "kp-1-1", type: "SINGLE_CHOICE" },
     ]);
 
     const map = await getStudentKnowledgeMap("user-1");

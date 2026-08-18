@@ -53,11 +53,12 @@ export async function getStudentKnowledgeMap(userId: string): Promise<PublicKnow
   }
 
   const pointById = new Map(points.map((point) => [point.id, point]));
+  const parentIds = new Set(points.map((point) => point.parentId).filter((id): id is string => id !== null));
   const practiceHrefs = new Map<string, string>();
   const inventoryQuestions = questions.flatMap((question) => question.levels.map((item) => ({ knowledgePointId: question.knowledgePointId, type: question.type, status: "ACTIVE" as const, levelId: item.levelId })));
   for (const rule of rules) {
     const point = pointById.get(rule.knowledgePointId);
-    if (!point || point.depth !== 2) continue;
+    if (!point || parentIds.has(point.id)) continue;
     const inventory = getKnowledgeRuleInventory(inventoryQuestions, rule.levelId, rule.knowledgePointId);
     if (!isPracticeRuleWithinInventory(rule, inventory)) continue;
     if (!practiceHrefs.has(point.id)) {

@@ -28,7 +28,7 @@ async function assertInventory(input: z.infer<typeof schema>) {
   for (const rule of input.knowledgeRules.filter((item) => item.singleCount > 0 || item.multipleCount > 0)) {
     const point = await prisma.knowledgePoint.findFirst({ where: { id: rule.knowledgePointId }, include: { _count: { select: { children: true } } } });
     if (!point || !point.enabled) throw new ApiError("知识点不存在或已停用", 404);
-    if (point.depth !== 2 || point._count.children > 0) throw new ApiError("专项练习规则只能配置二级末级知识点");
+    if (point._count.children > 0) throw new ApiError("专项练习规则只能配置末级知识点");
     const [singleAvailable, multipleAvailable] = await Promise.all([
       prisma.question.count({ where: { levels: { some: { levelId: rule.levelId } }, knowledgePointId: point.id, status: "ACTIVE", type: "SINGLE_CHOICE" } }),
       prisma.question.count({ where: { levels: { some: { levelId: rule.levelId } }, knowledgePointId: point.id, status: "ACTIVE", type: "MULTIPLE_CHOICE" } }),

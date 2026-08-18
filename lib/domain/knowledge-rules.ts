@@ -16,7 +16,7 @@ type InventoryQuestion = {
 
 export function canConfigureKnowledgeRule(points: readonly KnowledgeRulePoint[], knowledgePointId: string) {
   const point = points.find((item) => item.id === knowledgePointId);
-  if (!point || !point.enabled || point.depth !== 2) return false;
+  if (!point || !point.enabled) return false;
   return !points.some((item) => item.parentId === point.id);
 }
 

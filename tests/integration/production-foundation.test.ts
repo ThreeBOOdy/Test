@@ -258,6 +258,38 @@ describe("production database foundation", () => {
     expect(await prisma.practiceSession.findUniqueOrThrow({ where: { id: created.id } })).toMatchObject({ status: "COMPLETED", currentIndex: 1, correctCount: 1 });
   });
 
+  it("draws practice questions from a K letter-class and injects K into snapshots", async () => {
+    const user = await prisma.user.create({ data: { username: "k-practice-user", displayName: "K Practice User", passwordHash: "test", role: "STUDENT" } });
+    const kLevel = await prisma.level.create({ data: { code: "K", name: "K Level" } });
+    const aLevel = await prisma.level.create({ data: { code: "A", name: "A Level" } });
+    const defaultType = await prisma.knowledgePointType.upsert({ where: { code: "DEFAULT" }, update: {}, create: { code: "DEFAULT", name: "默认" } });
+    const point = await prisma.knowledgePoint.create({ data: { typeId: defaultType.id, code: "K.1", name: "K Point", path: "/K/K.1", depth: 1 } });
+    const kQuestion = await prisma.question.create({ data: { knowledgePointId: point.id, levels: { create: { levelId: kLevel.id } }, externalQuestionCode: "K-1", stem: "K class question", type: "SINGLE_CHOICE", optionCount: 2, correctOptionCount: 1, selectionSpec: "2选1", options: [{ id: "A", text: "A" }, { id: "B", text: "B" }], correctOptionIds: ["A"] } });
+    await prisma.question.create({ data: { knowledgePointId: point.id, levels: { create: { levelId: aLevel.id } }, externalQuestionCode: "A-1", stem: "A class question", type: "SINGLE_CHOICE", optionCount: 2, correctOptionCount: 1, selectionSpec: "2选1", options: [{ id: "A", text: "A" }, { id: "B", text: "B" }], correctOptionIds: ["A"] } });
+    await prisma.levelPracticeRule.create({ data: { levelId: kLevel.id, singleCount: 1, multipleCount: 0 } });
+
+    const session = await createPracticeSession(user.id, { mode: "level", levelCode: "K" });
+
+    expect(session.questions).toHaveLength(1);
+    expect(session.questions[0]).toMatchObject({ id: kQuestion.id, levelId: kLevel.id, levelCode: "K" });
+    const stored = await prisma.practiceSessionQuestion.findFirstOrThrow({ where: { sessionId: session.id } });
+    expect(stored.snapshot).toMatchObject({ questionId: kQuestion.id, levelId: kLevel.id, levelCode: "K" });
+  });
+
+  it("loads legacy practice sessions from stored snapshots even when current level associations change", async () => {
+    const { user, level, point, question } = await createBaseRecords();
+    const snapshot = { questionId: question.id, levelId: level.id, knowledgePointId: point.id, stem: "Original", type: "SINGLE_CHOICE", optionCount: 2, correctOptionCount: 1, selectionSpec: "2选1", options: [{ id: "A", text: "A" }, { id: "B", text: "B" }], correctOptionIds: ["A"], levelCode: "A", knowledgeName: "Point" };
+    const session = await prisma.practiceSession.create({ data: { userId: user.id, mode: "LEVEL_COMPREHENSIVE", levelId: level.id, singleCountSnapshot: 1, multipleCountSnapshot: 0 } });
+    await prisma.practiceSessionQuestion.create({ data: { sessionId: session.id, questionId: question.id, position: 0, snapshot } });
+
+    await prisma.questionLevel.deleteMany({ where: { questionId: question.id } });
+    await prisma.question.update({ where: { id: question.id }, data: { stem: "Changed", correctOptionIds: ["B"] } });
+
+    const resumed = await getPracticeSession(user.id, session.id);
+    expect(resumed?.questions[0]).toMatchObject({ id: question.id, levelId: level.id, levelCode: "A", stem: "Original" });
+    expect(JSON.stringify(resumed)).not.toContain("correctOptionIds");
+  });
+
   it("stores only token hashes and invalidates sessions on server-side revocation", async () => {
     const user = await prisma.user.create({ data: {
       username: "session-user", displayName: "Session User", passwordHash: "test", role: "STUDENT", mustChangePassword: false,
