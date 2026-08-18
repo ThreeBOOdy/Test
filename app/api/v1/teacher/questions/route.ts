@@ -10,7 +10,7 @@ import { toQuestionSnapshot } from "@/lib/server/question-revisions";
 import { ApiError, apiErrorResponse, requireTeacher } from "@/lib/server/api";
 
 export const questionInputSchema = z.object({
-  levelId: z.string().min(1),
+  levelIds: z.array(z.string().min(1)).default([]),
   knowledgePointId: z.string().min(1),
   sourceBankCode: z.string().trim().max(100).optional(),
   externalQuestionCode: z.string().trim().max(100).optional(),
@@ -27,11 +27,12 @@ export async function POST(request: Request) {
     const user = await requireTeacher();
     const input = questionInputSchema.parse(await readJsonBody(request));
     const normalized = normalizeQuestionEditorInput(input);
-    const [level, point] = await Promise.all([
-      prisma.level.findFirst({ where: { id: input.levelId, enabled: true } }),
+    const levelIds = [...new Set(input.levelIds)];
+    const [levels, point] = await Promise.all([
+      prisma.level.findMany({ where: { id: { in: levelIds.length > 0 ? levelIds : ["__none__"] }, enabled: true } }),
       prisma.knowledgePoint.findFirst({ where: { id: input.knowledgePointId, enabled: true }, include: { _count: { select: { children: true } } } }),
     ]);
-    if (!level) throw new ApiError("等级不存在或已停用", 404);
+    if (levels.length !== levelIds.length) throw new ApiError("字母类不存在或已停用", 404);
     if (!point) throw new ApiError("知识点不存在或已停用", 404);
     if (point._count.children > 0) throw new ApiError("题目必须归属末级知识点");
     const question = await prisma.$transaction(async (tx) => {
@@ -42,7 +43,7 @@ export async function POST(request: Request) {
       const created = await tx.question.create({
         data: {
           knowledgePointId: input.knowledgePointId,
-          levels: { create: { levelId: input.levelId } },
+          levels: levelIds.length > 0 ? { create: levelIds.map((levelId) => ({ levelId })) } : undefined,
           sourceBankCode: input.sourceBankCode || null, externalQuestionCode: input.externalQuestionCode || null, stem: input.stem,
           type: normalized.type, optionCount: normalized.optionCount, correctOptionCount: normalized.correctOptionCount, selectionSpec: normalized.selectionSpec, preserveOptionOrder: input.preserveOptionOrder,
           options: normalized.options as Prisma.InputJsonValue, correctOptionIds: normalized.correctOptionIds as Prisma.InputJsonValue, status: input.status,

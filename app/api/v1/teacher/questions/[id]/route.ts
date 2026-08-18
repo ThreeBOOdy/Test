@@ -19,15 +19,17 @@ export async function PUT(request: Request, context: { params: Promise<{ id: str
     const { id } = await context.params;
     const input = schema.parse(await readJsonBody(request));
     const normalized = normalizeQuestionEditorInput(input);
-    const [question, level, point] = await Promise.all([
+    const levelIds = [...new Set(input.levelIds)];
+    const [question, levels, point] = await Promise.all([
       prisma.question.findFirst({ where: { id }, include: { levels: { select: { levelId: true } } } }),
-      prisma.level.findFirst({ where: { id: input.levelId } }),
+      prisma.level.findMany({ where: { id: { in: levelIds.length > 0 ? levelIds : ["__none__"] } } }),
       prisma.knowledgePoint.findFirst({ where: { id: input.knowledgePointId }, include: { _count: { select: { children: true } } } }),
     ]);
     if (!question) throw new ApiError("题目不存在", 404);
     if (question.status === "ARCHIVED") throw new ApiError("归档题目必须通过修订历史恢复", 409);
-    const currentLevelIds = question.levels.map((item) => item.levelId);
-    if (!level || (!level.enabled && !currentLevelIds.includes(input.levelId))) throw new ApiError("等级不存在或已停用", 404);
+    const currentLevelIds = new Set(question.levels.map((item) => item.levelId));
+    if (levels.length !== levelIds.length) throw new ApiError("字母类不存在", 404);
+    if (levels.some((level) => !level.enabled && !currentLevelIds.has(level.id))) throw new ApiError("字母类不存在或已停用", 404);
     if (!point || (!point.enabled && input.knowledgePointId !== question.knowledgePointId)) throw new ApiError("知识点不存在或已停用", 404);
     if (point._count.children > 0) throw new ApiError("题目必须归属末级知识点");
     const saved = await prisma.$transaction(async (tx) => {
@@ -41,7 +43,9 @@ export async function PUT(request: Request, context: { params: Promise<{ id: str
       });
       if (changed.count !== 1) throw new ApiError(STALE_VERSION_MESSAGE, 409);
       await tx.questionLevel.deleteMany({ where: { questionId: id } });
-      await tx.questionLevel.create({ data: { questionId: id, levelId: input.levelId } });
+      if (levelIds.length > 0) {
+        await tx.questionLevel.createMany({ data: levelIds.map((levelId) => ({ questionId: id, levelId })), skipDuplicates: true });
+      }
       const updated = await tx.question.findFirstOrThrow({ where: { id } });
       await tx.questionRevision.create({ data: { questionId: id, revision: updated.version, snapshot: toQuestionSnapshot(updated), changeSource: "TEACHER_UPDATE", actorUserId: user.id } });
       await writeAuditLogInTransaction(tx, { actorUserId: user.id, action: "QUESTION_UPDATE", targetType: "Question", targetId: id, metadata: { status: input.status, version: updated.version } });

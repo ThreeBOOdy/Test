@@ -15,7 +15,7 @@ const mocks = vi.hoisted(() => ({
   writeAuditLogInTransaction: vi.fn(),
   ensureKnowledgePoint: vi.fn(),
   getOrCreateDefaultKnowledgePointType: vi.fn(),
-  levelFindFirst: vi.fn(),
+  levelFindMany: vi.fn(),
   knowledgePointFindFirst: vi.fn(),
   knowledgePointFindUnique: vi.fn(),
   questionFindFirst: vi.fn(),
@@ -41,7 +41,7 @@ vi.mock("@/lib/server/knowledge-service", () => ({ ensureKnowledgePoint: mocks.e
 vi.mock("@/lib/db", () => ({
   prisma: {
     importBatch: { findMany: mocks.importBatchFindMany, count: mocks.importBatchCount },
-    level: { findFirst: mocks.levelFindFirst },
+    level: { findMany: mocks.levelFindMany },
     knowledgePoint: { findFirst: mocks.knowledgePointFindFirst, findUnique: mocks.knowledgePointFindUnique },
     question: { findFirst: mocks.questionFindFirst, create: mocks.questionCreate, count: vi.fn() },
     $transaction: vi.fn((input: ((transaction: object) => unknown) | Promise<unknown>[]) => Array.isArray(input) ? Promise.all(input) : input({
@@ -100,7 +100,7 @@ describe("single-role API access", () => {
     mocks.createPracticeSession.mockResolvedValue({ id: "session-1" });
     mocks.commitImportBatch.mockResolvedValue({ inserted: 1, skipped: 0 });
     mocks.approveRegistration.mockResolvedValue({ id: "student-1", studentStatus: "ACTIVE" });
-    mocks.levelFindFirst.mockResolvedValue({ id: "level-1", enabled: true });
+    mocks.levelFindMany.mockResolvedValue([{ id: "level-1", enabled: true }]);
     mocks.knowledgePointFindFirst.mockImplementation((args) => (args?.where?.id ? { id: "point-1", enabled: true, _count: { children: 0 } } : null));
     mocks.knowledgePointFindUnique.mockResolvedValue(null);
     mocks.getOrCreateDefaultKnowledgePointType.mockResolvedValue({ id: "type-1" });
@@ -167,7 +167,7 @@ describe("single-role API access", () => {
     const questionRequest = () => new Request("http://localhost/api/v1/teacher/questions", {
       method: "POST",
       headers: { "content-type": "application/json", origin: "http://localhost", host: "localhost" },
-      body: JSON.stringify({ levelId: "level-1", knowledgePointId: "point-1", stem: "题目", options: [{ id: "A", text: "正确" }, { id: "B", text: "错误" }], correctOptionIds: ["A"] }),
+      body: JSON.stringify({ levelIds: ["level-1"], knowledgePointId: "point-1", stem: "题目", options: [{ id: "A", text: "正确" }, { id: "B", text: "错误" }], correctOptionIds: ["A"] }),
     });
     const knowledgeRequest = () => new Request("http://localhost/api/v1/teacher/knowledge-points", {
       method: "POST",
@@ -204,8 +204,8 @@ describe("single-role API access", () => {
       () => createKnowledgePoint(new Request("http://localhost/api/v1/teacher/knowledge-points", { method: "POST", headers: mutationHeaders, body: JSON.stringify({ code: "9.1", name: "测试知识点" }) })),
       () => updateKnowledgePoint(new Request("http://localhost/api/v1/teacher/knowledge-points/point-1", { method: "PUT", headers: mutationHeaders, body: JSON.stringify({ name: "测试知识点", sortOrder: 0, enabled: true }) }), { params: Promise.resolve({ id: "point-1" }) }),
       () => savePracticeRules(new Request("http://localhost/api/v1/teacher/practice-rules", { method: "PUT", headers: mutationHeaders, body: JSON.stringify({ levelRules: [], knowledgeRules: [], examRules: [] }) })),
-      () => createQuestion(new Request("http://localhost/api/v1/teacher/questions", { method: "POST", headers: mutationHeaders, body: JSON.stringify({ levelId: "level-1", knowledgePointId: "point-1", stem: "题目", options: [{ id: "A", text: "正确" }, { id: "B", text: "错误" }], correctOptionIds: ["A"] }) })),
-      () => updateQuestion(new Request("http://localhost/api/v1/teacher/questions/question-1", { method: "PUT", headers: mutationHeaders, body: JSON.stringify({ levelId: "level-1", knowledgePointId: "point-1", stem: "题目", options: [{ id: "A", text: "正确" }, { id: "B", text: "错误" }], correctOptionIds: ["A"], status: "ACTIVE" }) }), { params: Promise.resolve({ id: "question-1" }) }),
+      () => createQuestion(new Request("http://localhost/api/v1/teacher/questions", { method: "POST", headers: mutationHeaders, body: JSON.stringify({ levelIds: ["level-1"], knowledgePointId: "point-1", stem: "题目", options: [{ id: "A", text: "正确" }, { id: "B", text: "错误" }], correctOptionIds: ["A"] }) })),
+      () => updateQuestion(new Request("http://localhost/api/v1/teacher/questions/question-1", { method: "PUT", headers: mutationHeaders, body: JSON.stringify({ levelIds: ["level-1"], knowledgePointId: "point-1", stem: "题目", options: [{ id: "A", text: "正确" }, { id: "B", text: "错误" }], correctOptionIds: ["A"], status: "ACTIVE" }) }), { params: Promise.resolve({ id: "question-1" }) }),
       () => assignQuestionLevel(new Request("http://localhost/api/v1/teacher/questions/question-1/levels", { method: "POST", headers: mutationHeaders, body: JSON.stringify({ levelIds: ["level-1"] }) }), { params: Promise.resolve({ id: "question-1" }) }),
       () => removeQuestionLevel(new Request("http://localhost/api/v1/teacher/questions/question-1/levels/remove", { method: "POST", headers: mutationHeaders, body: JSON.stringify({ levelIds: ["level-1"] }) }), { params: Promise.resolve({ id: "question-1" }) }),
       () => batchAssignQuestionLevels(new Request("http://localhost/api/v1/teacher/questions/levels/batch", { method: "POST", headers: mutationHeaders, body: JSON.stringify({ questionIds: ["question-1"], levelIds: ["level-1"] }) })),

@@ -6,7 +6,7 @@ const mocks = vi.hoisted(() => ({
   questionUpdateMany: vi.fn(),
   questionRevisionFindFirst: vi.fn(),
   questionRevisionCreate: vi.fn(),
-  levelFindFirst: vi.fn(),
+  levelFindMany: vi.fn(),
   knowledgePointFindFirst: vi.fn(),
   knowledgePointUpdateMany: vi.fn(),
   levelRuleUpdateMany: vi.fn(),
@@ -19,11 +19,11 @@ vi.mock("@/lib/server/audit", () => ({ writeAuditLogInTransaction: mocks.audit }
 vi.mock("@/lib/db", () => ({
   prisma: {
     question: { findFirst: mocks.questionFindFirst, count: mocks.questionCount },
-    level: { findFirst: mocks.levelFindFirst },
+    level: { findMany: mocks.levelFindMany },
     knowledgePoint: { findFirst: mocks.knowledgePointFindFirst },
     $transaction: vi.fn((callback: (transaction: object) => unknown) => callback({
       question: { findFirst: mocks.questionFindFirst, findFirstOrThrow: mocks.questionFindFirst, updateMany: mocks.questionUpdateMany },
-      questionLevel: { deleteMany: vi.fn().mockResolvedValue({ count: 1 }), create: vi.fn().mockResolvedValue({ id: "question-level-1" }) },
+      questionLevel: { deleteMany: vi.fn().mockResolvedValue({ count: 1 }), createMany: vi.fn().mockResolvedValue({ count: 1 }) },
       questionRevision: { findFirst: mocks.questionRevisionFindFirst, create: mocks.questionRevisionCreate },
       knowledgePoint: { findFirst: mocks.knowledgePointFindFirst, updateMany: mocks.knowledgePointUpdateMany, findFirstOrThrow: mocks.knowledgePointFindFirst },
       levelPracticeRule: { updateMany: mocks.levelRuleUpdateMany, findUnique: vi.fn(), create: vi.fn() },
@@ -43,14 +43,14 @@ const teacher = { id: "teacher-1", role: "TEACHER" as const, capability: "FULL_T
 const question = { id: "question-1", version: 1, levelId: "level-1", levels: [{ levelId: "level-1" }], knowledgePointId: "point-1", sourceBankCode: null, externalQuestionCode: null, stem: "原题", type: "SINGLE_CHOICE" as const, optionCount: 2, correctOptionCount: 1, selectionSpec: "2选1", options: [{ id: "A", text: "A" }, { id: "B", text: "B" }], correctOptionIds: ["A"], status: "ACTIVE" as const };
 
 function questionRequest(version: number) {
-  return new Request("http://localhost/api/v1/teacher/questions/question-1", { method: "PUT", headers, body: JSON.stringify({ levelId: "level-1", knowledgePointId: "point-1", stem: "新题", options: [{ id: "A", text: "A" }, { id: "B", text: "B" }], correctOptionIds: ["A"], status: "ACTIVE", version }) });
+  return new Request("http://localhost/api/v1/teacher/questions/question-1", { method: "PUT", headers, body: JSON.stringify({ levelIds: ["level-1"], knowledgePointId: "point-1", stem: "新题", options: [{ id: "A", text: "A" }, { id: "B", text: "B" }], correctOptionIds: ["A"], status: "ACTIVE", version }) });
 }
 
 describe("teacher optimistic concurrency routes", () => {
   beforeEach(() => {
     for (const mock of Object.values(mocks)) mock.mockReset();
     mocks.getCurrentUser.mockResolvedValue(teacher);
-    mocks.levelFindFirst.mockResolvedValue({ id: "level-1", enabled: true });
+    mocks.levelFindMany.mockResolvedValue([{ id: "level-1", enabled: true }]);
     mocks.knowledgePointFindFirst.mockResolvedValue({ id: "point-1", path: "/1.1", enabled: true, version: 1, _count: { children: 0 } });
     mocks.questionFindFirst.mockImplementation((args) => args?.where?.id && typeof args.where.id === "object" ? null : { ...question, version: 2 });
     mocks.questionRevisionCreate.mockResolvedValue({});
