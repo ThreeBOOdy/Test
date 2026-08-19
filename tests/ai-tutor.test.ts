@@ -54,7 +54,7 @@ vi.mock("@/lib/db", () => ({
 
 const sampleQuestion = {
   id: "q-1",
-  levelId: "level-1",
+  levels: [{ level: { name: "A 级" } }],
   knowledgePointId: "point-1",
   externalQuestionCode: "EX-1",
   stem: "中继台下行频率应避开哪些业务频率？",
@@ -74,7 +74,6 @@ const sampleQuestion = {
   explanation: JSON.stringify({ summary: "航空业务优先，中继让路", knowledge: "中继台应避开航空移动业务频率", memory: "航空优先" }),
   levelName: "A 级",
   knowledgePointName: "中继台频率使用规则",
-  level: { name: "A 级" },
   knowledgePoint: { id: "point-1", name: "中继台频率使用规则" },
 };
 

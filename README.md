@@ -10,6 +10,7 @@
 
 2026-08-13 移除单课程硬编码边界：删除 `Course` 模型与所有表的 `courseId` 列、复合外键和复合唯一键，系统回归单一领域（等级 + 知识点直接承载题库数据）。多课程/课程切换能力暂不建设，后续需要时再重新设计。
 2026-08-18 完成奖项级前端动效层与正式美术资源扩展：参考 webdesignclip / reeoo 等获奖作品集语言，为首页与核心训练页面叠加扰码调谐文本、磁吸按钮、跟随光标、滚动进度、全宽跑马灯带、逐行遮罩标题、巨型描边序号、数字滚动与胶片噪点等动效；新增 `scramble-text`、`magnetic`、`cursor-glow`、`count-up` 四个交互组件与配套 CSS 基元；新增 6 张 GPT-Image2 风格库生成的正式美术资源，并接入首页 Hero、训练频道区、信号数据带、模拟考试入口与结算页。
+2026-08-19 完成题库导入灵活化：字母类可扩展（A/B/C/K……），导入不再直接归属字母类，题目先进公共题池；新增 `KnowledgePointType` 知识点类型字典，多 sheet 以 sheet 名建类型，单 sheet / Word 由向导选择或新建大类；练习抽题按 `QuestionLevel` 过滤，快照保留当前字母类。对应分片 S1–S11 落地，规格见 `docs/question-bank-abc-flexibility-spec.md` 与 `docs/question-bank-abc-flexibility-slices.md`。
 
 ## 当前版本组成
 
@@ -22,7 +23,7 @@
 - **角色边界**：管理员、教师、学生页面/API/服务层严格分离；种子账号角色修正。
 - **账号与认证**：数据库有状态会话、分角色空闲与绝对时限、分角色密码策略、教师由管理员创建、学生人物用户名永久绑定、一次性激活码。
 - **题库与练习**：题目修订与乐观并发、教师批次所有权、公共题库只归档、选项随机化冻结、唯一进行中练习、答题幂等、错题三刷掌握。
-- **Word 题库导入**：按小鹅通 Word 批量导入模板解析 `.docx`，仅接受选择题；判断题、填空题、简答题逐题报错，材料题整块拒绝；题号只用于定位不入库，解析保留在批次行数据，等级/分类号整份应用。
+- **题库导入与字母类归类**：按 Excel / Word 模板解析题目，支持多 sheet 以 sheet 名建立知识点类型、单 sheet / Word 向导选择大类并填写小类分类号；导入成功后题目先进公共题池，可批量拉取到 A/B/C/K…… 字母类。
 - **人物身份目录**：120 位真实无线电贡献者目录，学生注册与激活时按页选择身份，确认后永久绑定。
 - **模拟考试**：服务器计时、服务端版本化草稿、断网恢复、worker 到时自动交卷、交卷后统一展示结果。
 - **运维与安全**：敏感数据脱敏与 5 分钟再次验证、密钥轮换、加密备份、离线副本、隔离恢复演练、分级数据保留。
@@ -59,7 +60,7 @@ Word 题库导入（仅选择题）按 6 张分票落地（`.scratch/word-questi
 - 自主注册后进入申请状态页，只有管理员审核通过后才能进入练习系统。
 - 审核拒绝时可查看原因、修改资料并主动重新提交。
 - 普通账号默认从审核日期起有效一年；长期账号不受日期限制，直到管理员关闭长期开关或停用账号。
-- 按 A、B、C 等等级进行综合练习。
+- 按已启用的字母类（A/B/C/K……）进行综合练习。
 - 按“知识点 + 等级”进行专项练习。
 - 只展示教师已经配置且库存充足的练习入口。
 - 单选题和多选题分开随机抽取，同一次练习不会重复出题。
@@ -85,10 +86,10 @@ Word 题库导入（仅选择题）按 6 张分票落地（`.scratch/word-questi
 
 - 查看题库、知识点和近期练习概览。
 - 新增和编辑题目。
-- 设置题目等级、知识点、题库编号、题目编号、选项和答案。
+- 设置字母类（可多选、可留空）、知识点、题库编号、题目编号、选项和答案。
 - 自动根据有效选项和答案生成 `4选1`、`4选2` 等选项规格。
 - 启用、停用或归档题目。
-- 创建树形知识点，缺失的父级知识点自动补齐。
+- 维护知识点类型字典与树形知识点，缺失的父级知识点自动补齐。
 - 修改知识点名称、排序和启用状态。
 - 停用父级知识点时同步停用全部后代节点。
 - 查看按日期、等级、学生和知识点筛选的练习次数、实际答题量、正确率和活跃学生统计。
@@ -120,7 +121,8 @@ Word 题库导入（仅选择题）按 6 张分票落地（`.scratch/word-questi
 - 支持 `1.`、`1、`、`（1）` 三种题号格式与题干末尾括号内答案；`[不定项选择题]`、`[不定项选项题]`、`[不定项]` 三种标注均兼容。
 - 仅接受选择题：单选、多选与不定项按答案个数沿用同一判定规则；判断题、填空题、简答/论述题逐题报错，材料题整块拒绝。
 - 题号只用于定位（`第 N 题`）不写入题库；解析内容识别后保留在批次行数据供追溯。
-- 等级、分类号与知识点名称在页面上整份应用，缺失时预检直接报错。
+- 单 sheet / Word 导入向导选择或新建“大类知识点（类型）”，并填写“小类知识点（分类号/叶子节点）”；多 sheet 以每个 sheet 名作为知识点类型。
+- 导入成功后题目先进入公共题池，不自动归属字母类；提交后可弹字母类归类向导，也可在题目管理“未归类”筛选中批量拉取。
 - Word 与 Excel 共用 20MB 文件上限、5000 行上限与服务端复检。
 - 支持自定义或确认表头映射。
 - 支持 `AB`、`A,B`、`A、B`、`A B`、`A|B` 等答案格式。
@@ -244,11 +246,13 @@ flowchart LR
 | `RadioPerson` | 无线电贡献人物身份目录与永久占用状态 |
 | `StudentActivation` | 一次性激活码哈希、有效期、版本与使用时间 |
 | `AuthSession` | 数据库有状态会话：令牌哈希、用户、角色、空闲与绝对到期、撤销时间 |
-| `Level` | A、B、C 等等级定义 |
-| `KnowledgePoint` | 使用分类号、父级 ID、路径和深度组成的树形知识点 |
-| `LevelPracticeRule` | 每个等级的综合练习题量配置 |
-| `KnowledgePracticeRule` | 每个“知识点 + 等级”的专项题量配置 |
-| `Question` | 题干、选项、答案、等级、知识点、规格、选项顺序锁定和状态（只归档不物理删除） |
+| `Level` | 可扩展字母类（A/B/C/K……）定义，练习抽题和规则按字母类过滤 |
+| `KnowledgePointType` | 知识点类型字典，题目/知识点按类型组织，可新增、编辑、停用 |
+| `KnowledgePoint` | 挂接到 `KnowledgePointType` 的树形知识点，使用分类号、父级 ID、路径和深度；同一类型内 `code` 唯一 |
+| `QuestionLevel` | 题目与字母类的多对多关联，支持一题多类或未归类 |
+| `LevelPracticeRule` | 每个字母类的综合练习题量配置 |
+| `KnowledgePracticeRule` | 每个“知识点 + 字母类”的专项题量配置 |
+| `Question` | 题干、选项、答案、知识点、字母类关联（`QuestionLevel`）、规格、选项顺序锁定和状态（只归档不物理删除） |
 | `QuestionRevision` | 题目完整内容快照、版本号、操作者和变更来源 |
 | `PracticeSession` | 学生练习、模式、题量快照和完成状态 |
 | `PracticeSessionQuestion` | 练习中固定的题目顺序和完整题目快照 |
@@ -280,6 +284,8 @@ components/
 ├── practice-runner.tsx     # 单题练习、草稿选择、即时判题与恢复
 ├── question-manager.tsx    # 题库管理交互
 ├── knowledge-manager.tsx   # 知识点管理交互
+├── level-manager.tsx       # 字母类维护交互
+├── knowledge-point-type-manager.tsx # 知识点类型维护交互
 ├── rule-editor.tsx         # 抽题规则和库存校验
 ├── radio-person-picker.tsx # 人物身份分页选择器
 ├── import-preview.tsx      # Excel / Word 预检、提交和批次反馈
@@ -538,18 +544,18 @@ docker compose -f docker-compose.prod.yml run --rm migrate npm run db:seed
 推荐表头：
 
 ```text
-等级 | 题库编号 | 分类号 | 知识点名称 | 题目编号 | 问题 | 答案 | 选项规格 | A | B | C | D | E | F | 是否启用
+题库编号 | 分类号 | 知识点名称 | 题目编号 | 问题 | 答案 | 选项规格 | A | B | C | D | E | F | 是否启用
 ```
 
 ### 字段说明
 
 | 字段 | 必填 | 说明 |
 | --- | --- | --- |
-| 等级 | 是 | 必须对应系统中已启用的等级，例如 `A` |
 | 题库编号 | 否 | 题目来源或题库批次编号 |
-| 分类号 | 是 | 例如 `4.1.1`，用于生成知识点树 |
+| 知识点类型 / 大类 | 否* | 多 sheet 以工作表名作为类型；单 sheet / Word 由导入向导选择或新建，不需要在表格中填写 |
+| 分类号 | 是 | 例如 `4.1.1`，在该类型下用于生成知识点树 |
 | 知识点名称 | 否 | 末级知识点名称，未填写时暂用分类号 |
-| 题目编号 | 否 | 相同等级内用于重复检查 |
+| 题目编号 | 否 | 全局唯一业务编号，用于重复检查；可空，无编号时用内容指纹做疑似重复 |
 | 问题 | 是 | 题干文本 |
 | 答案 | 是 | 例如 `A`、`AC`、`A,C` |
 | 选项规格 | 建议 | 例如 `4选1`、`4选2`、`5选3` |
@@ -567,7 +573,7 @@ docker compose -f docker-compose.prod.yml run --rm migrate npm run db:seed
 
 以下情况会阻止导入：
 
-- 等级为空、不存在或已停用。
+- 单 sheet / Word 未选择或未新建知识点类型；多 sheet 导入时同时为整份文件指定单一知识点类型。
 - 分类号为空或知识点已停用。
 - 选项少于两个。
 - 选项编号不连续。
@@ -618,11 +624,20 @@ docker compose -f docker-compose.prod.yml run --rm migrate npm run db:seed
 
 | 方法 | 路径 | 说明 |
 | --- | --- | --- |
-| `POST` | `/api/v1/admin/questions` | 新增题目 |
-| `PUT` | `/api/v1/admin/questions/:id` | 编辑题目和状态 |
-| `POST` | `/api/v1/admin/knowledge-points` | 新增知识点 |
-| `PUT` | `/api/v1/admin/knowledge-points/:id` | 编辑、排序或停用知识点 |
-| `PUT` | `/api/v1/admin/practice-rules` | 保存综合或专项抽题规则 |
+| `GET` | `/api/v1/teacher/levels` | 查询字母类（Level） |
+| `POST` | `/api/v1/teacher/levels` | 新增字母类 |
+| `PUT` | `/api/v1/teacher/levels/:id` | 编辑字母类 |
+| `POST` | `/api/v1/teacher/levels/:id/disable` | 停用字母类 |
+| `GET` | `/api/v1/teacher/knowledge-point-types` | 查询知识点类型 |
+| `POST` | `/api/v1/teacher/knowledge-point-types` | 新增知识点类型 |
+| `PUT` | `/api/v1/teacher/knowledge-point-types/:id` | 编辑知识点类型 |
+| `POST` | `/api/v1/teacher/knowledge-point-types/:id/disable` | 停用知识点类型 |
+| `GET` | `/api/v1/teacher/knowledge-points?typeId=...` | 查询指定类型下的知识点树 |
+| `POST` | `/api/v1/teacher/knowledge-points` | 在类型下新增知识点 |
+| `PUT` | `/api/v1/teacher/knowledge-points/:id` | 编辑、排序或停用知识点 |
+| `POST` | `/api/v1/teacher/questions` | 新增题目 |
+| `PUT` | `/api/v1/teacher/questions/:id` | 编辑题目和状态 |
+| `PUT` | `/api/v1/teacher/practice-rules` | 保存综合或专项抽题规则 |
 | `GET` | `/api/v1/admin/registrations` | 管理员查询学生注册申请 |
 | `POST` | `/api/v1/admin/registrations/:id/approve` | 管理员审核通过注册申请 |
 | `POST` | `/api/v1/admin/registrations/:id/reject` | 管理员填写原因并拒绝注册申请 |
@@ -635,15 +650,19 @@ docker compose -f docker-compose.prod.yml run --rm migrate npm run db:seed
 | `POST` | `/api/v1/admin/grades` | 管理员创建年级 |
 | `PUT` | `/api/v1/admin/grades/:id` | 管理员编辑年级 |
 
-### Excel 导入
+### 题库导入与学生导入
 
 | 方法 | 路径 | 说明 |
 | --- | --- | --- |
-| `POST` | `/api/v1/imports/preview` | 解析 Excel，保存服务端批次并返回 `batchId`、统计和分页预览 |
-| `POST` | `/api/v1/imports/commit` | 接收 `{batchId}`，重新校验服务端保存的全部行并提交 |
-| `GET` | `/api/v1/admin/import-batches` | 分页查询导入批次 |
-| `GET` | `/api/v1/admin/import-batches/:id` | 分页查询批次预检行或问题报告 |
-| `POST` | `/api/v1/admin/import-batches/:id/revert` | 撤销已提交导入批次 |
+| `POST` | `/api/v1/teacher/imports/preview` | 解析 Excel / Word，保存服务端批次并返回 `batchId`、统计和分页预览 |
+| `POST` | `/api/v1/teacher/imports/commit` | 接收 `{batchId}`，重新校验服务端保存的全部行并提交，返回 `inserted`、`skipped` 与 `questionIds` |
+| `GET` | `/api/v1/teacher/import-batches` | 分页查询题库导入批次 |
+| `GET` | `/api/v1/teacher/import-batches/:id` | 分页查询批次预检行或问题报告 |
+| `POST` | `/api/v1/teacher/import-batches/:id/revert` | 撤销已提交导入批次 |
+| `POST` | `/api/v1/teacher/questions/levels/batch` | 批量拉取题目到字母类（追加幂等） |
+| `POST` | `/api/v1/teacher/questions/levels/remove` | 批量取消题目字母类 |
+| `POST` | `/api/v1/teacher/questions/:id/levels` | 单题拉取到字母类 |
+| `POST` | `/api/v1/teacher/questions/:id/levels/remove` | 单题取消字母类 |
 | `POST` | `/api/v1/admin/student-imports/preview` | 管理员预检学生账号 Excel |
 | `GET` | `/api/v1/admin/student-imports/:id` | 读取本人创建且未过期的学生导入草稿 |
 | `PUT` | `/api/v1/admin/student-imports/:id/rows/:rowId` | 编辑学生导入行并重新执行整批校验 |
@@ -704,7 +723,7 @@ npm.cmd run acceptance
 - 最多随机抽取 20 道错题，答对更新掌握状态，答错累计错误次数。
 - Excel 常见答案格式标准化。
 - Word 解析三种题号、大小写选项、答案行与括号内答案、解析行、不定项标注与模板说明跳过。
-- Word 判断题/填空题/简答题逐题报错、材料题整块拒绝、选项超限、缺等级/分类号与超限行数。
+- Word 判断题/填空题/简答题逐题报错、材料题整块拒绝、选项超限、缺分类号/大类类型与超限行数。
 - 选项规格与实际答案数量校验。
 - `MC2`、`MC3` 等编码冲突警告。
 - 5000 行预检数据能够完整提交，并正确统计重复题。

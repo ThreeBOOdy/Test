@@ -36,7 +36,7 @@ import {
 
 const baseQuestion = {
   id: "q-1",
-  levelId: "level-1",
+  levels: [{ level: { id: "level-1", code: "A", name: "A Level" } }],
   knowledgePointId: "point-1",
   sourceBankCode: null,
   externalQuestionCode: "EX-1",
@@ -62,7 +62,6 @@ const baseQuestion = {
   explanationReviewedAt: null,
   createdAt: new Date("2026-08-17T00:00:00.000Z"),
   updatedAt: new Date("2026-08-17T00:00:00.000Z"),
-  level: { id: "level-1", code: "A", name: "A Level" },
   knowledgePoint: { id: "point-1", code: "1.1", name: "中继台频率" },
   explanationReviewedBy: null,
 };
