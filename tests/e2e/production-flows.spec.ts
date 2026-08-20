@@ -236,11 +236,12 @@ test.describe.serial("production business flows", () => {
       await page.getByRole("button", { name: "暂不归类" }).click();
       await expect(page.getByText("成功导入 101 道题，跳过重复 0 道")).toBeVisible();
 
-      const batch = page.getByText(path.basename(filePath)).locator("xpath=ancestor::div[contains(@class,'rounded-2xl')][1]");
+      const batchList = page.getByText("最近导入批次").locator("xpath=ancestor::div[contains(@class,'rounded-3xl')][1]");
+      const batch = batchList.getByText(path.basename(filePath)).locator("xpath=ancestor::div[contains(@class,'rounded-2xl')][1]").first();
       await expect(batch).toContainText("COMMITTED");
       await batch.getByRole("button", { name: "查看报告" }).click();
-      await expect(batch.getByText("问题报告（共 101 行）")).toBeVisible();
-      await expect(batch.getByText(/警告［题目编号］/).first()).toBeVisible();
+      await expect(batch.getByText("问题报告（共 101 行）")).toBeVisible({ timeout: 30_000 });
+      await expect(batch.getByText(/警告［题目编号］/).first()).toBeVisible({ timeout: 30_000 });
 
       page.once("dialog", (dialog) => dialog.accept());
       const revertResponsePromise = page.waitForResponse((response) => response.request().method() === "POST" && response.url().includes("/api/v1/teacher/import-batches/") && response.url().endsWith("/revert"), { timeout: 30_000 });

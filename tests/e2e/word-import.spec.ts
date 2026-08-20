@@ -94,7 +94,8 @@ test("Word question import runs preview, commit, bank visibility, and revert as 
     await expect(page.getByRole("row").filter({ hasText: secondStem })).toBeVisible();
 
     await page.goto("/teacher/import");
-    const batch = page.getByText(fileName).locator("xpath=ancestor::div[contains(@class,'rounded-2xl')][1]");
+    const batchList = page.getByText("最近导入批次").locator("xpath=ancestor::div[contains(@class,'rounded-3xl')][1]");
+    const batch = batchList.getByText(fileName).locator("xpath=ancestor::div[contains(@class,'rounded-2xl')][1]").first();
     await expect(batch).toContainText("COMMITTED");
     page.once("dialog", (dialog) => dialog.accept());
     const revertResponsePromise = page.waitForResponse((response) => response.request().method() === "POST" && response.url().includes("/api/v1/teacher/import-batches/") && response.url().endsWith("/revert"), { timeout: 30_000 });
