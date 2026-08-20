@@ -12,7 +12,6 @@ describe("repository release quality", () => {
   it("uses the dedicated WebP artwork for every visual scene", () => {
     const expectedReferences = new Map([
       ["app/page.tsx", "/art/home-signal-laboratory-new.webp"],
-      ["app/login/page.tsx", "/art/auth-telegraph-console-new-v2.webp"],
       ["app/change-password/page.tsx", "/art/auth-telegraph-console-new-v2.webp"],
       ["app/student/page.tsx", "/art/student-direction-cabin-new.webp"],
       ["components/visual/empty-signal-state.tsx", "/art/empty-no-signal.webp"],
@@ -24,7 +23,7 @@ describe("repository release quality", () => {
       expect(fs.existsSync(path.join(root, "public", reference))).toBe(true);
     }
 
-    const sourceFiles = [...expectedReferences.keys(), "components/visual/artwork.tsx"];
+    const sourceFiles = [...expectedReferences.keys(), "app/login/page.tsx", "components/visual/artwork.tsx"];
     for (const file of sourceFiles) expect(read(file), `${file} should not reference legacy visuals`).not.toContain("/visuals/");
     expect(fs.existsSync(path.join(root, "public", "visuals"))).toBe(false);
   });
@@ -35,7 +34,6 @@ describe("repository release quality", () => {
     expect(artwork).toContain('loading={preload ? "eager" : "lazy"}');
     expect(artwork).not.toContain("priority={priority}");
     expect(read("app/page.tsx")).toContain("preload variant=\"orbital\"");
-    expect(read("app/login/page.tsx")).toContain("preload variant=\"antenna\"");
     expect(read("app/change-password/page.tsx")).toContain("preload variant=\"antenna\"");
     expect(read("app/student/page.tsx")).toContain("preload variant=\"spectrum\"");
   });

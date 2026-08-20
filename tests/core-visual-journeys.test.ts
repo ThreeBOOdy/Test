@@ -5,8 +5,12 @@ import { describe, expect, it } from "vitest";
 const read = (relativePath: string) => fs.readFileSync(path.join(process.cwd(), relativePath), "utf8");
 
 describe("core visual journeys", () => {
-  it("uses the shared authentication console across account entry pages", () => {
-    for (const file of ["app/login/page.tsx", "app/register/page.tsx", "app/change-password/page.tsx"]) {
+  it("uses the public auth shell on the login entry", () => {
+    expect(read("app/login/page.tsx")).toContain("PublicAuthShell");
+  });
+
+  it("uses the shared authentication console for internal auth pages", () => {
+    for (const file of ["app/register/page.tsx", "app/change-password/page.tsx"]) {
       expect(read(file), file).toContain("AuthConsole");
     }
   });

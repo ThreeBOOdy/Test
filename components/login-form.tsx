@@ -25,7 +25,7 @@ async function browserSessionIsReady() {
   return response.ok;
 }
 
-export function LoginForm() {
+export function LoginForm({ showDemoAccounts = false }: { showDemoAccounts?: boolean }) {
   const searchParams = useSearchParams();
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
@@ -89,7 +89,7 @@ export function LoginForm() {
     </label>
     {error ? <div role="alert" className="rounded-xl border border-rose-100 bg-rose-50 px-4 py-3 text-sm font-bold leading-6 text-rose-700">{error}</div> : null}
     <Button type="submit" size="lg" className="mt-1 w-full" disabled={pending}><LogIn className="size-4" />{pending ? "正在验证登录状态…" : "进入系统"}</Button>
-    <div className="rounded-xl border border-cyan-600/20 bg-cyan-500/[.06] p-3 text-xs leading-6 text-cyan-900"><span className="font-black text-[var(--primary)]">演示账号</span><br />学生：student / 123456<br />教师：teacher / 123456<br />管理员：admin / 123456</div>
+    {showDemoAccounts ? <div className="rounded-xl border border-cyan-600/20 bg-cyan-500/[.06] p-3 text-xs leading-6 text-cyan-900"><span className="font-black text-[var(--primary)]">演示账号</span><br />学生：student / 123456<br />教师：teacher / 123456<br />管理员：admin / 123456</div> : null}
   </form>;
 }
 
