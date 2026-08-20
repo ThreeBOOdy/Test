@@ -687,6 +687,16 @@ npm.cmd run test:integration
 
 运行 Playwright 端到端测试：
 
+先确保本地数据库已迁移并重置开发测试账号密码：
+
+```powershell
+npm.cmd run db:migrate
+npm.cmd run db:seed
+npm.cmd run db:reset-passwords
+```
+
+安装浏览器并运行测试：
+
 ```powershell
 npm.cmd run test:e2e:install
 npm.cmd run test:e2e
@@ -696,6 +706,19 @@ npm.cmd run test:e2e
 
 ```powershell
 $env:PLAYWRIGHT_CHANNEL="chrome"
+npm.cmd run test:e2e
+```
+
+Windows 下如果 Playwright 托管的 Next dev server 不稳定，建议先手动启动：
+
+```powershell
+npm.cmd run dev -- --port 3100
+```
+
+再另开终端运行：
+
+```powershell
+$env:PLAYWRIGHT_REUSE_SERVER="true"
 npm.cmd run test:e2e
 ```
 
