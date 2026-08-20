@@ -20,9 +20,9 @@ describe("core visual journeys", () => {
     expect(fs.existsSync(path.join(process.cwd(), "public/art/register-signal-station.webp"))).toBe(true);
   });
 
-  it("gives the public, student, launcher, and teacher surfaces distinct radio instruments", () => {
-    expect(read("app/page.tsx")).toContain("BearingCompass");
-    expect(read("app/page.tsx")).toContain("MorseDivider");
+  it("uses the ambient signal field on the home brand page and keeps radio instruments on role surfaces", () => {
+    expect(read("app/page.tsx")).toContain("SignalField");
+    expect(read("app/page.tsx")).toContain("开始刷题");
     expect(read("app/student/page.tsx")).toContain("CallsignLabel");
     expect(read("app/student/practice/start/page.tsx")).toContain("FrequencyScale");
     expect(read("app/teacher/page.tsx")).toContain("SignalMeter");

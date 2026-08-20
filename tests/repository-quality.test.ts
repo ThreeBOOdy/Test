@@ -11,7 +11,6 @@ function read(relativePath: string) {
 describe("repository release quality", () => {
   it("uses the dedicated WebP artwork for every visual scene", () => {
     const expectedReferences = new Map([
-      ["app/page.tsx", "/art/home-signal-laboratory-new.webp"],
       ["app/change-password/page.tsx", "/art/auth-telegraph-console-new-v2.webp"],
       ["app/student/page.tsx", "/art/student-direction-cabin-new.webp"],
       ["components/visual/empty-signal-state.tsx", "/art/empty-no-signal.webp"],
@@ -23,7 +22,7 @@ describe("repository release quality", () => {
       expect(fs.existsSync(path.join(root, "public", reference))).toBe(true);
     }
 
-    const sourceFiles = [...expectedReferences.keys(), "app/login/page.tsx", "components/visual/artwork.tsx"];
+    const sourceFiles = ["app/page.tsx", ...expectedReferences.keys(), "app/login/page.tsx", "components/visual/artwork.tsx"];
     for (const file of sourceFiles) expect(read(file), `${file} should not reference legacy visuals`).not.toContain("/visuals/");
     expect(fs.existsSync(path.join(root, "public", "visuals"))).toBe(false);
   });
@@ -33,7 +32,6 @@ describe("repository release quality", () => {
     expect(artwork).toContain("preload={preload}");
     expect(artwork).toContain('loading={preload ? "eager" : "lazy"}');
     expect(artwork).not.toContain("priority={priority}");
-    expect(read("app/page.tsx")).toContain("preload variant=\"orbital\"");
     expect(read("app/change-password/page.tsx")).toContain("preload variant=\"antenna\"");
     expect(read("app/student/page.tsx")).toContain("preload variant=\"spectrum\"");
   });
@@ -49,8 +47,8 @@ describe("repository release quality", () => {
     const practice = read("app/student/practice/page.tsx");
     const navigation = read("components/navigation-items.ts");
 
-    expect(home).toContain('getEntryHrefForRole("STUDENT"');
-    expect(home).toContain('href={studentHref as never}');
+    expect(home).toContain("开始刷题");
+    expect(home).toContain("/login?next=/student");
     expect(navigation).toContain('{ href: "/student/practice/start", label: "开始练习"');
     expect(studentHome).toContain('<AppShell role="student" currentPath="/student">');
     expect(studentHome).toContain('href="/student/history"');
