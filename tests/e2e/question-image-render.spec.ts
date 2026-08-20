@@ -59,7 +59,7 @@ test("question images render across bank, revisions, wrong book, and practice zo
   await buildQuestionImagesFile();
   const filePath = path.join(os.tmpdir(), fileName);
   try {
-    await login(page, "teacher", "ChangeMe123!", "/teacher/import");
+    await login(page, "teacher", "123456", "/teacher/import");
     await page.locator('input[type="file"]').setInputFiles(filePath);
     await page.getByLabel("大类知识点（类型）").selectOption({ label: "默认（DEFAULT）" });
     await page.getByLabel("分类号").fill("4.1.1");
@@ -99,7 +99,7 @@ test("question images render across bank, revisions, wrong book, and practice zo
     runDbHelper("seed-wrong", searchKeyword);
 
     await logout(page);
-    await login(page, "student", "ChangeMe123!", "/student/wrong");
+    await login(page, "student", "123456", "/student/wrong");
     await expect(page.getByText("待巩固 1", { exact: true })).toBeVisible({ timeout: 15_000 });
     await expect(page.locator('img[src^="/api/v1/question-images/"]').first()).toBeVisible();
 
@@ -125,7 +125,7 @@ test("question images render across bank, revisions, wrong book, and practice zo
 
     await page.goto("/student/wrong");
     await logout(page);
-    await login(page, "teacher", "ChangeMe123!", "/teacher/import");
+    await login(page, "teacher", "123456", "/teacher/import");
     const batch = page.getByText(fileName).locator("xpath=ancestor::div[contains(@class,'rounded-2xl')][1]");
     page.once("dialog", (dialog) => dialog.accept());
     await batch.getByRole("button", { name: "撤销" }).click();

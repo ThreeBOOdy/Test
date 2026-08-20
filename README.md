@@ -369,7 +369,7 @@ Copy-Item .env.example .env
 | --- | --- | --- |
 | `DATABASE_URL` | `mysql://practice:URL编码后的密码@127.0.0.1:3306/practice_dev` | Prisma 使用的 MySQL 地址；密码中的特殊字符必须进行 URL 编码 |
 | `SHADOW_DATABASE_URL` | `mysql://practice:URL编码后的密码@127.0.0.1:3306/practice_shadow` | `prisma migrate dev` 使用的独立 shadow database |
-| `APP_SEED_PASSWORD` | `ChangeMe123!` | 演示账号种子密码 |
+| `APP_SEED_PASSWORD` | `123456` | 演示账号种子密码 |
 | `AUTH_SECRET` | 至少 32 字符随机字符串 | JWT 签名密钥 |
 | `COOKIE_SECURE` | `false` | 本地 HTTP 为 `false`，正式 HTTPS 为 `true` |
 | `MYSQL_PASSWORD` | 高熵随机密码 | 生产 MySQL 应用账号密码；保持原始值，不做 URL 编码 |
@@ -529,9 +529,9 @@ docker compose -f docker-compose.prod.yml run --rm migrate npm run db:seed
 
 | 角色 | 用户名 | 默认密码 |
 | --- | --- | --- |
-| 管理员 | `admin` | `ChangeMe123!` |
-| 教师 | `teacher` | `ChangeMe123!` |
-| 学生 | `student` | `ChangeMe123!` |
+| 管理员 | `admin` | `123456` |
+| 教师 | `teacher` | `123456` |
+| 学生 | `student` | `123456` |
 
 如果修改了 `APP_SEED_PASSWORD`，密码以环境变量为准。Seed 按等级代码和知识点分类号等业务唯一键对齐数据，可以在同一开发数据库中重复执行。
 

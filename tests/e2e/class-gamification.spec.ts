@@ -10,7 +10,7 @@ async function login(page: Page, username: string, password: string, destination
 
 test.describe.serial("teacher class gamification control", () => {
   test("teacher can hide and show gamification for a grade", async ({ page }) => {
-    await login(page, "teacher", "ChangeMe123!", "/teacher");
+    await login(page, "teacher", "123456", "/teacher");
     await expect(page.getByRole("heading", { name: "班级游戏化显示" })).toBeVisible({ timeout: 20_000 });
     await expect(page.getByText("七年级", { exact: true })).toBeVisible();
 

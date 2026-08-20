@@ -65,7 +65,7 @@ test("Word question import runs preview, commit, bank visibility, and revert as 
   await buildWordQuestionsFile();
   const filePath = path.join(os.tmpdir(), fileName);
   try {
-    await login(page, "teacher", "ChangeMe123!", "/teacher/import");
+    await login(page, "teacher", "123456", "/teacher/import");
     await page.locator('input[type="file"]').setInputFiles(filePath);
     await page.getByLabel("大类知识点（类型）").selectOption({ label: "默认（DEFAULT）" });
     await page.getByLabel("分类号").fill("4.1.1");

@@ -352,7 +352,7 @@ prisma/migrations/20260730170000_radio_person_identity_registration/migration.sq
 - 通过：`administrator imports and activates a student through the one-time credential flow`（约 12 秒）。
 - 通过：`student practice restores progress and closes the wrong-question loop`（约 27 秒），其中包含新的三次独立错题巩固会话。
 - 失败：`Excel preview, issue report, commit, and revert work as one server-owned batch`，位置 `tests/e2e/production-flows.spec.ts:201`。
-- 当前准确失败：`login(page, "teacher", "ChangeMe123!", "/teacher/import")` 期待 URL 匹配 `/teacher/import`，实际稳定停在 `http://127.0.0.1:3100/teacher`。该失败发生在 Excel 文件生成和导入动作之前。
+- 当前准确失败：`login(page, "teacher", "123456", "/teacher/import")` 期待 URL 匹配 `/teacher/import`，实际稳定停在 `http://127.0.0.1:3100/teacher`。该失败发生在 Excel 文件生成和导入动作之前。
 - Playwright 失败快照：`test-results/production-flows-productio-009e5-k-as-one-server-owned-batch/error-context.md`。
 
 ### 下次继续顺序

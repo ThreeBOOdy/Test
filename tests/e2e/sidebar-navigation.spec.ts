@@ -11,7 +11,7 @@ const roles = [
 async function login(page: Page, username: string, destination: string) {
   await page.goto("/login?next=" + encodeURIComponent(destination));
   await page.getByLabel("用户名").fill(username);
-  await page.getByLabel("密码").fill("ChangeMe123!");
+  await page.getByLabel("密码").fill("123456");
   await page.getByRole("button", { name: "进入系统", exact: true }).click();
   await expect(page).toHaveURL(new RegExp(destination.replaceAll("/", "\\/") + "$"), { timeout: 20_000 });
 }

@@ -92,7 +92,7 @@ async function answerCorrect(page: Page) {
 
 test.describe.serial("production business flows", () => {
   test("administrator imports and activates a student through the one-time credential flow", async ({ page }) => {
-    await login(page, "admin", "ChangeMe123!", "/admin");
+    await login(page, "admin", "123456", "/admin");
     await page.goto("/admin/student-import");
 
     const workbook = new ExcelJS.Workbook();
@@ -211,7 +211,7 @@ test.describe.serial("production business flows", () => {
   });
 
   test("Excel preview, issue report, commit, and revert work as one server-owned batch", async ({ page }) => {
-    await login(page, "teacher", "ChangeMe123!", "/teacher/import");
+    await login(page, "teacher", "123456", "/teacher/import");
     const workbook = new ExcelJS.Workbook();
     const sheet = workbook.addWorksheet("Questions");
     sheet.addRow(["等级", "题库编号", "分类号", "知识点名称", "题目编号", "问题", "答案", "选项规格", "A", "B", "C", "D", "是否启用"]);

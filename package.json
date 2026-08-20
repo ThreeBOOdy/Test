@@ -26,6 +26,7 @@
     "db:migrate": "prisma migrate dev",
     "db:s1-precheck": "node --conditions=react-server --import tsx scripts/question-bank-s1-precheck.ts",
     "db:seed": "tsx prisma/seed.ts",
+    "db:reset-passwords": "tsx scripts/reset-dev-passwords.ts",
     "slice:status": "node --conditions=react-server --import tsx scripts/slice-runner.ts status",
     "slice:next": "node --conditions=react-server --import tsx scripts/slice-runner.ts next",
     "slice:prompt": "node --conditions=react-server --import tsx scripts/slice-runner.ts prompt",

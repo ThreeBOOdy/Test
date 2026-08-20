@@ -23,7 +23,7 @@ const grades = [
 
 
 async function main() {
-  const seedPassword = process.env.APP_SEED_PASSWORD ?? "ChangeMe123!";
+  const seedPassword = process.env.APP_SEED_PASSWORD ?? "123456";
   const levelIds = new Map<string, string>();
   const knowledgePointIds = new Map<string, string>();
   const passwordHash = hashPassword(seedPassword);
