@@ -722,6 +722,22 @@ $env:PLAYWRIGHT_REUSE_SERVER="true"
 npm.cmd run test:e2e
 ```
 
+如果仍遇到 `ERR_ADDRESS_IN_USE` 或页面 JS 未加载，建议改用生产模式服务器：
+
+```powershell
+npm.cmd run build
+npm.cmd run start -- --port 3100
+```
+
+再另开终端运行：
+
+```powershell
+$env:PLAYWRIGHT_REUSE_SERVER="true"
+npm.cmd run test:e2e
+```
+
+注意：3100 端口只能有一个服务占用；切换模式前先停掉旧的 dev server。
+
 运行 ESLint：
 
 ```powershell
