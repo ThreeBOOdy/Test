@@ -5,19 +5,18 @@ import { describe, expect, it } from "vitest";
 const read = (relativePath: string) => fs.readFileSync(path.join(process.cwd(), relativePath), "utf8");
 
 describe("core visual journeys", () => {
-  it("uses the public auth shell on the login entry", () => {
-    expect(read("app/login/page.tsx")).toContain("PublicAuthShell");
-  });
-
-  it("uses the shared authentication console for internal auth pages", () => {
-    for (const file of ["app/register/page.tsx", "app/change-password/page.tsx"]) {
-      expect(read(file), file).toContain("AuthConsole");
+  it("uses the public auth shell on the login and registration entries", () => {
+    for (const file of ["app/login/page.tsx", "app/register/page.tsx"]) {
+      expect(read(file), file).toContain("PublicAuthShell");
     }
   });
 
-  it("uses the generated signal-station artwork on registration", () => {
-    expect(read("app/register/page.tsx")).toContain("/art/register-signal-station.webp");
-    expect(fs.existsSync(path.join(process.cwd(), "public/art/register-signal-station.webp"))).toBe(true);
+  it("uses the shared authentication console for internal auth pages", () => {
+    expect(read("app/change-password/page.tsx")).toContain("AuthConsole");
+  });
+
+  it("does not use the legacy signal-station artwork on registration", () => {
+    expect(read("app/register/page.tsx")).not.toContain("/art/register-signal-station.webp");
   });
 
   it("uses the ambient signal field on the home brand page and keeps radio instruments on role surfaces", () => {
