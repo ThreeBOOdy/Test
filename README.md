@@ -688,7 +688,14 @@ npm.cmd run test:integration
 运行 Playwright 端到端测试：
 
 ```powershell
-npx playwright install chromium
+npm.cmd run test:e2e:install
+npm.cmd run test:e2e
+```
+
+默认使用 Playwright 自带的 Chromium，跨平台一致。若希望使用本机已安装的 Chrome，可设置环境变量后再运行：
+
+```powershell
+$env:PLAYWRIGHT_CHANNEL="chrome"
 npm.cmd run test:e2e
 ```
 

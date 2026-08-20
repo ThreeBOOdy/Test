@@ -35,7 +35,8 @@
     "slice:verify": "node --conditions=react-server --import tsx scripts/slice-runner.ts verify",
     "data-retention:cleanup": "node --conditions=react-server --import tsx scripts/data-retention-maintenance.ts",
     "acceptance": "tsx scripts/full-system-acceptance.ts",
-    "acceptance:ticket12": "tsx scripts/ticket12-acceptance.ts"
+    "acceptance:ticket12": "tsx scripts/ticket12-acceptance.ts",
+    "test:e2e:install": "playwright install chromium"
   },
   "dependencies": {
     "@prisma/adapter-mariadb": "7.9.0",
