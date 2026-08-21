@@ -30,7 +30,7 @@ export function PracticeRunner({ session }: { session: PublicPracticeSession }) 
   const [pending, setPending] = useState(false);
   const [learningMode, setLearningMode] = useState(session.learningMode ?? false);
   const [modeSaving, setModeSaving] = useState(false);
-  const showFavoriteButtons = !isExam && (session.mode === "QUESTION_ORDER" || session.mode === "RANDOM_ALL" || session.mode === "WRONG_QUESTION");
+  const showFavoriteButtons = !isExam && (session.mode === "QUESTION_ORDER" || session.mode === "RANDOM_ALL" || session.mode === "WRONG_QUESTION" || session.mode === "FAVORITE");
   const [marks, setMarks] = useState<Record<string, { favorite: boolean; ignored: boolean }>>(() => Object.fromEntries(session.questions.map((item) => [item.id, { favorite: item.favorite ?? false, ignored: item.ignored ?? false }])));
   const [markPending, setMarkPending] = useState<"favorite" | "ignored" | null>(null);
   const [remainingSeconds, setRemainingSeconds] = useState(() => session.exam ? Math.max(0, Math.ceil((new Date(session.exam.expiresAt).getTime() - Date.now()) / 1000)) : 0);

@@ -183,7 +183,7 @@ describe("PracticeRunner", () => {
     expect(screen.getByText("下列哪些做法有助于减少业余电台干扰？")).toBeInTheDocument();
   });
 
-  it.each(["QUESTION_ORDER", "RANDOM_ALL", "WRONG_QUESTION"] as const)("shows favorite and ignore buttons for %s", (mode) => {
+  it.each(["QUESTION_ORDER", "RANDOM_ALL", "WRONG_QUESTION", "FAVORITE"] as const)("shows favorite and ignore buttons for %s", (mode) => {
     render(<PracticeRunner session={practiceSessionFixture({ mode, title: "练习" })} />);
 
     expect(screen.getByRole("button", { name: "收藏" })).toBeInTheDocument();

@@ -32,12 +32,14 @@ describe("practice UI state", () => {
     expect(buildPracticeLaunchHref({ mode: "MOCK_EXAM", levelCode: "B" })).toBe("/student/practice/start?mode=exam&level=B");
     expect(buildPracticeLaunchHref({ mode: "MOCK_EXAM", levelCode: "B", blueprintId: "blueprint-1" })).toBe("/student/practice/start?mode=exam&level=B&blueprint=blueprint-1");
     expect(buildPracticeLaunchHref({ mode: "WRONG_QUESTION", questionId: "q-1" })).toBe("/student/practice/start?mode=wrong&question=q-1");
+    expect(buildPracticeLaunchHref({ mode: "FAVORITE" })).toBe("/student/practice/start?mode=favorite");
   });
 
   it("normalizes legacy launcher params into a server request", () => {
     expect(normalizePracticeLaunch({ mode: "random", level: "C" })).toEqual({ mode: "RANDOM_ALL", levelCode: "C" });
     expect(normalizePracticeLaunch({ mode: "knowledge", level: "A", knowledge: "kp-1" })).toEqual({ mode: "KNOWLEDGE_POINT", levelCode: "A", knowledgePointId: "kp-1" });
     expect(normalizePracticeLaunch({ mode: "wrong", question: "q-1" })).toEqual({ mode: "WRONG_QUESTION", questionId: "q-1" });
+    expect(normalizePracticeLaunch({ mode: "favorite" })).toEqual({ mode: "FAVORITE" });
     expect(normalizePracticeLaunch({ mode: "exam", level: "A", blueprint: "blueprint-1" })).toEqual({ mode: "MOCK_EXAM", levelCode: "A", blueprintId: "blueprint-1" });
   });
 

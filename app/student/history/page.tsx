@@ -42,6 +42,7 @@ function historyStatus(status: PracticeStatus, mode: PracticeMode, settlementSou
 
 function sessionTitle(mode: string, levelCode?: string, knowledgeName?: string) {
   if (mode === "WRONG_QUESTION") return "错题巩固练习";
+  if (mode === "FAVORITE") return "收藏题练习";
   if (mode === "KNOWLEDGE_POINT") return `${knowledgeName ?? "知识点专项"} · ${levelCode ?? "-"}级`;
   if (mode === "QUESTION_ORDER") return `${levelCode ?? "-"}级顺序练习`;
   if (mode === "RANDOM_ALL") return `${levelCode ?? "-"}级智能随机练习`;

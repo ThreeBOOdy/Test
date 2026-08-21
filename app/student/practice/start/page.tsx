@@ -31,6 +31,7 @@ export default async function PracticeStartPage({ searchParams }: { searchParams
           : launch.mode === "QUESTION_ORDER" ? { mode: "order", levelCode: launch.levelCode ?? "" }
             : launch.mode === "RANDOM_ALL" ? { mode: "random", levelCode: launch.levelCode ?? "" }
               : launch.mode === "MOCK_EXAM" ? { mode: "exam", levelCode: launch.levelCode ?? "", blueprintId: launch.blueprintId }
+                : launch.mode === "FAVORITE" ? { mode: "favorite" }
                 : { mode: "level", levelCode: launch.levelCode ?? "" });
     redirect(`/student/practice?session=${session.id}`);
   }

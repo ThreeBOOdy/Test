@@ -3,7 +3,7 @@ import type { StudentExplanation } from "./student-explanation";
 
 export type QuestionType = "SINGLE_CHOICE" | "MULTIPLE_CHOICE";
 export type QuestionStatus = "ACTIVE" | "DISABLED" | "ARCHIVED";
-export type PracticeMode = "LEVEL_COMPREHENSIVE" | "KNOWLEDGE_POINT" | "WRONG_QUESTION" | "QUESTION_ORDER" | "RANDOM_ALL" | "MOCK_EXAM";
+export type PracticeMode = "LEVEL_COMPREHENSIVE" | "KNOWLEDGE_POINT" | "WRONG_QUESTION" | "QUESTION_ORDER" | "RANDOM_ALL" | "MOCK_EXAM" | "FAVORITE";
 export type PracticeStatus = "IN_PROGRESS" | "COMPLETED" | "ABANDONED";
 export type ExamSettlementSource = "STUDENT_SUBMISSION" | "AUTO_SETTLEMENT";
 
