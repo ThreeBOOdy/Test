@@ -366,6 +366,36 @@ describe("MySQL project configuration", () => {
     expect(schema).toMatch(/@@unique\(\[userId, levelId, questionId\]\)/);
     expect(schema).toMatch(/studentLevelQuestionStates\s+StudentLevelQuestionState\[\]/);
   });
+
+  it("adds exam blueprint models and migrates old ExamRules into default blueprints", () => {
+    const migration = fs.readFileSync(path.resolve("prisma/migrations/20260821020000_exam_blueprint_models/migration.sql"), "utf8");
+    const schema = fs.readFileSync(path.resolve("prisma/schema.prisma"), "utf8");
+
+    expect(migration).toContain("CREATE TABLE `ExamBlueprint`");
+    expect(migration).toContain("CREATE TABLE `ExamBlueprintItem`");
+    expect(migration).toContain("`durationMinutes` INTEGER NULL");
+    expect(migration).toContain("`passingCount` INTEGER NOT NULL");
+    expect(migration).toContain("`isDefault` BOOLEAN NOT NULL DEFAULT false");
+    expect(migration).toContain("`knowledgePointId` VARCHAR(191) NOT NULL");
+    expect(migration).toContain("UNIQUE INDEX `ExamBlueprint_levelId_name_key`");
+    expect(migration).toContain("UNIQUE INDEX `ExamBlueprintItem_blueprintId_knowledgePointId_key`");
+    expect(migration).toContain("FOREIGN KEY (`blueprintId`) REFERENCES `ExamBlueprint`(`id`) ON DELETE CASCADE");
+    expect(migration).toContain("FOREIGN KEY (`knowledgePointId`) REFERENCES `KnowledgePoint`(`id`) ON DELETE RESTRICT");
+    expect(migration).toContain("MIGRATION_BACKFILL");
+    expect(migration).toContain("FROM `ExamRule`");
+    expect(migration).toContain("'默认模拟测试'");
+    expect(migration).toContain("INSERT INTO `ExamBlueprintItem`");
+    expect(migration).not.toMatch(/DROP TABLE `(ExamBlueprint|ExamBlueprintItem|ExamRule|Level|KnowledgePoint)`|DELETE FROM `(ExamRule|Level|KnowledgePoint)`/);
+
+    expect(schema).toContain("model ExamBlueprint {");
+    expect(schema).toContain("model ExamBlueprintItem {");
+    expect(schema).toMatch(/durationMinutes\s+Int\?/);
+    expect(schema).toMatch(/isDefault\s+Boolean\s+@default\(false\)/);
+    expect(schema).toMatch(/examBlueprints\s+ExamBlueprint\[\]/);
+    expect(schema).toMatch(/examBlueprintItems\s+ExamBlueprintItem\[\]/);
+    expect(schema).toMatch(/@@unique\(\[levelId, name\]\)/);
+    expect(schema).toMatch(/@@unique\(\[blueprintId, knowledgePointId\]\)/);
+  });
 });
 
 describe("MySQL database URL protection", () => {

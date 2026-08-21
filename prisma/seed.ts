@@ -5,6 +5,7 @@ import { RADIO_PERSON_CATALOG } from "../lib/domain/radio-person-catalog";
 import { knowledgePoints, levelRules, levels, questions } from "../lib/data/demo";
 import { hashPassword } from "../lib/server/password";
 import { DEFAULT_EXAM_RULES } from "../lib/domain/exam-rules";
+import { allocateExamBlueprintItems, DEFAULT_EXAM_BLUEPRINT_NAME } from "../lib/domain/exam-blueprints";
 
 const connectionString = process.env.DATABASE_URL ?? "mysql://practice:practice@127.0.0.1:3306/practice_dev";
 const prisma = new PrismaClient({ adapter: new PrismaMariaDb(connectionString) });
@@ -101,6 +102,54 @@ async function main() {
     });
     await tx.questionRevision.createMany({ data: seededQuestions.map((question) => ({ questionId: question.id, revision: question.version, snapshot: { knowledgePointId: question.knowledgePointId, sourceBankCode: question.sourceBankCode, externalQuestionCode: question.externalQuestionCode, stem: question.stem, options: question.options, correctOptionIds: question.correctOptionIds, status: question.status }, changeSource: "SEED" })), skipDuplicates: true });
   });
+
+  // 为每个有旧 ExamRule 的字母类创建默认模拟测试蓝图（幂等）。
+  const fallbackKnowledgePointId = knowledgePointIds.values().next().value as string | undefined;
+  const storedKnowledgeRules = await prisma.knowledgePracticeRule.findMany();
+  for (const level of levels) {
+    const storedLevel = await prisma.level.findUnique({ where: { code: level.code } });
+    if (!storedLevel) continue;
+    const rule = await prisma.examRule.findUnique({ where: { levelId: storedLevel.id } });
+    if (!rule) continue;
+    const existingBlueprint = await prisma.examBlueprint.findFirst({ where: { levelId: storedLevel.id, isDefault: true } });
+    if (existingBlueprint) continue;
+
+    const practiceWeights = storedKnowledgeRules
+      .filter((knowledgeRule) => knowledgeRule.levelId === storedLevel.id)
+      .map((knowledgeRule) => ({
+        knowledgePointId: knowledgeRule.knowledgePointId,
+        singleWeight: knowledgeRule.singleCount,
+        multipleWeight: knowledgeRule.multipleCount,
+      }));
+
+    const inventoryWeights = new Map<string, { singleWeight: number; multipleWeight: number }>();
+    for (const question of questions) {
+      if (question.status !== "ACTIVE" || !question.levelIds.includes(storedLevel.id)) continue;
+      const storedKnowledgePointId = knowledgePointIds.get(question.knowledgePointId) ?? question.knowledgePointId;
+      const current = inventoryWeights.get(storedKnowledgePointId) ?? { singleWeight: 0, multipleWeight: 0 };
+      if (question.type === "SINGLE_CHOICE") current.singleWeight += 1;
+      if (question.type === "MULTIPLE_CHOICE") current.multipleWeight += 1;
+      inventoryWeights.set(storedKnowledgePointId, current);
+    }
+    const weights = practiceWeights.length > 0 ? practiceWeights : [...inventoryWeights].map(([knowledgePointId, value]) => ({ knowledgePointId, ...value }));
+
+    const blueprint = await prisma.examBlueprint.create({
+      data: {
+        levelId: storedLevel.id,
+        name: DEFAULT_EXAM_BLUEPRINT_NAME,
+        durationMinutes: rule.durationMinutes,
+        passingCount: rule.passingCount,
+        enabled: rule.enabled,
+        isDefault: true,
+      },
+    });
+    const allocated = allocateExamBlueprintItems(rule, weights, fallbackKnowledgePointId);
+    if (allocated.length > 0) {
+      await prisma.examBlueprintItem.createMany({
+        data: allocated.map((item) => ({ blueprintId: blueprint.id, ...item })),
+      });
+    }
+  }
 
   console.log(`Seed complete: ${levels.length} levels, ${knowledgePoints.length} knowledge points, ${questions.length} questions.`);
 }

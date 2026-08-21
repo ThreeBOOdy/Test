@@ -64,6 +64,40 @@ export type ExamRule = PracticeRule & {
   passingCount: number;
 };
 
+export type ExamBlueprint = {
+  id: string;
+  levelId: string;
+  name: string;
+  /** 空表示不限时。 */
+  durationMinutes: number | null;
+  passingCount: number;
+  enabled: boolean;
+  isDefault: boolean;
+};
+
+export type ExamBlueprintItem = {
+  id: string;
+  blueprintId: string;
+  knowledgePointId: string;
+  singleCount: number;
+  multipleCount: number;
+};
+
+export type ExamBlueprintInput = Omit<ExamBlueprint, "id">;
+export type ExamBlueprintItemInput = Omit<ExamBlueprintItem, "id">;
+
+export type ExamBlueprintItemWeight = {
+  knowledgePointId: string;
+  singleWeight: number;
+  multipleWeight: number;
+};
+
+export type ExamBlueprintAllocation = {
+  knowledgePointId: string;
+  singleCount: number;
+  multipleCount: number;
+};
+
 export type ImportQuestionRow = {
   rowNumber: number;
   locationLabel?: string;

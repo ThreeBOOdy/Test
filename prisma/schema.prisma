@@ -287,6 +287,7 @@ model Level {
   questions      QuestionLevel[]
   practiceRule   LevelPracticeRule?
   examRule       ExamRule?
+  examBlueprints ExamBlueprint[]
   knowledgeRules KnowledgePracticeRule[]
   sessions       PracticeSession[]
   students       User[]                  @relation("StudentActiveLevel")
@@ -323,6 +324,38 @@ model ExamRule {
   updatedAt       DateTime @updatedAt
 }
 
+model ExamBlueprint {
+  id              String              @id @default(cuid())
+  levelId         String
+  level           Level               @relation(fields: [levelId], references: [id], onDelete: Cascade)
+  name            String
+  durationMinutes Int?
+  passingCount    Int
+  enabled         Boolean             @default(true)
+  isDefault       Boolean             @default(false)
+  items           ExamBlueprintItem[]
+  createdAt       DateTime            @default(now())
+  updatedAt       DateTime            @updatedAt
+
+  @@unique([levelId, name])
+  @@index([levelId, isDefault, enabled])
+}
+
+model ExamBlueprintItem {
+  id               String         @id @default(cuid())
+  blueprintId      String
+  blueprint        ExamBlueprint  @relation(fields: [blueprintId], references: [id], onDelete: Cascade)
+  knowledgePointId String
+  knowledgePoint   KnowledgePoint @relation(fields: [knowledgePointId], references: [id], onDelete: Restrict)
+  singleCount      Int            @default(0)
+  multipleCount    Int            @default(0)
+  createdAt        DateTime       @default(now())
+  updatedAt        DateTime       @updatedAt
+
+  @@unique([blueprintId, knowledgePointId])
+  @@index([knowledgePointId])
+}
+
 model KnowledgePoint {
   id            String                  @id @default(cuid())
   typeId        String
@@ -337,12 +370,13 @@ model KnowledgePoint {
   parentId      String?
   parent        KnowledgePoint?         @relation("KnowledgeTree", fields: [parentId], references: [id], onDelete: Restrict)
   children      KnowledgePoint[]        @relation("KnowledgeTree")
-  questions     Question[]
-  practiceRules KnowledgePracticeRule[]
-  sessions      PracticeSession[]
-  reviewCards   ReviewCard[]
-  createdAt     DateTime                @default(now())
-  updatedAt     DateTime                @updatedAt
+  questions          Question[]
+  practiceRules      KnowledgePracticeRule[]
+  examBlueprintItems ExamBlueprintItem[]
+  sessions           PracticeSession[]
+  reviewCards        ReviewCard[]
+  createdAt          DateTime                @default(now())
+  updatedAt          DateTime                @updatedAt
 
   @@unique([typeId, code])
   @@index([parentId, sortOrder])
