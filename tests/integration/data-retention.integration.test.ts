@@ -36,6 +36,10 @@ beforeEach(async () => {
   await prisma.practiceAnswer.deleteMany();
   await prisma.practiceSessionQuestion.deleteMany();
   await prisma.practiceSession.deleteMany();
+  await prisma.studentLevelQuestionState.deleteMany();
+  await prisma.studentLevelProgress.deleteMany();
+  await prisma.examBlueprintItem.deleteMany();
+  await prisma.examBlueprint.deleteMany();
   await prisma.wrongQuestion.deleteMany();
   await prisma.questionRevision.deleteMany();
   await prisma.questionImage.deleteMany();
