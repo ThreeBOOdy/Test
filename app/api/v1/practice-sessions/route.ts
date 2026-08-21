@@ -12,6 +12,7 @@ const schema = z.discriminatedUnion("mode", [
   z.object({ mode: z.literal("exam"), levelCode: z.string().min(1), blueprintId: z.string().min(1).optional() }),
   z.object({ mode: z.literal("knowledge"), levelCode: z.string().min(1), knowledgePointId: z.string().min(1) }),
   z.object({ mode: z.literal("wrong") }),
+  z.object({ mode: z.literal("favorite") }),
 ]);
 
 export async function POST(request: Request) {

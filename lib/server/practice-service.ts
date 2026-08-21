@@ -19,7 +19,8 @@ type CreatePracticeRequest =
   | { mode: "level" | "order" | "random"; levelCode: string }
   | { mode: "exam"; levelCode: string; blueprintId?: string }
   | { mode: "knowledge"; levelCode: string; knowledgePointId: string }
-  | { mode: "wrong"; questionId?: string };
+  | { mode: "wrong"; questionId?: string }
+  | { mode: "favorite" };
 
 type QuestionRecord = {
   id: string;
@@ -43,6 +44,7 @@ export async function createPracticeSession(userId: string, input: CreatePractic
   const access = await getStudentActiveLevelAccess(userId);
   const activeLevel = requireAssignedActiveLevel(access);
   if (input.mode === "wrong") return createWrongQuestionSession(userId, input.questionId, activeLevel.id);
+  if (input.mode === "favorite") return createFavoriteQuestionSession(userId, activeLevel.id);
   if (activeLevel.code !== input.levelCode) throw new ApiError("只能练习当前分配的字母类", 403);
   const level = await prisma.level.findFirst({ where: { code: input.levelCode, enabled: true } });
   if (!level) throw new ApiError("所选等级不存在或已停用", 404);
@@ -140,6 +142,17 @@ async function createWrongQuestionSession(userId: string, questionId: string | u
   if (!chosen.length) throw new ApiError(questionId ? "该错题不在待巩固列表" : "当前没有待巩固错题", 409);
   const snapshots = chosen.map(({ question }) => createQuestionSnapshot({ ...toDomainQuestion(question), levelId: question.levels[0]?.levelId ?? activeLevelId, levelCode: question.levels[0]?.level.code ?? "未归类", knowledgeName: question.knowledgePoint.name }));
   return persistPracticeSession(userId, "WRONG_QUESTION", null, null, snapshots);
+}
+
+async function createFavoriteQuestionSession(userId: string, activeLevelId: string): Promise<PublicPracticeSession> {
+  const favoriteStates = await prisma.studentLevelQuestionState.findMany({
+    where: { userId, levelId: activeLevelId, favorite: true, question: { status: "ACTIVE", knowledgePoint: { enabled: true } } },
+    include: { question: { include: { levels: { where: { levelId: activeLevelId }, include: { level: { select: { code: true } } } }, knowledgePoint: { select: { name: true } } } } },
+    orderBy: [{ dueAt: "asc" }, { wrongCount: "desc" }, { ignored: "asc" }],
+  });
+  if (favoriteStates.length === 0) throw new ApiError("当前没有收藏题目", 409);
+  const snapshots = favoriteStates.map(({ question }) => createQuestionSnapshot({ ...toDomainQuestion(question), levelId: question.levels[0]?.levelId ?? activeLevelId, levelCode: question.levels[0]?.level.code ?? "未归类", knowledgeName: question.knowledgePoint.name }));
+  return persistPracticeSession(userId, "FAVORITE", activeLevelId, null, snapshots);
 }
 
 async function persistPracticeSession(userId: string, mode: PracticeMode, levelId: string | null, knowledgePointId: string | null, snapshots: QuestionSnapshot[], examRule?: { durationMinutes: number | null; passingCount: number }, stageCompleted?: boolean): Promise<PublicPracticeSession> {
@@ -551,6 +564,7 @@ async function settleWrongQuestionMastery(tx: Prisma.TransactionClient, userId: 
 
 function sessionTitle(mode: PracticeMode, snapshots: QuestionSnapshot[]) {
   if (mode === "WRONG_QUESTION") return "错题巩固练习";
+  if (mode === "FAVORITE") return "收藏题练习";
   const first = snapshots[0];
   if (mode === "KNOWLEDGE_POINT") return `${first.knowledgeName} · ${first.levelCode}级`;
   if (mode === "QUESTION_ORDER") return `${first.levelCode}级 · 顺序练习`;

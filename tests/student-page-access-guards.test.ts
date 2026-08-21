@@ -8,6 +8,7 @@ const studentPages = [
   "app/student/page.tsx",
   "app/student/history/page.tsx",
   "app/student/wrong/page.tsx",
+  "app/student/favorites/page.tsx",
   "app/student/practice/page.tsx",
   "app/student/practice/start/page.tsx",
 ];

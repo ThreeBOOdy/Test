@@ -1,11 +1,12 @@
 import type { LucideIcon } from "lucide-react";
-import { BarChart3, BookCopy, BookOpen, ClipboardCheck, FileSpreadsheet, Flame, Layers3, LayoutDashboard, School, Settings2, Sparkles, Target, UserRoundCog, UsersRound } from "lucide-react";
+import { BarChart3, BookCopy, BookOpen, ClipboardCheck, FileSpreadsheet, Flame, Layers3, LayoutDashboard, School, Settings2, Sparkles, Star, Target, UserRoundCog, UsersRound } from "lucide-react";
 
 export type NavigationItem = { href: string; label: string; icon: LucideIcon };
 
 export const studentNavigation: NavigationItem[] = [
   { href: "/student", label: "学习首页", icon: LayoutDashboard },
   { href: "/student/practice/start", label: "开始练习", icon: Target },
+  { href: "/student/favorites", label: "我的收藏", icon: Star },
   { href: "/student/history", label: "练习记录", icon: BarChart3 },
   { href: "/student/focus", label: "专注打卡", icon: Flame },
   { href: "/student/wrong", label: "我的错题", icon: BookCopy },

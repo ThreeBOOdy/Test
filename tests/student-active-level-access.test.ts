@@ -32,6 +32,15 @@ describe("student activeLevel filtering and unassigned blocking", () => {
     expect(source).toContain("studentLevelQuestionState");
   });
 
+  it("filters favorite questions by activeLevel and guards the favorites page for unassigned students", () => {
+    const source = read("app/student/favorites/page.tsx");
+    expect(source).toContain("getStudentActiveLevelAccess");
+    expect(source).toContain("未分配题库，请联系老师");
+    expect(source).toContain("levelId: activeLevelId");
+    expect(source).toContain("favorite: true");
+    expect(source).toContain("studentLevelQuestionState");
+  });
+
   it("enforces activeLevel in the practice creation service", () => {
     const helper = read("lib/server/student-level-access.ts");
     const service = read("lib/server/practice-service.ts");

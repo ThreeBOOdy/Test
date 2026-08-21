@@ -104,4 +104,19 @@ describe("practice-sessions API activeLevel guard", () => {
     expect(await response.json()).toEqual({ id: "order-session-1" });
     expect(mocks.createPracticeSession).toHaveBeenCalledWith("student-1", { mode: "order", levelCode: "A" });
   });
+
+  it("creates a favorite practice session for the current active level", async () => {
+    mocks.createPracticeSession.mockResolvedValue({ id: "favorite-session-1" });
+    const request = new Request("http://localhost/api/v1/practice-sessions", {
+      method: "POST",
+      headers: { "content-type": "application/json", origin: "http://localhost", host: "localhost" },
+      body: JSON.stringify({ mode: "favorite" }),
+    });
+
+    const response = await POST(request);
+
+    expect(response.status).toBe(201);
+    expect(await response.json()).toEqual({ id: "favorite-session-1" });
+    expect(mocks.createPracticeSession).toHaveBeenCalledWith("student-1", { mode: "favorite" });
+  });
 });

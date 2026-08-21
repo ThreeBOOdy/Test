@@ -61,6 +61,7 @@ enum PracticeMode {
   QUESTION_ORDER
   RANDOM_ALL
   MOCK_EXAM
+  FAVORITE
 }
 
 enum PracticeStatus {

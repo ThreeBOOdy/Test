@@ -24,6 +24,7 @@ const MODE_TO_PARAM: Record<PracticeMode, string> = {
   QUESTION_ORDER: "order",
   RANDOM_ALL: "random",
   MOCK_EXAM: "exam",
+  FAVORITE: "favorite",
 };
 
 const PARAM_TO_MODE: Record<string, PracticeMode> = Object.fromEntries(
@@ -42,6 +43,7 @@ export function buildPracticeLaunchHref(input: PracticeLaunchInput) {
 export function normalizePracticeLaunch(params: PracticeLaunchParams): PracticeLaunchInput {
   const mode = PARAM_TO_MODE[params.mode ?? "level"] ?? "LEVEL_COMPREHENSIVE";
   if (mode === "WRONG_QUESTION") return { mode, questionId: params.question || undefined };
+  if (mode === "FAVORITE") return { mode };
   if (mode === "KNOWLEDGE_POINT") {
     return { mode, levelCode: params.level, knowledgePointId: params.knowledge ?? "" };
   }
