@@ -340,6 +340,32 @@ describe("MySQL project configuration", () => {
     expect(schema).toMatch(/activeLevel\s+Level\?\s+@relation\("StudentActiveLevel"/);
     expect(schema).toMatch(/students\s+User\[\]\s+@relation\("StudentActiveLevel"\)/);
   });
+  it("adds the unified StudentLevelQuestionState FSRS/learning-state table", () => {
+    const migration = fs.readFileSync(path.resolve("prisma/migrations/20260821120000_student_level_question_state_fsrs/migration.sql"), "utf8");
+    const schema = fs.readFileSync(path.resolve("prisma/schema.prisma"), "utf8");
+
+    expect(migration).toContain("CREATE TABLE `StudentLevelQuestionState`");
+    expect(migration).toContain("ENUM('NEW', 'LEARNING', 'REVIEW', 'RELEARNING') NOT NULL DEFAULT 'NEW'");
+    expect(migration).toContain("`dueAt` DATETIME(3) NULL");
+    expect(migration).toContain("`stability` DOUBLE NOT NULL DEFAULT 0");
+    expect(migration).toContain("`difficulty` DOUBLE NOT NULL DEFAULT 5");
+    expect(migration).toContain("`favorite` BOOLEAN NOT NULL DEFAULT false");
+    expect(migration).toContain("`ignored` BOOLEAN NOT NULL DEFAULT false");
+    expect(migration).toContain("`wrongCount` INTEGER NOT NULL DEFAULT 0");
+    expect(migration).toContain("`correctCount` INTEGER NOT NULL DEFAULT 0");
+    expect(migration).toContain("`lastResult` ENUM('CORRECT', 'INCORRECT') NULL");
+    expect(migration).toContain("UNIQUE INDEX `StudentLevelQuestionState_userId_levelId_questionId_key`(`userId`, `levelId`, `questionId`)");
+    expect(migration).toContain("FOREIGN KEY (`userId`) REFERENCES `User`(`id`) ON DELETE CASCADE ON UPDATE CASCADE");
+    expect(migration).toContain("FOREIGN KEY (`levelId`) REFERENCES `Level`(`id`) ON DELETE RESTRICT ON UPDATE CASCADE");
+    expect(migration).toContain("FOREIGN KEY (`questionId`) REFERENCES `Question`(`id`) ON DELETE RESTRICT ON UPDATE CASCADE");
+    expect(migration).not.toMatch(/DROP TABLE `(Question|User|Level|StudentLevelQuestionState)`|DELETE FROM `(Question|User|Level)`/);
+
+    expect(schema).toContain("model StudentLevelQuestionState {");
+    expect(schema).toContain("enum LearningState {");
+    expect(schema).toContain("enum AnswerResult {");
+    expect(schema).toMatch(/@@unique\(\[userId, levelId, questionId\]\)/);
+    expect(schema).toMatch(/studentLevelQuestionStates\s+StudentLevelQuestionState\[\]/);
+  });
 });
 
 describe("MySQL database URL protection", () => {
