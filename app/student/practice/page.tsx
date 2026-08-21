@@ -5,7 +5,7 @@ import { createPracticeSession, getPracticeSession } from "@/lib/server/practice
 import { getCurrentUser } from "@/lib/server/session";
 import { getStudentActiveLevelAccess } from "@/lib/server/student-level-access";
 
-export default async function PracticePage({ searchParams }: { searchParams: Promise<{ mode?: string; level?: string; knowledge?: string; session?: string }> }) {
+export default async function PracticePage({ searchParams }: { searchParams: Promise<{ mode?: string; level?: string; knowledge?: string; blueprint?: string; session?: string }> }) {
   const user = await getCurrentUser();
   if (!user || user.role !== "STUDENT") redirect("/login?next=/student");
   if (user.capability !== "FULL_STUDENT") redirect("/login");
@@ -23,7 +23,7 @@ export default async function PracticePage({ searchParams }: { searchParams: Pro
       : launch.mode === "KNOWLEDGE_POINT" ? { mode: "knowledge", levelCode: launch.levelCode ?? "", knowledgePointId: launch.knowledgePointId ?? "" }
         : launch.mode === "QUESTION_ORDER" ? { mode: "order", levelCode: launch.levelCode ?? "" }
           : launch.mode === "RANDOM_ALL" ? { mode: "random", levelCode: launch.levelCode ?? "" }
-            : launch.mode === "MOCK_EXAM" ? { mode: "exam", levelCode: launch.levelCode ?? "" }
+            : launch.mode === "MOCK_EXAM" ? { mode: "exam", levelCode: launch.levelCode ?? "", blueprintId: launch.blueprintId }
               : { mode: "level", levelCode: launch.levelCode ?? "" });
   redirect(`/student/practice?session=${session.id}`);
 }
