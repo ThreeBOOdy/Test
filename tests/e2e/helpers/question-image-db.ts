@@ -13,15 +13,18 @@ async function main() {
 
   if (command === "seed-wrong") {
     const question = await prisma.question.findFirstOrThrow({ where: { stem: { contains: keyword } }, select: { id: true } });
-    await prisma.wrongQuestion.deleteMany({ where: { userId: student.id } });
-    await prisma.wrongQuestion.create({ data: { userId: student.id, questionId: question.id, wrongCount: 1, lastWrongReason: "ANSWERED_WRONG" } });
+    const levelId = student.activeLevelId ?? (await prisma.level.findFirstOrThrow({ where: { enabled: true } })).id;
+    await prisma.studentLevelQuestionState.deleteMany({ where: { userId: student.id } });
+    await prisma.studentLevelQuestionState.create({
+      data: { userId: student.id, levelId, questionId: question.id, wrongCount: 1, state: "LEARNING", dueAt: new Date(), reps: 1, lastResult: "INCORRECT" },
+    });
     console.log(question.id);
     return;
   }
 
   if (command === "cleanup") {
     const question = await prisma.question.findFirst({ where: { stem: { contains: keyword } }, select: { id: true } });
-    if (question) await prisma.wrongQuestion.deleteMany({ where: { userId: student.id, questionId: question.id } });
+    if (question) await prisma.studentLevelQuestionState.deleteMany({ where: { userId: student.id, questionId: question.id } });
     await prisma.practiceSession.deleteMany({ where: { userId: student.id, mode: "WRONG_QUESTION" } });
     console.log("cleaned");
     return;

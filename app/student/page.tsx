@@ -15,6 +15,7 @@ import { EmptySignalState } from "@/components/visual/empty-signal-state";
 import { Artwork } from "@/components/visual/artwork";
 import { CallsignLabel, FrequencyScale, SignalMeter } from "@/components/visual/radio-instruments";
 import { prisma } from "@/lib/db";
+import { isWrongQuestionState } from "@/lib/domain/learning-state";
 import { getCurrentUser } from "@/lib/server/session";
 import { getStudentActiveLevelAccess } from "@/lib/server/student-level-access";
 import { getStudentMasteryOverview } from "@/lib/server/student-mastery-overview-service";
@@ -28,10 +29,10 @@ export default async function StudentPage() {
   if (!user) return null;
   if (user.capability !== "FULL_STUDENT") return null;
   const sevenDaysAgo = getDaysAgo(7);
-  const [activeLevelAccess, sessions, wrongQuestions, levelRules, knowledgeRules, activeQuestions, focusOverview, reviewPlan, playerStatus, gamificationVisibility] = await Promise.all([
+  const [activeLevelAccess, sessions, wrongStates, levelRules, knowledgeRules, activeQuestions, focusOverview, reviewPlan, playerStatus, gamificationVisibility] = await Promise.all([
     getStudentActiveLevelAccess(user.id),
     prisma.practiceSession.findMany({ where: { userId: user.id }, include: { level: true, knowledgePoint: true }, orderBy: { startedAt: "desc" } }),
-    prisma.wrongQuestion.findMany({ where: { userId: user.id, mastered: false }, select: { question: { select: { knowledgePointId: true } } } }),
+    prisma.studentLevelQuestionState.findMany({ where: { userId: user.id, wrongCount: { gt: 0 } }, select: { levelId: true, state: true, intervalDays: true, wrongCount: true, question: { select: { knowledgePointId: true } } } }),
     prisma.levelPracticeRule.findMany({ where: { enabled: true, level: { enabled: true } }, include: { level: true }, orderBy: { level: { sortOrder: "asc" } } }),
     prisma.knowledgePracticeRule.findMany({ where: { enabled: true, level: { enabled: true }, knowledgePoint: { enabled: true } }, include: { level: true, knowledgePoint: true }, orderBy: [{ knowledgePoint: { sortOrder: "asc" } }, { level: { sortOrder: "asc" } }] }),
     prisma.question.findMany({ where: { status: "ACTIVE", knowledgePoint: { enabled: true } }, select: { levels: { select: { levelId: true } }, type: true, knowledgePoint: { select: { path: true } } } }),
@@ -48,11 +49,12 @@ export default async function StudentPage() {
   const weeklySessions = completedSessions.filter((session) => session.startedAt >= sevenDaysAgo);
   const weeklyAnswered = weeklySessions.reduce((sum, session) => sum + session.singleCountSnapshot + session.multipleCountSnapshot, 0);
   const activeDays = new Set(weeklySessions.map((session) => session.startedAt.toLocaleDateString("en-CA", { timeZone: "Asia/Shanghai" }))).size;
+  const activeLevelId = activeLevelAccess.activeLevelId;
+  const hasActiveLevel = Boolean(activeLevelId && activeLevelAccess.activeLevel?.enabled);
+  const wrongQuestions = wrongStates.filter((item) => (!activeLevelId || item.levelId === activeLevelId) && isWrongQuestionState(item));
   const weakKnowledgeCount = new Set(wrongQuestions.map((item) => item.question.knowledgePointId)).size;
   const showRpgPanel = gamificationVisibility.classGamificationEnabled;
   const showMap = playerStatus.mapEnabled && gamificationVisibility.gamificationVisible;
-  const activeLevelId = activeLevelAccess.activeLevelId;
-  const hasActiveLevel = Boolean(activeLevelId && activeLevelAccess.activeLevel?.enabled);
   const masteryOverview = hasActiveLevel ? await getStudentMasteryOverview(user.id) : null;
   const availableLevels = levelRules.filter((rule) => {
     if (rule.levelId !== activeLevelId) return false;

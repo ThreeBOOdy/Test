@@ -70,6 +70,16 @@ export function selectPracticeQuestions(
     return true;
   });
 
+  if (input.mode === "WRONG_QUESTION") {
+    const singles = eligible.filter((question) => question.type === "SINGLE_CHOICE");
+    const multiples = eligible.filter((question) => question.type === "MULTIPLE_CHOICE");
+    return {
+      questions: shuffle(eligible, random),
+      singleCount: singles.length,
+      multipleCount: multiples.length,
+    };
+  }
+
   const singles = eligible.filter((question) => question.type === "SINGLE_CHOICE");
   const multiples = eligible.filter((question) => question.type === "MULTIPLE_CHOICE");
 
