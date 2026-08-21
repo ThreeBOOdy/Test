@@ -38,4 +38,11 @@ describe("student activeLevel filtering and unassigned blocking", () => {
     expect(service).toContain("只能练习当前分配的字母类");
     expect(service).toContain("levels: { some: { levelId: activeLevelId } }");
   });
+
+  it("renders the StudentLevelQuestionState mastery overview on the student home page", () => {
+    const source = read("app/student/page.tsx");
+    expect(source).toContain("StudentMasteryOverview");
+    expect(source).toContain("getStudentMasteryOverview");
+    expect(source).toContain("masteryOverview");
+  });
 });

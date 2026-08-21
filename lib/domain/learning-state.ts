@@ -175,3 +175,56 @@ export function clearLearningState(state: StudentLevelQuestionState): StudentLev
 export function isDue(state: StudentLevelQuestionState, now: Date = new Date()): boolean {
   return state.reps > 0 && state.dueAt !== null && state.dueAt.getTime() <= now.getTime();
 }
+
+export type MasteryOverviewBucket = "NOT_STARTED" | "LEARNING" | "DUE" | "MASTERED";
+
+export type StudentMasteryOverviewCounts = {
+  total: number;
+  notStarted: number;
+  learning: number;
+  due: number;
+  mastered: number;
+};
+
+export type StudentMasteryOverview = StudentMasteryOverviewCounts & {
+  levelId: string;
+  levelCode: string;
+  levelName: string;
+};
+
+export type StudentLevelQuestionStateOverviewInput = Pick<
+  StudentLevelQuestionState,
+  "state" | "dueAt" | "intervalDays" | "reps"
+>;
+
+export function summarizeStudentLevelQuestionStates(input: {
+  total: number;
+  states: StudentLevelQuestionStateOverviewInput[];
+  now?: Date;
+}): StudentMasteryOverviewCounts {
+  const now = input.now ?? new Date();
+  let answered = 0;
+  let learning = 0;
+  let due = 0;
+  let mastered = 0;
+
+  for (const state of input.states) {
+    if (state.reps <= 0) continue;
+    answered += 1;
+    if (state.dueAt !== null && state.dueAt.getTime() <= now.getTime()) {
+      due += 1;
+    } else if (state.state === "REVIEW" && state.intervalDays >= 7) {
+      mastered += 1;
+    } else {
+      learning += 1;
+    }
+  }
+
+  return {
+    total: input.total,
+    notStarted: Math.max(0, input.total - answered),
+    learning,
+    due,
+    mastered,
+  };
+}
