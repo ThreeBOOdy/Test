@@ -347,6 +347,82 @@ describe("production database foundation", () => {
     });
   });
 
+  it("writes StudentLevelQuestionState for every mock exam question using plain GOOD/AGAIN mapping", async () => {
+    const { user, level } = await createBaseRecords();
+    const defaultType = await prisma.knowledgePointType.findUniqueOrThrow({ where: { code: "DEFAULT" } });
+    const mockPoint = await prisma.knowledgePoint.create({ data: { typeId: defaultType.id, code: "MOCK-FSRS.1", name: "Mock FSRS Point", path: "/mock-fsrs/mock-fsrs.1", depth: 1 } });
+    const favoriteCorrect = await prisma.question.create({ data: { knowledgePointId: mockPoint.id, levels: { create: { levelId: level.id } }, externalQuestionCode: "MOCK-FSRS-FAVORITE-CORRECT", stem: "Favorite correct", type: "SINGLE_CHOICE", optionCount: 2, correctOptionCount: 1, selectionSpec: "2选1", options: [{ id: "A", text: "A" }, { id: "B", text: "B" }], correctOptionIds: ["A"] } });
+    const ignoredCorrect = await prisma.question.create({ data: { knowledgePointId: mockPoint.id, levels: { create: { levelId: level.id } }, externalQuestionCode: "MOCK-FSRS-IGNORED-CORRECT", stem: "Ignored correct", type: "SINGLE_CHOICE", optionCount: 2, correctOptionCount: 1, selectionSpec: "2选1", options: [{ id: "A", text: "A" }, { id: "B", text: "B" }], correctOptionIds: ["A"] } });
+    const ignoredWrong = await prisma.question.create({ data: { knowledgePointId: mockPoint.id, levels: { create: { levelId: level.id } }, externalQuestionCode: "MOCK-FSRS-IGNORED-WRONG", stem: "Ignored wrong", type: "SINGLE_CHOICE", optionCount: 2, correctOptionCount: 1, selectionSpec: "2选1", options: [{ id: "A", text: "A" }, { id: "B", text: "B" }], correctOptionIds: ["A"] } });
+    await prisma.studentLevelQuestionState.createMany({
+      data: [
+        { userId: user.id, levelId: level.id, questionId: favoriteCorrect.id, favorite: true },
+        { userId: user.id, levelId: level.id, questionId: ignoredCorrect.id, ignored: true },
+        { userId: user.id, levelId: level.id, questionId: ignoredWrong.id, ignored: true },
+      ],
+    });
+    await createDefaultMockBlueprint(level.id, mockPoint.id, 3, 0);
+
+    const session = await createPracticeSession(user.id, { mode: "exam", levelCode: level.code });
+    const favoriteCorrectAnswer = await correctAnswerFor(session.id, favoriteCorrect.id);
+    const ignoredCorrectAnswer = await correctAnswerFor(session.id, ignoredCorrect.id);
+    const ignoredWrongAnswer = await correctAnswerFor(session.id, ignoredWrong.id);
+    const wrongAnswer = ["A", "B"].filter((id) => !ignoredWrongAnswer.includes(id));
+    await submitMockExam(user.id, session.id, [
+      { questionId: favoriteCorrect.id, selectedOptionIds: favoriteCorrectAnswer },
+      { questionId: ignoredCorrect.id, selectedOptionIds: ignoredCorrectAnswer },
+      { questionId: ignoredWrong.id, selectedOptionIds: wrongAnswer },
+    ]);
+
+    const favoriteCorrectState = await prisma.studentLevelQuestionState.findUniqueOrThrow({
+      where: { userId_levelId_questionId: { userId: user.id, levelId: level.id, questionId: favoriteCorrect.id } },
+    });
+    const ignoredCorrectState = await prisma.studentLevelQuestionState.findUniqueOrThrow({
+      where: { userId_levelId_questionId: { userId: user.id, levelId: level.id, questionId: ignoredCorrect.id } },
+    });
+    const ignoredWrongState = await prisma.studentLevelQuestionState.findUniqueOrThrow({
+      where: { userId_levelId_questionId: { userId: user.id, levelId: level.id, questionId: ignoredWrong.id } },
+    });
+
+    expect(favoriteCorrectState).toMatchObject({
+      state: "REVIEW",
+      reps: 1,
+      lapses: 0,
+      wrongCount: 0,
+      correctCount: 1,
+      intervalDays: 1,
+      stability: 1,
+      difficulty: 4.5,
+      lastResult: "CORRECT",
+      favorite: true,
+    });
+    expect(ignoredCorrectState).toMatchObject({
+      state: "REVIEW",
+      reps: 1,
+      lapses: 0,
+      wrongCount: 0,
+      correctCount: 1,
+      intervalDays: 1,
+      stability: 1,
+      difficulty: 4.5,
+      lastResult: "CORRECT",
+      ignored: true,
+    });
+    expect(ignoredWrongState).toMatchObject({
+      state: "LEARNING",
+      reps: 1,
+      lapses: 0,
+      wrongCount: 1,
+      correctCount: 0,
+      intervalDays: 0,
+      stability: 0.3,
+      difficulty: 7,
+      lastResult: "INCORRECT",
+      ignored: true,
+    });
+    expect(ignoredWrongState.dueAt).not.toBeNull();
+  });
+
   it("generates today's review from FSRS due states and weak knowledge points, not legacy WrongQuestion rows", async () => {
     const level = await prisma.level.create({ data: { code: "A", name: "A Level" } });
     const user = await prisma.user.create({ data: { username: "review-fsrs-user", displayName: "Review FSRS User", passwordHash: "test", role: "STUDENT", activeLevelId: level.id } });
