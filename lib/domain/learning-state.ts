@@ -176,6 +176,45 @@ export function isDue(state: StudentLevelQuestionState, now: Date = new Date()):
   return state.reps > 0 && state.dueAt !== null && state.dueAt.getTime() <= now.getTime();
 }
 
+export function isMasteredLearningState(
+  state: Pick<StudentLevelQuestionState, "state" | "intervalDays">,
+): boolean {
+  return state.state === "REVIEW" && state.intervalDays >= 7;
+}
+
+export function isWrongQuestionState(
+  state: Pick<StudentLevelQuestionState, "wrongCount" | "state" | "intervalDays">,
+): boolean {
+  return state.wrongCount > 0 && !isMasteredLearningState(state);
+}
+
+export type WrongQuestionStateCandidate = Pick<
+  StudentLevelQuestionState,
+  "favorite" | "dueAt" | "wrongCount" | "ignored"
+> & {
+  questionId?: string;
+  id?: string;
+};
+
+/**
+ * Orders the wrong-question pool as specified:
+ * favorite first -> dueAt ascending -> wrongCount descending -> ignored last.
+ * States without a dueAt are treated as furthest from due.
+ */
+export function sortWrongQuestionStates<T extends WrongQuestionStateCandidate>(
+  states: readonly T[],
+): T[] {
+  return [...states].sort((left, right) => {
+    if (left.favorite !== right.favorite) return left.favorite ? -1 : 1;
+    const leftDue = left.dueAt?.getTime() ?? Number.MAX_SAFE_INTEGER;
+    const rightDue = right.dueAt?.getTime() ?? Number.MAX_SAFE_INTEGER;
+    if (leftDue !== rightDue) return leftDue - rightDue;
+    if (left.wrongCount !== right.wrongCount) return right.wrongCount - left.wrongCount;
+    if (left.ignored !== right.ignored) return left.ignored ? 1 : -1;
+    return (left.questionId ?? left.id ?? "").localeCompare(right.questionId ?? right.id ?? "");
+  });
+}
+
 export type MasteryOverviewBucket = "NOT_STARTED" | "LEARNING" | "DUE" | "MASTERED";
 
 export type StudentMasteryOverviewCounts = {

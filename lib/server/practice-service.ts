@@ -6,6 +6,7 @@ import { parseJsonStringArray } from "@/lib/domain/json-string-array";
 import { BlueprintInsufficientQuestionError, selectExamBlueprintQuestions } from "@/lib/domain/exam-blueprints";
 import { selectPracticeQuestions, selectPrioritizedRandomQuestions, shuffle, sortQuestionsByBankNumber } from "@/lib/domain/practice-engine";
 import { createQuestionSnapshot, gradeQuestionSnapshot, toPublicQuestionSnapshot, type QuestionSnapshot } from "@/lib/domain/practice-snapshot";
+import { isWrongQuestionState, sortWrongQuestionStates } from "@/lib/domain/learning-state";
 import { advanceWrongQuestionMastery } from "@/lib/domain/wrong-question-mastery";
 import { upsertStudentLevelQuestionState } from "@/lib/server/learning-state-service";
 import { completeReviewCardsForSession } from "@/lib/server/review-plan-service";
@@ -125,15 +126,16 @@ async function createSequentialPracticeSession(userId: string, levelId: string):
 }
 
 async function createWrongQuestionSession(userId: string, questionId: string | undefined, activeLevelId: string): Promise<PublicPracticeSession> {
-  const wrongQuestions = await prisma.wrongQuestion.findMany({
-    where: { userId, mastered: false, question: { status: "ACTIVE", knowledgePoint: { enabled: true }, levels: { some: { levelId: activeLevelId } } } },
+  const wrongStates = await prisma.studentLevelQuestionState.findMany({
+    where: { userId, levelId: activeLevelId, wrongCount: { gt: 0 }, question: { status: "ACTIVE", knowledgePoint: { enabled: true } } },
     include: { question: { include: { levels: { where: { levelId: activeLevelId }, include: { level: { select: { code: true } } } }, knowledgePoint: { select: { name: true } } } } },
   });
-  const selected = questionId
-    ? wrongQuestions.filter((item) => item.questionId === questionId)
-    : shuffle(wrongQuestions).slice(0, 20);
-  if (!selected.length) throw new ApiError(questionId ? "该错题不在待巩固列表" : "当前没有待巩固错题", 409);
-  const snapshots = selected.map(({ question }) => createQuestionSnapshot({ ...toDomainQuestion(question), levelId: question.levels[0]?.levelId ?? activeLevelId, levelCode: question.levels[0]?.level.code ?? "未归类", knowledgeName: question.knowledgePoint.name }));
+  const selected = sortWrongQuestionStates(wrongStates.filter(isWrongQuestionState));
+  const chosen = questionId
+    ? selected.filter((item) => item.questionId === questionId)
+    : selected;
+  if (!chosen.length) throw new ApiError(questionId ? "该错题不在待巩固列表" : "当前没有待巩固错题", 409);
+  const snapshots = chosen.map(({ question }) => createQuestionSnapshot({ ...toDomainQuestion(question), levelId: question.levels[0]?.levelId ?? activeLevelId, levelCode: question.levels[0]?.level.code ?? "未归类", knowledgeName: question.knowledgePoint.name }));
   return persistPracticeSession(userId, "WRONG_QUESTION", null, null, snapshots);
 }
 

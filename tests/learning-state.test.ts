@@ -5,7 +5,10 @@ import {
   clearLearningState,
   createInitialState,
   isDue,
+  isMasteredLearningState,
+  isWrongQuestionState,
   mapAnswerToRating,
+  sortWrongQuestionStates,
 } from "@/lib/domain/learning-state";
 
 const NOW = new Date("2026-08-21T00:00:00.000Z");
@@ -196,5 +199,38 @@ describe("isDue", () => {
 
   it("returns false for never-reviewed cards", () => {
     expect(isDue(createInitialState(), NOW)).toBe(false);
+  });
+});
+
+describe("wrong-question state derivation and ordering", () => {
+  it("treats REVIEW with intervalDays >= 7 as mastered", () => {
+    expect(isMasteredLearningState({ state: "REVIEW", intervalDays: 7 })).toBe(true);
+    expect(isMasteredLearningState({ state: "REVIEW", intervalDays: 6 })).toBe(false);
+    expect(isMasteredLearningState({ state: "LEARNING", intervalDays: 30 })).toBe(false);
+  });
+
+  it("includes only wrongCount > 0 and unmastered states", () => {
+    expect(isWrongQuestionState({ wrongCount: 1, state: "LEARNING", intervalDays: 0 })).toBe(true);
+    expect(isWrongQuestionState({ wrongCount: 1, state: "REVIEW", intervalDays: 6 })).toBe(true);
+    expect(isWrongQuestionState({ wrongCount: 1, state: "REVIEW", intervalDays: 7 })).toBe(false);
+    expect(isWrongQuestionState({ wrongCount: 0, state: "LEARNING", intervalDays: 0 })).toBe(false);
+  });
+
+  it("orders wrong states by favorite, dueAt, wrongCount, then ignored", () => {
+    const states = [
+      { questionId: "later-wrong", favorite: false, dueAt: new Date("2026-08-12T00:00:00.000Z"), wrongCount: 1, ignored: false },
+      { questionId: "favorite", favorite: true, dueAt: new Date("2026-08-12T00:00:00.000Z"), wrongCount: 4, ignored: false },
+      { questionId: "urgent", favorite: false, dueAt: new Date("2026-08-11T00:00:00.000Z"), wrongCount: 5, ignored: false },
+      { questionId: "ignored", favorite: false, dueAt: new Date("2026-08-11T00:00:00.000Z"), wrongCount: 2, ignored: true },
+      { questionId: "no-due", favorite: false, dueAt: null, wrongCount: 9, ignored: false },
+    ];
+
+    expect(sortWrongQuestionStates(states).map((item) => item.questionId)).toEqual([
+      "favorite",
+      "urgent",
+      "ignored",
+      "later-wrong",
+      "no-due",
+    ]);
   });
 });

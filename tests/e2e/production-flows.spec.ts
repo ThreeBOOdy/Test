@@ -188,7 +188,7 @@ test.describe.serial("production business flows", () => {
     await expect(page.getByText("A级综合练习").first()).toBeVisible();
     await expect(page.getByText("10 题", { exact: false }).first()).toBeVisible();
 
-    for (let sessionNumber = 1; sessionNumber <= 3; sessionNumber += 1) {
+    for (let sessionNumber = 1; sessionNumber <= 4; sessionNumber += 1) {
       await page.goto("/student/wrong");
       await expect(page.getByText("待巩固 10", { exact: true })).toBeVisible();
       await page.getByRole("link", { name: "随机巩固错题" }).click();

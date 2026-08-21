@@ -46,15 +46,15 @@ describe("practice engine", () => {
     expect(isAnswerCorrect(["A", "B"], ["A", "C"])).toBe(false);
   });
 
-  it("selects at most twenty pending wrong questions", () => {
+  it("includes all pending wrong questions without a fixed cap", () => {
     const wrongBank = Array.from({ length: 25 }, (_, index) => question(`wrong-${index}`, "SINGLE_CHOICE", index % 2 ? "A" : "B"));
     const result = selectPracticeQuestions(wrongBank, {
       mode: "WRONG_QUESTION",
       levelId: "",
       rule: { singleCount: 20, multipleCount: 0 },
     }, () => 0.42);
-    expect(result.questions).toHaveLength(20);
-    expect(new Set(result.questions.map((item) => item.id)).size).toBe(20);
+    expect(result.questions).toHaveLength(25);
+    expect(new Set(result.questions.map((item) => item.id)).size).toBe(25);
   });
 
   it("sorts bank question numbers naturally in ascending order", () => {

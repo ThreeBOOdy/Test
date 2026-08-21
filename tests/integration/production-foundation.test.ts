@@ -483,11 +483,44 @@ describe("production database foundation", () => {
       prisma.question.create({ data: { knowledgePointId: point.id, levels: { create: { levelId: levelA.id } }, externalQuestionCode: "WA-1", stem: "A wrong", type: "SINGLE_CHOICE", optionCount: 2, correctOptionCount: 1, selectionSpec: "2选1", options: [{ id: "A", text: "A" }, { id: "B", text: "B" }], correctOptionIds: ["A"] } }),
       prisma.question.create({ data: { knowledgePointId: point.id, levels: { create: { levelId: levelB.id } }, externalQuestionCode: "WB-1", stem: "B wrong", type: "SINGLE_CHOICE", optionCount: 2, correctOptionCount: 1, selectionSpec: "2选1", options: [{ id: "A", text: "A" }, { id: "B", text: "B" }], correctOptionIds: ["A"] } }),
     ]);
-    await prisma.wrongQuestion.createMany({ data: [{ userId: user.id, questionId: questionA.id }, { userId: user.id, questionId: questionB.id }] });
+    await prisma.studentLevelQuestionState.createMany({ data: [
+      { userId: user.id, levelId: levelA.id, questionId: questionA.id, wrongCount: 1, state: "LEARNING", dueAt: new Date(), reps: 1, lastResult: "INCORRECT" },
+      { userId: user.id, levelId: levelB.id, questionId: questionB.id, wrongCount: 1, state: "LEARNING", dueAt: new Date(), reps: 1, lastResult: "INCORRECT" },
+    ] });
 
     const session = await createPracticeSession(user.id, { mode: "wrong" });
 
     expect(session.questions.map((question) => question.id)).toEqual([questionA.id]);
+  });
+
+  it("orders wrong-question practice by favorite, dueAt, wrongCount, and ignored", async () => {
+    const level = await prisma.level.create({ data: { code: "A", name: "A Level" } });
+    const user = await prisma.user.create({ data: { username: "wrong-order-user", displayName: "Wrong Order User", passwordHash: "test", role: "STUDENT", activeLevelId: level.id } });
+    const defaultType = await prisma.knowledgePointType.upsert({ where: { code: "DEFAULT" }, update: {}, create: { code: "DEFAULT", name: "默认" } });
+    const point = await prisma.knowledgePoint.create({ data: { typeId: defaultType.id, code: "WO.1", name: "Wrong Order Point", path: "/WO/WO.1", depth: 1 } });
+    const createQuestion = (externalQuestionCode: string, stem: string) => prisma.question.create({
+      data: { knowledgePointId: point.id, levels: { create: { levelId: level.id } }, externalQuestionCode, stem, type: "SINGLE_CHOICE", optionCount: 2, correctOptionCount: 1, selectionSpec: "2选1", options: [{ id: "A", text: "A" }, { id: "B", text: "B" }], correctOptionIds: ["A"] },
+    });
+    const [favoriteQuestion, urgentQuestion, ignoredQuestion, laterQuestion, masteredQuestion] = await Promise.all([
+      createQuestion("WO-FAV", "Favorite wrong"),
+      createQuestion("WO-URG", "Urgent wrong"),
+      createQuestion("WO-IGN", "Ignored wrong"),
+      createQuestion("WO-LAT", "Later wrong"),
+      createQuestion("WO-MAS", "Mastered wrong"),
+    ]);
+    const sooner = new Date("2026-08-21T00:00:00.000Z");
+    const later = new Date("2026-08-22T00:00:00.000Z");
+    await prisma.studentLevelQuestionState.createMany({ data: [
+      { userId: user.id, levelId: level.id, questionId: favoriteQuestion.id, favorite: true, ignored: false, dueAt: later, wrongCount: 1, state: "LEARNING", reps: 1, lastResult: "INCORRECT" },
+      { userId: user.id, levelId: level.id, questionId: urgentQuestion.id, favorite: false, ignored: false, dueAt: sooner, wrongCount: 5, state: "LEARNING", reps: 1, lastResult: "INCORRECT" },
+      { userId: user.id, levelId: level.id, questionId: ignoredQuestion.id, favorite: false, ignored: true, dueAt: sooner, wrongCount: 2, state: "LEARNING", reps: 1, lastResult: "INCORRECT" },
+      { userId: user.id, levelId: level.id, questionId: laterQuestion.id, favorite: false, ignored: false, dueAt: later, wrongCount: 4, state: "LEARNING", reps: 1, lastResult: "INCORRECT" },
+      { userId: user.id, levelId: level.id, questionId: masteredQuestion.id, favorite: false, ignored: false, dueAt: later, wrongCount: 3, state: "REVIEW", intervalDays: 7, reps: 3, lastResult: "CORRECT" },
+    ] });
+
+    const session = await createPracticeSession(user.id, { mode: "wrong" });
+
+    expect(session.questions.map((question) => question.id)).toEqual([favoriteQuestion.id, urgentQuestion.id, ignoredQuestion.id, laterQuestion.id]);
   });
 
   it("loads legacy practice sessions from stored snapshots even when current level associations change", async () => {
@@ -571,27 +604,36 @@ describe("production database foundation", () => {
     expect(await findSessionUser(token)).toBeNull();
   });
 
-  it("creates at most twenty wrong-question items and updates mastery", async () => {
+  it("creates wrong-question practice from every unmastered state and updates state", async () => {
     const user = await prisma.user.create({ data: { username: "wrong-user", displayName: "Wrong User", passwordHash: "test", role: "STUDENT" } });
     const level = await prisma.level.create({ data: { code: "A", name: "A Level" } });
     await prisma.user.update({ where: { id: user.id }, data: { activeLevelId: level.id } });
     const defaultType = await prisma.knowledgePointType.upsert({ where: { code: "DEFAULT" }, update: {}, create: { code: "DEFAULT", name: "默认" } });
   const point = await prisma.knowledgePoint.create({ data: { typeId: defaultType.id, code: "8.1.1", name: "Wrong Point", path: "/8/8.1/8.1.1", depth: 2 } });
     const questions = await Promise.all(Array.from({ length: 25 }, (_, index) => prisma.question.create({ data: { knowledgePointId: point.id, levels: { create: { levelId: level.id } }, externalQuestionCode: `WRONG-${index + 1}`, stem: `Wrong ${index + 1}`, type: "SINGLE_CHOICE", optionCount: 2, correctOptionCount: 1, selectionSpec: "2选1", options: [{ id: "A", text: "A" }, { id: "B", text: "B" }], correctOptionIds: ["A"] } })));
-    await prisma.wrongQuestion.createMany({ data: questions.map((question) => ({ userId: user.id, questionId: question.id })) });
+    await prisma.studentLevelQuestionState.createMany({ data: questions.map((question) => ({
+      userId: user.id,
+      levelId: level.id,
+      questionId: question.id,
+      wrongCount: 1,
+      state: "LEARNING",
+      dueAt: new Date(),
+      reps: 1,
+      lastResult: "INCORRECT",
+    })) });
 
     const session = await createPracticeSession(user.id, { mode: "wrong" });
 
     expect(session.mode).toBe("WRONG_QUESTION");
-    expect(session.total).toBe(20);
+    expect(session.total).toBe(25);
     expect((await prisma.practiceSession.findUniqueOrThrow({ where: { id: session.id } })).levelId).toBeNull();
     const [correctQuestion, incorrectQuestion] = session.questions;
     const correctAnswer = await correctAnswerFor(session.id, correctQuestion.id);
     const incorrectAnswer = await correctAnswerFor(session.id, incorrectQuestion.id);
     await submitPracticeAnswer(user.id, session.id, correctQuestion.id, correctAnswer, "wrong-correct-key");
     await submitPracticeAnswer(user.id, session.id, incorrectQuestion.id, ["A", "B"].filter((id) => !incorrectAnswer.includes(id)), "wrong-incorrect-key");
-    expect(await prisma.wrongQuestion.findUniqueOrThrow({ where: { userId_questionId: { userId: user.id, questionId: correctQuestion.id } } })).toMatchObject({ mastered: false, correctSessionCount: 0, wrongCount: 1 });
-    expect(await prisma.wrongQuestion.findUniqueOrThrow({ where: { userId_questionId: { userId: user.id, questionId: incorrectQuestion.id } } })).toMatchObject({ mastered: false, wrongCount: 2 });
+    expect(await prisma.studentLevelQuestionState.findUniqueOrThrow({ where: { userId_levelId_questionId: { userId: user.id, levelId: level.id, questionId: correctQuestion.id } } })).toMatchObject({ state: "REVIEW", wrongCount: 1, correctCount: 1, lastResult: "CORRECT" });
+    expect(await prisma.studentLevelQuestionState.findUniqueOrThrow({ where: { userId_levelId_questionId: { userId: user.id, levelId: level.id, questionId: incorrectQuestion.id } } })).toMatchObject({ state: "RELEARNING", wrongCount: 2, correctCount: 0, lastResult: "INCORRECT" });
   });
 
   it("creates sequential practice with every active question in natural order without reading count rules", async () => {

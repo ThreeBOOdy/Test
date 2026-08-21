@@ -28,7 +28,8 @@ describe("student activeLevel filtering and unassigned blocking", () => {
     const source = read("app/student/wrong/page.tsx");
     expect(source).toContain("getStudentActiveLevelAccess");
     expect(source).toContain("未分配题库，请联系老师");
-    expect(source).toContain("levels: { some: { levelId: activeLevelId } }");
+    expect(source).toContain("levelId: activeLevelId");
+    expect(source).toContain("studentLevelQuestionState");
   });
 
   it("enforces activeLevel in the practice creation service", () => {
@@ -36,7 +37,8 @@ describe("student activeLevel filtering and unassigned blocking", () => {
     const service = read("lib/server/practice-service.ts");
     expect(helper).toContain("未分配题库，请联系老师");
     expect(service).toContain("只能练习当前分配的字母类");
-    expect(service).toContain("levels: { some: { levelId: activeLevelId } }");
+    expect(service).toContain("studentLevelQuestionState.findMany");
+    expect(service).toContain("levelId: activeLevelId");
   });
 
   it("renders the StudentLevelQuestionState mastery overview on the student home page", () => {
