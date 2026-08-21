@@ -47,6 +47,8 @@ beforeEach(async () => {
   await prisma.levelPracticeRule.deleteMany();
   await deleteKnowledgePoints();
   await prisma.knowledgePointType.deleteMany();
+  // User.activeLevel has a RESTRICT FK to Level, so detach it before deleting levels.
+  await prisma.user.updateMany({ data: { activeLevelId: null } });
   await prisma.level.deleteMany();
   await prisma.user.deleteMany();
 });

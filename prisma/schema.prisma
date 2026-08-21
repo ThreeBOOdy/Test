@@ -144,6 +144,8 @@ model User {
   school                     String?
   gradeId                    String?
   grade                      Grade?                     @relation(fields: [gradeId], references: [id], onDelete: Restrict)
+  activeLevelId              String?
+  activeLevel                Level?                     @relation("StudentActiveLevel", fields: [activeLevelId], references: [id], onDelete: Restrict)
   phoneEncrypted             String?                    @db.Text
   phoneHash                  String?                    @unique
   phoneLast4                 String?                    @db.VarChar(4)
@@ -184,6 +186,7 @@ model User {
 
   @@index([role, studentStatus, enabled])
   @@index([gradeId, studentStatus])
+  @@index([activeLevelId])
   @@index([reviewedById, reviewedAt])
 }
 
@@ -273,6 +276,7 @@ model Level {
   examRule       ExamRule?
   knowledgeRules KnowledgePracticeRule[]
   sessions       PracticeSession[]
+  students       User[]                  @relation("StudentActiveLevel")
   createdAt      DateTime                @default(now())
   updatedAt      DateTime                @updatedAt
 

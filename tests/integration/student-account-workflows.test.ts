@@ -15,6 +15,10 @@ import {
   updateRegistrationProfile,
   updateStudentAccount,
 } from "../../lib/server/student-account-service";
+import {
+  listTeacherStudents,
+  setStudentActiveLevel,
+} from "../../lib/server/teacher-student-service";
 
 const connectionString = process.env.DATABASE_URL;
 if (!connectionString) throw new Error("DATABASE_URL is required for integration tests");
@@ -67,6 +71,8 @@ beforeEach(async () => {
   await prisma.examRule.deleteMany();
   await prisma.levelPracticeRule.deleteMany();
   await deleteKnowledgePoints();
+  // User.activeLevel has a RESTRICT FK to Level, so detach it before deleting levels.
+  await prisma.user.updateMany({ data: { activeLevelId: null } });
   await prisma.level.deleteMany();
   await prisma.user.deleteMany();
   await prisma.radioPerson.deleteMany();
@@ -284,5 +290,63 @@ describe("student account workflows", () => {
     await expect(registerStudent({ ...profile, realName: "王五", nationalId: "110105194912310046", phone: "13700137000", gradeId: grade.id })).rejects.toMatchObject({ message: "RADIO_PERSON_UNAVAILABLE", status: 409 });
     await expect(updateStudentAccount(administrator.id, student.id, { radioPersonId: "radio-person-002" })).rejects.toBeInstanceOf(Error);
     await expect(updateStudentAccount(administrator.id, student.id, { username: "radio-002" })).rejects.toBeInstanceOf(Error);
+  });
+});
+
+describe("teacher student active level management", () => {
+  async function setupActiveLevelData() {
+    const teacher = await prisma.user.create({ data: { username: "active-level-teacher", displayName: "Active Level Teacher", passwordHash: "test", role: "TEACHER", mustChangePassword: false } });
+    const levelA = await prisma.level.create({ data: { code: "A", name: "基础掌握", sortOrder: 1 } });
+    const levelB = await prisma.level.create({ data: { code: "B", name: "综合提升", sortOrder: 2 } });
+    const disabled = await prisma.level.create({ data: { code: "D", name: "停用类", sortOrder: 3, enabled: false } });
+    const student = await prisma.user.create({ data: { username: "active-level-student", displayName: "Active Level Student", realName: "字母类学生", passwordHash: "test", role: "STUDENT", studentStatus: "ACTIVE", activeLevelId: levelA.id } });
+    return { teacher, levelA, levelB, disabled, student };
+  }
+
+  it("lists teacher-visible students with their current active level", async () => {
+    const { levelA, student } = await setupActiveLevelData();
+    const unassigned = await prisma.user.create({ data: { username: "active-level-unassigned", displayName: "未分配学生", realName: "未分配学生", passwordHash: "test", role: "STUDENT", studentStatus: "ACTIVE" } });
+
+    const assigned = await listTeacherStudents({ search: "字母类学生", status: "ACTIVE" });
+    expect(assigned.items).toHaveLength(1);
+    expect(assigned.items[0]).toMatchObject({ id: student.id, activeLevel: { id: levelA.id, code: "A", name: "基础掌握" } });
+
+    const all = await listTeacherStudents({ search: "active-level" });
+    expect(all.items.map((item) => item.id)).toEqual(expect.arrayContaining([student.id, unassigned.id]));
+  });
+
+  it("updates activeLevel and writes an audit log with before/after codes", async () => {
+    const { teacher, levelA, levelB, student } = await setupActiveLevelData();
+
+    const result = await setStudentActiveLevel(teacher.id, student.id, levelB.id);
+    expect(result).toEqual({ saved: true, activeLevelId: levelB.id });
+
+    const stored = await prisma.user.findUniqueOrThrow({ where: { id: student.id } });
+    expect(stored.activeLevelId).toBe(levelB.id);
+    const log = await prisma.auditLog.findFirstOrThrow({ where: { targetId: student.id, action: "STUDENT_ACTIVE_LEVEL_UPDATE" } });
+    expect(log.actorUserId).toBe(teacher.id);
+    expect(log.targetType).toBe("User");
+    expect(log.metadata).toMatchObject({ previousActiveLevelId: levelA.id, previousActiveLevelCode: "A", activeLevelId: levelB.id, activeLevelCode: "B" });
+  });
+
+  it("clears activeLevel to unassigned and writes an audit log", async () => {
+    const { teacher, levelA, student } = await setupActiveLevelData();
+
+    await setStudentActiveLevel(teacher.id, student.id, null);
+
+    expect((await prisma.user.findUniqueOrThrow({ where: { id: student.id } })).activeLevelId).toBeNull();
+    const log = await prisma.auditLog.findFirstOrThrow({ where: { targetId: student.id, action: "STUDENT_ACTIVE_LEVEL_UPDATE" } });
+    expect(log.metadata).toMatchObject({ previousActiveLevelId: levelA.id, previousActiveLevelCode: "A", activeLevelId: null, activeLevelCode: null });
+  });
+
+  it("rejects missing students and disabled/missing levels without writing audit logs", async () => {
+    const { teacher, levelA, disabled, student } = await setupActiveLevelData();
+
+    await expect(setStudentActiveLevel(teacher.id, "missing-student", levelA.id)).rejects.toMatchObject({ status: 404, message: "学生账号不存在" });
+    await expect(setStudentActiveLevel(teacher.id, student.id, disabled.id)).rejects.toMatchObject({ status: 404, message: "字母类不存在或已停用" });
+    await expect(setStudentActiveLevel(teacher.id, student.id, "missing-level")).rejects.toMatchObject({ status: 404, message: "字母类不存在或已停用" });
+
+    expect((await prisma.user.findUniqueOrThrow({ where: { id: student.id } })).activeLevelId).toBe(levelA.id);
+    expect(await prisma.auditLog.count({ where: { action: "STUDENT_ACTIVE_LEVEL_UPDATE" } })).toBe(0);
   });
 });

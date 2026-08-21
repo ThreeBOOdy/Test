@@ -169,7 +169,8 @@ describe("MySQL project configuration", () => {
 
     expect(statisticsService).toMatch(/CAST\(COUNT\(DISTINCT/);
     expect(statisticsService).toContain("SUM(CASE WHEN");
-    expect(studentsPage).toContain('redirect("/teacher"');
+    expect(studentsPage).toContain("TeacherStudentManager");
+    expect(studentsPage).toContain("activeLevel");
     expect(studentsPage).not.toContain("$queryRaw");
     expect(statisticsService).toContain("TIMESTAMPDIFF(SECOND");
     expect(statisticsService).toContain("CAST(COALESCE");
@@ -325,6 +326,19 @@ describe("MySQL project configuration", () => {
     expect(schema).toMatch(/externalQuestionCode\s+String\?\s+@unique/);
     expect(schema).toMatch(/@@unique\(\[typeId, code\]\)/);
     expect(schema).not.toContain("levelId                 String\n");
+  });
+  it("adds the teacher-managed nullable student active level to User", () => {
+    const migration = fs.readFileSync(path.resolve("prisma/migrations/20260821010000_student_active_level/migration.sql"), "utf8");
+    const schema = fs.readFileSync(path.resolve("prisma/schema.prisma"), "utf8");
+
+    expect(migration).toContain("ALTER TABLE `User` ADD COLUMN `activeLevelId` VARCHAR(191) NULL");
+    expect(migration).toContain("CREATE INDEX `User_activeLevelId_idx` ON `User`(`activeLevelId`)");
+    expect(migration).toContain("ADD CONSTRAINT `User_activeLevelId_fkey` FOREIGN KEY (`activeLevelId`) REFERENCES `Level`(`id`) ON DELETE RESTRICT ON UPDATE CASCADE");
+    expect(migration).not.toMatch(/DROP TABLE `(User|Level)`|DELETE FROM `(User|Level)`/);
+
+    expect(schema).toMatch(/activeLevelId\s+String\?/);
+    expect(schema).toMatch(/activeLevel\s+Level\?\s+@relation\("StudentActiveLevel"/);
+    expect(schema).toMatch(/students\s+User\[\]\s+@relation\("StudentActiveLevel"\)/);
   });
 });
 
