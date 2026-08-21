@@ -9,18 +9,19 @@ function read(relativePath: string) {
 }
 
 describe("student activeLevel filtering and unassigned blocking", () => {
-  it("shows the unassigned message and filters home channels by the student activeLevel", () => {
+  it("shows the unassigned message and scopes home practice entries to the student activeLevel", () => {
     const source = read("app/student/page.tsx");
     expect(source).toContain("getStudentActiveLevelAccess");
     expect(source).toContain("未分配题库，请联系老师");
-    expect(source).toContain("rule.levelId !== activeLevelId");
+    expect(source).toContain("activeLevelQuestionTotal");
+    expect(source).toContain("item.levelId === activeLevelId");
   });
 
-  it("filters the practice launcher by activeLevel and blocks mode launches when unassigned", () => {
+  it("scopes the practice launcher to activeLevel and blocks mode launches when unassigned", () => {
     const source = read("app/student/practice/start/page.tsx");
     expect(source).toContain("getStudentActiveLevelAccess");
     expect(source).toContain("未分配题库，请联系老师");
-    expect(source).toContain("rule.levelId !== activeLevelAccess.activeLevelId");
+    expect(source).toContain("activeLevelQuestionTotal");
     expect(source).toContain("if (params.mode && !hasActiveLevel) redirect(\"/student/practice/start\")");
   });
 

@@ -40,7 +40,7 @@ describe("repository release quality", () => {
     expect(read("app/layout.tsx")).toContain('data-scroll-behavior="smooth"');
   });
 
-  it("keeps the dashboard primary while routing practice choices through the launcher", () => {
+  it("keeps the dashboard primary while converging student practice entries", () => {
     const home = read("app/page.tsx");
     const studentHome = read("app/student/page.tsx");
     const launcher = read("app/student/practice/start/page.tsx");
@@ -53,13 +53,18 @@ describe("repository release quality", () => {
     expect(studentHome).toContain('<AppShell role="student" currentPath="/student">');
     expect(studentHome).toContain('href="/student/history"');
     expect(studentHome).toContain('href="/student/wrong"');
+    expect(studentHome).toContain("/student/practice/start?mode=order");
+    expect(studentHome).toContain("/student/practice/start?mode=random");
+    expect(studentHome).toContain("/student/practice/start?mode=exam");
+    expect(studentHome).toContain('href="/student/favorites"');
+    expect(studentHome).not.toContain("/student/practice/start?mode=level");
+    expect(studentHome).not.toContain("/student/practice/start?mode=knowledge");
     expect(studentHome).not.toMatch(/["']\?{2,}["']/);
     expect(studentHome).not.toMatch(/href=\{`\/student\/practice\?mode=/);
-    expect(studentHome).not.toContain("/student/practice/start?mode=order");
-    expect(studentHome).not.toContain("/student/practice/start?mode=random");
-    expect(studentHome).not.toContain("/student/practice/start?mode=exam");
     expect(launcher).toContain('import { AppShell } from "@/components/app-shell"');
     expect(launcher).toContain('<AppShell role="student" currentPath="/student/practice/start">');
+    expect(launcher).not.toContain('buildPracticeLaunchHref({ mode: "LEVEL_COMPREHENSIVE"');
+    expect(launcher).not.toContain('buildPracticeLaunchHref({ mode: "KNOWLEDGE_POINT"');
     expect(practice).not.toContain("AppShell");
   });
 

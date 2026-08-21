@@ -24,11 +24,15 @@ describe("modern signal laboratory visual contract", () => {
     expect(shell).toContain("频道已同步");
   });
 
-  it("keeps the unified launcher as the only practice mode directory", () => {
+  it("converges student practice entries to order/random/wrong/mock/favorites", () => {
     const studentHome = read("app/student/page.tsx");
     expect(studentHome).not.toContain("基础练习模式");
-    expect(studentHome).not.toContain("/student/practice/start?mode=order");
-    expect(studentHome).not.toContain("/student/practice/start?mode=random");
-    expect(studentHome).not.toContain("/student/practice/start?mode=exam");
+    expect(studentHome).toContain("/student/practice/start?mode=order");
+    expect(studentHome).toContain("/student/practice/start?mode=random");
+    expect(studentHome).toContain("/student/practice/start?mode=exam");
+    expect(studentHome).toContain('href="/student/wrong"');
+    expect(studentHome).toContain('href="/student/favorites"');
+    expect(studentHome).not.toContain("/student/practice/start?mode=level");
+    expect(studentHome).not.toContain("/student/practice/start?mode=knowledge");
   });
 });
