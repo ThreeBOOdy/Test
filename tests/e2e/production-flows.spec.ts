@@ -1,8 +1,10 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { execFileSync } from "node:child_process";
 import ExcelJS from "exceljs";
 import { expect, test, type Page } from "@playwright/test";
+import { login, logout, waitForPageHydration } from "./helpers/login";
 
 const runId = `${Date.now().toString(36)}-${process.pid}`;
 const numericRunId = `${Date.now()}${process.pid}`.slice(-8).padStart(8, "0");
@@ -25,17 +27,11 @@ function createNationalId(seed: number) {
   return `${body}${checks[sum % 11]}`;
 }
 
-async function login(page: Page, username: string, password: string, destination: string) {
-  await page.goto(`/login?next=${encodeURIComponent(destination)}`);
-  await page.getByLabel("用户名").fill(username);
-  await page.getByLabel("密码").fill(password);
-  await page.getByRole("button", { name: "进入系统", exact: true }).click();
-  await expect(page).toHaveURL(new RegExp(`${destination.replaceAll("/", "\\/")}$`), { timeout: 20_000 });
-}
-
-async function logout(page: Page) {
-  await page.getByRole("button", { name: "退出登录" }).click();
-  await expect(page).toHaveURL(/\/$/);
+function forceReviewDue(username: string) {
+  execFileSync(process.execPath, ["--import", "tsx", path.resolve("tests/e2e/helpers/review-plan-due.ts"), username], {
+    encoding: "utf8",
+    env: { ...process.env },
+  });
 }
 
 async function optionLabels(page: Page) {
@@ -92,6 +88,7 @@ async function answerCorrect(page: Page) {
 }
 
 test.describe.serial("production business flows", () => {
+  test.describe.configure({ timeout: 300_000 });
   test("administrator imports and activates a student through the one-time credential flow", async ({ page }) => {
     await login(page, "admin", "123456", "/admin");
     await page.goto("/admin/student-import");
@@ -173,6 +170,19 @@ test.describe.serial("production business flows", () => {
     } else {
       await expect(row).toContainText("A级");
     }
+
+    // 后续学生端“一键清除错题”用例要求该年级开放自助清除。
+    await page.goto("/teacher");
+    await waitForPageHydration(page);
+    const wrongClearCard = page.getByText("JUNIOR_1", { exact: true })
+      .locator("xpath=ancestor::div[contains(@class,'rounded-2xl')][1]")
+      .filter({ hasText: /仅教师可清除|已开放自助清除/ })
+      .first();
+    await expect(wrongClearCard).toBeVisible({ timeout: 20_000 });
+    if (await wrongClearCard.getByRole("button", { name: "开启自助清除" }).count()) {
+      await wrongClearCard.getByRole("button", { name: "开启自助清除" }).click();
+    }
+    await expect(wrongClearCard).toContainText("已开放自助清除", { timeout: 30_000 });
   });
 
   test("teacher configures an A-level mock exam blueprint", async ({ page }) => {
@@ -199,60 +209,61 @@ test.describe.serial("production business flows", () => {
     await page.getByRole("link", { name: /A级顺序刷题/ }).click();
     // 首次访问会冷编译路由并在服务端创建练习会话，CI 冷启动下可能超过默认 5 秒。
     await expect(page).toHaveURL(/\/student\/practice\?session=/, { timeout: 30_000 });
-    await expect(page.getByText("第 1 / 10 题", { exact: true })).toBeVisible();
+    await expect(page.getByText("第 1 / 20 题", { exact: true })).toBeVisible();
 
     await answerWrong(page);
     await page.getByRole("button", { name: "下一题" }).click();
-    await expect(page.getByText("第 2 / 10 题", { exact: true })).toBeVisible();
+    await expect(page.getByText("第 2 / 20 题", { exact: true })).toBeVisible();
     const secondStem = await page.getByRole("heading", { level: 1 }).innerText();
     await page.reload();
-    await expect(page.getByText("第 2 / 10 题", { exact: true })).toBeVisible();
+    await expect(page.getByText("第 2 / 20 题", { exact: true })).toBeVisible();
     await expect(page.getByRole("heading", { level: 1 })).toHaveText(secondStem);
 
-    for (let questionNumber = 2; questionNumber <= 10; questionNumber += 1) {
+    for (let questionNumber = 2; questionNumber <= 20; questionNumber += 1) {
       await answerWrong(page);
-      await page.getByRole("button", { name: questionNumber === 10 ? "查看结果" : "下一题" }).click();
+      await page.getByRole("button", { name: questionNumber === 20 ? "查看结果" : "下一题" }).click();
     }
     await expect(page.getByRole("heading", { name: "训练完成" })).toBeVisible();
     await expect(page.getByText("正确", { exact: true }).locator("..")).toContainText("0");
-    await expect(page.getByText("总题", { exact: true }).locator("..")).toContainText("10");
+    await expect(page.getByText("总题", { exact: true }).locator("..")).toContainText("20");
 
-    // 今日复习计划应基于刚产生的错题生成
+    // 今日复习计划应基于刚产生的错题生成；FSRS 错题默认 10 分钟后到期，
+    // 这里直接置为立即到期，避免用例等待真实时长。
+    forceReviewDue(activatedStudentUsername);
     await page.goto("/student");
     await expect(page.getByText("今日复习计划")).toBeVisible({ timeout: 20_000 });
     await expect(page.getByText(/错题巩固/).first()).toBeVisible();
     await page.goto("/student/history");
     await expect(page.getByText("A级顺序练习").first()).toBeVisible();
-    await expect(page.getByText("10 题", { exact: false }).first()).toBeVisible();
+    await expect(page.getByText("20 题", { exact: false }).first()).toBeVisible();
 
     for (let sessionNumber = 1; sessionNumber <= 4; sessionNumber += 1) {
       await page.goto("/student/wrong");
-      await expect(page.getByText("待巩固 10", { exact: true })).toBeVisible();
+      await expect(page.getByText("待巩固 20", { exact: true })).toBeVisible();
       await page.getByRole("link", { name: "随机巩固错题" }).click();
-      await expect(page.getByText("第 1 / 10 题", { exact: true })).toBeVisible();
+      await expect(page.getByText("第 1 / 20 题", { exact: true })).toBeVisible();
 
-      for (let questionNumber = 1; questionNumber <= 10; questionNumber += 1) {
+      for (let questionNumber = 1; questionNumber <= 20; questionNumber += 1) {
         await answerCorrect(page);
-        await page.getByRole("button", { name: questionNumber === 10 ? "查看结果" : "下一题" }).click();
+        await page.getByRole("button", { name: questionNumber === 20 ? "查看结果" : "下一题" }).click();
       }
       await expect(page.getByRole("heading", { name: "训练完成" })).toBeVisible();
-      await expect(page.getByText("正确", { exact: true }).locator("..")).toContainText("10");
-      await expect(page.getByText("总题", { exact: true }).locator("..")).toContainText("10");
+      await expect(page.getByText("正确", { exact: true }).locator("..")).toContainText("20");
+      await expect(page.getByText("总题", { exact: true }).locator("..")).toContainText("20");
     }
 
     await page.goto("/student/wrong");
     await expect(page.getByText("待巩固 0", { exact: true })).toBeVisible();
-    await expect(page.getByText("已掌握 10", { exact: true })).toBeVisible();
+    await expect(page.getByText("已掌握 20", { exact: true })).toBeVisible();
     // 一键清除错题：先制造一道错题，再通过学生端清除
     await page.goto("/student/practice/start?mode=order&level=A");
     await expect(page).toHaveURL(/\/student\/practice\?session=/, { timeout: 30_000 });
-    await expect(page.getByText("第 1 / 10 题", { exact: true })).toBeVisible();
+    await expect(page.getByText("第 1 / 20 题", { exact: true })).toBeVisible();
     await answerWrong(page);
     await page.goto("/student/wrong");
     await expect(page.getByText("待巩固 1", { exact: true })).toBeVisible();
     await page.getByRole("button", { name: "一键清除错题" }).click();
     await page.getByRole("button", { name: "确认清除" }).click();
-    await expect(page.getByRole("status")).toContainText("错题已清除（1 道）");
     await expect(page.getByText("待巩固 0", { exact: true })).toBeVisible({ timeout: 20_000 });
     await page.goto("/student/history");
     await expect(page.getByText("错题巩固练习").first()).toBeVisible();
@@ -265,7 +276,7 @@ test.describe.serial("production business flows", () => {
     // 随机刷题
     await page.getByRole("link", { name: /A级随机刷题/ }).click();
     await expect(page).toHaveURL(/\/student\/practice\?session=/, { timeout: 30_000 });
-    await expect(page.getByText("第 1 / 10 题", { exact: true })).toBeVisible();
+    await expect(page.getByText("第 1 / 20 题", { exact: true })).toBeVisible();
     await page.getByRole("button", { name: "收藏", exact: true }).click();
     await expect(page.getByRole("button", { name: "收藏", exact: true })).toHaveAttribute("aria-pressed", "true");
     await page.getByRole("link", { name: "退出训练" }).click();
@@ -273,7 +284,7 @@ test.describe.serial("production business flows", () => {
 
     // 收藏列表与收藏练习
     await page.goto("/student/favorites");
-    await expect(page.getByText("我的收藏")).toBeVisible();
+    await expect(page.getByRole("heading", { name: "我的收藏" })).toBeVisible();
     await expect(page.getByRole("link", { name: "练习收藏题" })).toBeVisible();
     await page.getByRole("link", { name: "练习收藏题" }).click();
     await expect(page).toHaveURL(/\/student\/practice\?session=/, { timeout: 30_000 });

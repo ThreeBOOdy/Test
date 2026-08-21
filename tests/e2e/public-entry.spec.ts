@@ -1,4 +1,5 @@
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test } from "@playwright/test";
+import { loginViaUi } from "./helpers/login";
 
 const TEST_PASSWORD = "123456";
 
@@ -7,17 +8,6 @@ const roles = [
   { username: "teacher", home: "/teacher" },
   { username: "admin", home: "/admin" },
 ] as const;
-
-async function login(page: Page, username: string) {
-  const home = roles.find((role) => role.username === username)?.home;
-  if (!home) throw new Error(`Unknown e2e role: ${username}`);
-
-  await page.goto(`/login?next=${encodeURIComponent(home)}`);
-  await page.getByLabel("用户名").fill(username);
-  await page.getByLabel("密码").fill(TEST_PASSWORD);
-  await page.getByRole("button", { name: "进入系统", exact: true }).click();
-  await expect(page).toHaveURL(new RegExp(`${home.replaceAll("/", "\\/")}$`), { timeout: 20_000 });
-}
 
 test.describe.serial("public entry acceptance", () => {
   test("unauthenticated home shows the minimal brand page and points to student login", async ({ page }) => {
@@ -38,7 +28,7 @@ test.describe.serial("public entry acceptance", () => {
 
   test("student, teacher and admin log in to their role home and root redirects when authenticated", async ({ page }) => {
     for (const role of roles) {
-      await login(page, role.username);
+      await loginViaUi(page, role.username, TEST_PASSWORD, role.home);
 
       await page.goto("/");
       await expect(page).toHaveURL(new RegExp(`${role.home.replaceAll("/", "\\/")}$`), { timeout: 20_000 });

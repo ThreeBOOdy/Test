@@ -2,7 +2,8 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import JSZip from "jszip";
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test } from "@playwright/test";
+import { login } from "./helpers/login";
 
 const runId = `${Date.now().toString(36)}-${process.pid}`;
 const fileName = `word-import-${runId}.docx`;
@@ -51,14 +52,6 @@ async function buildWordQuestionsFile(): Promise<void> {
   zip.file("word/document.xml", documentXml(lines.map(paragraph).join("")));
   const buffer = await zip.generateAsync({ type: "nodebuffer" });
   fs.writeFileSync(path.join(os.tmpdir(), fileName), buffer);
-}
-
-async function login(page: Page, username: string, password: string, destination: string) {
-  await page.goto(`/login?next=${encodeURIComponent(destination)}`);
-  await page.getByLabel("用户名").fill(username);
-  await page.getByLabel("密码").fill(password);
-  await page.getByRole("button", { name: "进入系统", exact: true }).click();
-  await expect(page).toHaveURL(new RegExp(`${destination.replaceAll("/", "\\/")}$`), { timeout: 20_000 });
 }
 
 test("Word question import runs preview, commit, bank visibility, and revert as one loop", async ({ page }) => {

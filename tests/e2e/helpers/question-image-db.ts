@@ -13,7 +13,11 @@ async function main() {
 
   if (command === "seed-wrong") {
     const question = await prisma.question.findFirstOrThrow({ where: { stem: { contains: keyword } }, select: { id: true } });
-    const levelId = student.activeLevelId ?? (await prisma.level.findFirstOrThrow({ where: { enabled: true } })).id;
+    const level = await prisma.level.findFirstOrThrow({ where: { enabled: true } });
+    const levelId = student.activeLevelId ?? level.id;
+    if (!student.activeLevelId) {
+      await prisma.user.update({ where: { id: student.id }, data: { activeLevelId: level.id } });
+    }
     await prisma.studentLevelQuestionState.deleteMany({ where: { userId: student.id } });
     await prisma.studentLevelQuestionState.create({
       data: { userId: student.id, levelId, questionId: question.id, wrongCount: 1, state: "LEARNING", dueAt: new Date(), reps: 1, lastResult: "INCORRECT" },

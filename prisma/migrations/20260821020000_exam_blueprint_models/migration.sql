@@ -58,7 +58,8 @@ FROM `ExamRule`;
 -- 没有专项规则的知识点则按该字母类下 ACTIVE 题目库存拆分；
 -- 若完全没有可拆分依据，则回退到第一个知识点承载全部题量，
 -- 保证默认蓝图存在且总题量等于旧 ExamRule。
-CREATE TEMPORARY TABLE `_ExamBlueprintAllocation` (
+DROP TABLE IF EXISTS `_ExamBlueprintAllocation`;
+CREATE TABLE `_ExamBlueprintAllocation` (
     `blueprintId` VARCHAR(191) NOT NULL,
     `knowledgePointId` VARCHAR(191) NOT NULL,
     `singleWeight` INT NOT NULL DEFAULT 0,
@@ -142,4 +143,4 @@ SET
 -- 移除纯 0 条目；余数已补到权重最大的条目上。
 DELETE FROM `ExamBlueprintItem` WHERE `singleCount` = 0 AND `multipleCount` = 0;
 
-DROP TEMPORARY TABLE `_ExamBlueprintAllocation`;
+DROP TABLE `_ExamBlueprintAllocation`;

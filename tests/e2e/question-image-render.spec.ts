@@ -2,8 +2,9 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { execFileSync } from "node:child_process";
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test } from "@playwright/test";
 import { buildDocx, drawing, mediaRelationship, paragraph } from "../fixtures/word-docx";
+import { login, logout } from "./helpers/login";
 
 const runId = `${Date.now().toString(36)}-${process.pid}`;
 const fileName = `question-image-${runId}.docx`;
@@ -31,19 +32,6 @@ async function buildQuestionImagesFile(): Promise<void> {
     media: { "word/media/image1.png": QUESTION_IMAGE_BYTES },
   });
   fs.writeFileSync(path.join(os.tmpdir(), fileName), Buffer.from(buffer));
-}
-
-async function login(page: Page, username: string, password: string, destination: string) {
-  await page.goto(`/login?next=${encodeURIComponent(destination)}`);
-  await page.getByLabel("用户名").fill(username);
-  await page.getByLabel("密码").fill(password);
-  await page.getByRole("button", { name: "进入系统", exact: true }).click();
-  await expect(page).toHaveURL(new RegExp(`${destination.replaceAll("/", "\\/")}$`), { timeout: 20_000 });
-}
-
-async function logout(page: Page) {
-  await page.getByRole("button", { name: "退出登录" }).click();
-  await expect(page).toHaveURL(/\/$/);
 }
 
 const dbHelperPath = path.resolve("tests/e2e/helpers/question-image-db.ts");

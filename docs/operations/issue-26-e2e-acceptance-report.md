@@ -3,7 +3,7 @@
 - 分支：`issue/26-e2e`
 - 执行范围：worktree `/mnt/d/Tests/Test-issue-26`
 - 执行日期：2026-08-21
-- 结论：单元测试、集成测试、lint、TypeScript、Prisma、build 全部通过；E2E 因浏览器系统依赖缺失（`libnspr4.so`）无法启动，未伪造通过。
+- 结论：单元测试、集成测试、lint、TypeScript、Prisma、build 全部通过；E2E 已在安装 Playwright 系统依赖的 Windows 主机 + MySQL 8.0.46 上实际运行通过：**13/13 passed**。
 
 ## 执行结果
 
@@ -15,15 +15,24 @@
 | `npx tsc --noEmit` | ✅ 通过 | 无类型错误 |
 | `npm run test -- --maxWorkers=4` | ✅ 通过 | 140 个文件 / 919 个测试；全量运行中 `import-preview.test.tsx` 1 个用例在负载下超时，单独重跑 7/7 通过 |
 | `npm run test:integration` | ✅ 通过 | 13 个文件 / 96 个测试全部通过 |
-| `npm run test:e2e` | ⛔ 环境阻塞 | Playwright 无法启动 Chromium：`error while loading shared libraries: libnspr4.so: cannot open shared object file`；已明确记录，不视为通过 |
+| `npm run test:e2e` | ✅ 通过 | 6 个 spec / 13 个用例全部通过（5.2m，isolated `practice_ci_e2e` 库） |
 | `npm run build` | ✅ 通过 | Next.js production build 成功 |
 
-## E2E 阻塞原因
+## E2E 实际运行情况
 
-- 当前 WSL 环境缺少 Chromium 运行所需的系统共享库 `libnspr4.so`。
-- 尝试执行 `npm run test:e2e` 时，浏览器进程以 `exitCode=127` 启动失败，所有测试均未能进入业务断言。
-- 未安装系统依赖（无密码 sudo），因此无法在当前环境安装 `libnspr4`/`libnss3` 后重跑。
-- 这是环境问题，不是被测代码失败；已补充/更新的 E2E 用例已通过 `tsc --noEmit` 与 lint。
+- 原先的 WSL 环境缺少 Chromium 系统依赖 `libnspr4.so`，且无密码 sudo，无法直接安装系统包。
+- 解决方案：改用在已安装 Playwright 系统依赖的 Windows 主机（MySQL 8.0.46）上执行，并建立隔离的 `practice_ci_e2e` 数据库；这也是 CI 所使用的等价路径。
+- 运行前完成 `prisma migrate deploy` + `npm run db:seed`（`APP_SEED_PASSWORD=123456`），随后 `npm run test:e2e` 全量通过。
+
+## 运行中修复的问题
+
+1. **迁移兼容性**：`20260821020000_exam_blueprint_models` 使用 `CREATE TEMPORARY TABLE ... INSERT ... SELECT ... FROM 同一张临时表`，在 MySQL 8 上触发 `Can't reopen table`；改为普通临时落库表并在结束后 `DROP`，MySQL 8 / MariaDB 均可迁移。
+2. **登录水合抖动**：共享 `tests/e2e/helpers/login.ts`，长业务流程用页面内 `fetch /api/v1/auth/login` 登录（避免原生 GET 提交/水合竞态），`public-entry` 继续走真实登录表单。
+3. **页面水合等待**：新增 `waitForPageHydration`，避免在 React 水合前点击“保存/开启自助清除”等客户端控件。
+4. **用例可重入**：`class-gamification` 先恢复“显示游戏化”再切换；错题自助清除需等待年级卡片异步加载后再点击。
+5. **题目数量**：A 级练习实际 20 题/轮，将 E2E 中写死的 10 题断言更新为 20 题。
+6. **今日复习计划**：FSRS 错题默认 10 分钟后到期，E2E 通过 `review-plan-due` 助手把学习状态 `dueAt` 置为立即到期，确定性验证“今日复习计划 / 错题巩固”卡片。
+7. **错题图片用例**：`question-image-db` 的 `seed-wrong` 现在会为默认学生补 `activeLevelId`，否则错题页显示“未分配题库”。
 
 ## 本次 E2E 覆盖调整
 
@@ -53,6 +62,15 @@
 ## 改动文件清单
 
 - `tests/e2e/production-flows.spec.ts`
+- `tests/e2e/class-gamification.spec.ts`
+- `tests/e2e/public-entry.spec.ts`
+- `tests/e2e/question-image-render.spec.ts`
+- `tests/e2e/sidebar-navigation.spec.ts`
+- `tests/e2e/word-import.spec.ts`
+- `tests/e2e/helpers/login.ts`
+- `tests/e2e/helpers/review-plan-due.ts`
+- `tests/e2e/helpers/question-image-db.ts`
+- `prisma/migrations/20260821020000_exam_blueprint_models/migration.sql`
 - `tests/integration/ai-data-model.integration.test.ts`
 - `tests/integration/ai-explanation.integration.test.ts`
 - `tests/integration/ai-learning-report.integration.test.ts`
@@ -66,7 +84,7 @@
 - `tests/integration/wrong-question-clear.integration.test.ts`
 - `docs/operations/issue-26-e2e-acceptance-report.md`
 
-## 阻塞说明
+## 最终结论
 
-- E2E 未实际运行通过，唯一阻塞项是浏览器系统依赖缺失。
-- 在 CI 或已安装 Playwright 系统依赖的机器上运行 `npm run test:e2e` 可验证新增用例。
+- E2E 已在安装 Playwright 系统依赖的 Windows 主机上真实运行，**13/13 全部通过**（5.2m）。
+- CI 中的等价步骤（`npx playwright install --with-deps chromium` + 独立 `practice_ci_e2e` 库迁移/种子 + `npm run test:e2e`）可直接复现；本机 WSL 缺 `libnspr4.so` 的问题由“改用 Windows/CI 执行”绕过，不涉及被测代码失败。
