@@ -8,6 +8,9 @@ const mocks = vi.hoisted(() => ({
   importBatchCount: vi.fn(),
   createPracticeSession: vi.fn(),
   setStudentQuestionState: vi.fn(),
+  clearOwnWrongQuestions: vi.fn(),
+  clearStudentWrongQuestions: vi.fn(),
+  setGradeStudentSelfWrongClearEnabled: vi.fn(),
   commitImportBatch: vi.fn(),
   getImportBatchReport: vi.fn(),
   revertImportBatch: vi.fn(),
@@ -33,6 +36,13 @@ vi.mock("@/lib/server/student-account-service", () => ({
 }));
 vi.mock("@/lib/server/practice-service", () => ({ createPracticeSession: mocks.createPracticeSession }));
 vi.mock("@/lib/server/student-question-state-service", () => ({ setStudentQuestionState: mocks.setStudentQuestionState }));
+vi.mock("@/lib/server/wrong-question-clear-service", () => ({
+  clearOwnWrongQuestions: mocks.clearOwnWrongQuestions,
+  clearStudentWrongQuestions: mocks.clearStudentWrongQuestions,
+}));
+vi.mock("@/lib/server/gamification-settings-service", () => ({
+  setGradeStudentSelfWrongClearEnabled: mocks.setGradeStudentSelfWrongClearEnabled,
+}));
 vi.mock("@/lib/server/import-service", () => ({
   commitImportBatch: mocks.commitImportBatch,
   getImportBatchReport: mocks.getImportBatchReport,
@@ -74,6 +84,9 @@ import { PUT as updateKnowledgePoint } from "@/app/api/v1/teacher/knowledge-poin
 import { PUT as savePracticeRules } from "@/app/api/v1/teacher/practice-rules/route";
 import { POST as createPracticeSession } from "@/app/api/v1/practice-sessions/route";
 import { PATCH as updateStudentQuestionState } from "@/app/api/v1/student/question-states/[questionId]/route";
+import { POST as studentWrongClear } from "@/app/api/v1/student/wrong/clear/route";
+import { POST as teacherWrongClear } from "@/app/api/v1/teacher/students/[id]/wrong/clear/route";
+import { PATCH as gradeWrongClearSetting } from "@/app/api/v1/teacher/grades/[id]/wrong-clear/route";
 
 const baseUser = {
   id: "user-1",
@@ -102,6 +115,9 @@ describe("single-role API access", () => {
     mocks.importBatchCount.mockResolvedValue(0);
     mocks.createPracticeSession.mockResolvedValue({ id: "session-1" });
     mocks.setStudentQuestionState.mockResolvedValue({ questionId: "question-1", levelId: "level-1", levelCode: "A", favorite: true, ignored: false });
+    mocks.clearOwnWrongQuestions.mockResolvedValue({ cleared: 3, levelId: "level-1", levelCode: "A" });
+    mocks.clearStudentWrongQuestions.mockResolvedValue({ cleared: 3, levelId: "level-1", levelCode: "A" });
+    mocks.setGradeStudentSelfWrongClearEnabled.mockResolvedValue({ id: "grade-1", gamificationEnabled: true, studentSelfWrongClearEnabled: true });
     mocks.commitImportBatch.mockResolvedValue({ inserted: 1, skipped: 0 });
     mocks.approveRegistration.mockResolvedValue({ id: "student-1", studentStatus: "ACTIVE" });
     mocks.levelFindMany.mockResolvedValue([{ id: "level-1", enabled: true }]);
@@ -251,6 +267,43 @@ describe("single-role API access", () => {
     for (const user of [administrator, teacher]) {
       mocks.getCurrentUser.mockResolvedValue(user);
       expect((await updateStudentQuestionState(request(), { params: Promise.resolve({ questionId: "q1" }) })).status).toBe(403);
+    }
+  });
+
+  it("allows only active students to clear their own wrong questions", async () => {
+    const request = () => new Request("http://localhost/api/v1/student/wrong/clear", {
+      method: "POST",
+      headers: { origin: "http://localhost", host: "localhost" },
+    });
+
+    mocks.getCurrentUser.mockResolvedValue(student);
+    expect((await studentWrongClear(request())).status).toBe(200);
+
+    for (const user of [administrator, teacher]) {
+      mocks.getCurrentUser.mockResolvedValue(user);
+      expect((await studentWrongClear(request())).status).toBe(403);
+    }
+  });
+
+  it("allows only teachers to clear a student's wrong questions and toggle grade wrong-clear settings", async () => {
+    const clearRequest = () => new Request("http://localhost/api/v1/teacher/students/student-1/wrong/clear", {
+      method: "POST",
+      headers: { origin: "http://localhost", host: "localhost" },
+    });
+    const settingRequest = () => new Request("http://localhost/api/v1/teacher/grades/grade-1/wrong-clear", {
+      method: "PATCH",
+      headers: { "content-type": "application/json", origin: "http://localhost", host: "localhost" },
+      body: JSON.stringify({ enabled: true }),
+    });
+
+    mocks.getCurrentUser.mockResolvedValue(teacher);
+    expect((await teacherWrongClear(clearRequest(), { params: Promise.resolve({ id: "student-1" }) })).status).toBe(200);
+    expect((await gradeWrongClearSetting(settingRequest(), { params: Promise.resolve({ id: "grade-1" }) })).status).toBe(200);
+
+    for (const user of [administrator, student]) {
+      mocks.getCurrentUser.mockResolvedValue(user);
+      expect((await teacherWrongClear(clearRequest(), { params: Promise.resolve({ id: "student-1" }) })).status).toBe(403);
+      expect((await gradeWrongClearSetting(settingRequest(), { params: Promise.resolve({ id: "grade-1" }) })).status).toBe(403);
     }
   });
 });

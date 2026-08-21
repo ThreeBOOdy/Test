@@ -250,15 +250,16 @@ model AuthSession {
 }
 
 model Grade {
-  id                  String   @id @default(cuid())
-  code                String   @unique
-  name                String   @unique
-  sortOrder           Int      @default(0)
-  enabled             Boolean  @default(true)
-  gamificationEnabled Boolean  @default(true)
-  students            User[]
-  createdAt           DateTime @default(now())
-  updatedAt           DateTime @updatedAt
+  id                          String   @id @default(cuid())
+  code                        String   @unique
+  name                        String   @unique
+  sortOrder                   Int      @default(0)
+  enabled                     Boolean  @default(true)
+  gamificationEnabled         Boolean  @default(true)
+  studentSelfWrongClearEnabled Boolean  @default(false)
+  students                    User[]
+  createdAt                   DateTime @default(now())
+  updatedAt                   DateTime @updatedAt
 }
 
 model StudentReviewRecord {

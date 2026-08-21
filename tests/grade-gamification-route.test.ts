@@ -4,16 +4,19 @@ const mocks = vi.hoisted(() => ({
   getCurrentUser: vi.fn(),
   listGradeGamificationSettings: vi.fn(),
   setGradeGamificationEnabled: vi.fn(),
+  setGradeStudentSelfWrongClearEnabled: vi.fn(),
 }));
 
 vi.mock("@/lib/server/session", () => ({ getCurrentUser: mocks.getCurrentUser }));
 vi.mock("@/lib/server/gamification-settings-service", () => ({
   listGradeGamificationSettings: mocks.listGradeGamificationSettings,
   setGradeGamificationEnabled: mocks.setGradeGamificationEnabled,
+  setGradeStudentSelfWrongClearEnabled: mocks.setGradeStudentSelfWrongClearEnabled,
 }));
 
 import { GET as gradesGET } from "@/app/api/v1/teacher/grades/route";
 import { PATCH as gamificationPATCH } from "@/app/api/v1/teacher/grades/[id]/gamification/route";
+import { PATCH as wrongClearPATCH } from "@/app/api/v1/teacher/grades/[id]/wrong-clear/route";
 
 const baseUser = { id: "user-1", username: "teacher", displayName: "Teacher", enabled: true, mustChangePassword: false, sessionVersion: 0, studentStatus: null, isLongTerm: false, validFrom: null, validUntil: null, accessErrorCode: null };
 const teacher = { ...baseUser, role: "TEACHER", capability: "FULL_TEACHER" };
@@ -25,14 +28,16 @@ const grade = {
   name: "一年级",
   studentCount: 3,
   gamificationEnabled: true,
+  studentSelfWrongClearEnabled: false,
 };
 
-describe("teacher grade gamification routes", () => {
+describe("teacher grade gamification and wrong-clear routes", () => {
   beforeEach(() => {
     for (const mock of Object.values(mocks)) mock.mockReset();
     mocks.getCurrentUser.mockResolvedValue(teacher);
     mocks.listGradeGamificationSettings.mockResolvedValue([grade]);
     mocks.setGradeGamificationEnabled.mockResolvedValue({ ...grade, gamificationEnabled: false });
+    mocks.setGradeStudentSelfWrongClearEnabled.mockResolvedValue({ ...grade, studentSelfWrongClearEnabled: true });
   });
 
   it("GET grades returns class gamification settings for teachers", async () => {
@@ -71,5 +76,29 @@ describe("teacher grade gamification routes", () => {
     const response = await gamificationPATCH(request, { params: Promise.resolve({ id: "grade-1" }) });
     expect(response.status).toBe(403);
     expect(mocks.setGradeGamificationEnabled).not.toHaveBeenCalled();
+  });
+
+  it("PATCH wrong-clear enables student self-service clearing for teachers", async () => {
+    const request = new Request("http://localhost/api/v1/teacher/grades/grade-1/wrong-clear", {
+      method: "PATCH",
+      headers: { "content-type": "application/json", origin: "http://localhost", host: "localhost" },
+      body: JSON.stringify({ enabled: true }),
+    });
+    const response = await wrongClearPATCH(request, { params: Promise.resolve({ id: "grade-1" }) });
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({ id: "grade-1", studentSelfWrongClearEnabled: true });
+    expect(mocks.setGradeStudentSelfWrongClearEnabled).toHaveBeenCalledWith("user-1", "grade-1", true);
+  });
+
+  it("PATCH wrong-clear rejects students", async () => {
+    mocks.getCurrentUser.mockResolvedValue(student);
+    const request = new Request("http://localhost/api/v1/teacher/grades/grade-1/wrong-clear", {
+      method: "PATCH",
+      headers: { "content-type": "application/json", origin: "http://localhost", host: "localhost" },
+      body: JSON.stringify({ enabled: true }),
+    });
+    const response = await wrongClearPATCH(request, { params: Promise.resolve({ id: "grade-1" }) });
+    expect(response.status).toBe(403);
+    expect(mocks.setGradeStudentSelfWrongClearEnabled).not.toHaveBeenCalled();
   });
 });

@@ -305,6 +305,14 @@ describe("MySQL project configuration", () => {
     expect(schema).toMatch(/gamificationEnabled\s+Boolean\s+@default\(true\)/);
     expect(migration).not.toMatch(/DROP TABLE `Grade`|DELETE FROM `Grade`/);
   });
+  it("adds the teacher-controlled student self-service wrong-clear switch to Grade", () => {
+    const migration = fs.readFileSync(path.resolve("prisma/migrations/20260821150000_wrong_clear_setting/migration.sql"), "utf8");
+    const schema = fs.readFileSync(path.resolve("prisma/schema.prisma"), "utf8");
+
+    expect(migration).toContain("ALTER TABLE `Grade` ADD COLUMN `studentSelfWrongClearEnabled` BOOLEAN NOT NULL DEFAULT false");
+    expect(schema).toMatch(/studentSelfWrongClearEnabled\s+Boolean\s+@default\(false\)/);
+    expect(migration).not.toMatch(/DROP TABLE `Grade`|DELETE FROM `Grade`/);
+  });
   it("defines the S1 flexible question bank data model and safe backfill migration", () => {
     const migration = fs.readFileSync(path.resolve("prisma/migrations/20260821000000_question_bank_abc_flexibility_s1/migration.sql"), "utf8");
     const schema = fs.readFileSync(path.resolve("prisma/schema.prisma"), "utf8");
