@@ -5,6 +5,7 @@ import { PageHeader } from "@/components/page-header";
 import { PaginationNav } from "@/components/pagination-nav";
 import { QuestionRichText } from "@/components/question-rich-text";
 import { StudentExplanationCard } from "@/components/student-explanation-card";
+import { WrongClearButton } from "@/components/wrong-clear-button";
 import { parseStudentExplanation } from "@/lib/domain/student-explanation";
 import { isMasteredLearningState, isWrongQuestionState } from "@/lib/domain/learning-state";
 import { Badge } from "@/components/ui/badge";
@@ -13,6 +14,7 @@ import { prisma } from "@/lib/db";
 import { getCurrentUser } from "@/lib/server/session";
 import { getStudentActiveLevelAccess } from "@/lib/server/student-level-access";
 import { normalizePagination } from "@/lib/server/pagination";
+import { canStudentSelfClearWrongQuestions } from "@/lib/server/wrong-question-clear-service";
 
 const text = {
   title: "我的错题",
@@ -49,7 +51,7 @@ export default async function WrongPage({ searchParams }: { searchParams: Promis
   const activeLevelId = activeLevelAccess.activeLevelId;
   const params = await searchParams;
   const { page, pageSize, skip } = normalizePagination({ page: params.page });
-  const [wrongItems, allWrongStates] = await Promise.all([
+  const [wrongItems, allWrongStates, canSelfClear] = await Promise.all([
     prisma.studentLevelQuestionState.findMany({
       where: { userId: user.id, levelId: activeLevelId, wrongCount: { gt: 0 }, question: { status: "ACTIVE", knowledgePoint: { enabled: true } } },
       include: { question: { include: { levels: { include: { level: true } }, knowledgePoint: true } } },
@@ -61,12 +63,19 @@ export default async function WrongPage({ searchParams }: { searchParams: Promis
       where: { userId: user.id, levelId: activeLevelId, wrongCount: { gt: 0 }, question: { status: "ACTIVE", knowledgePoint: { enabled: true } } },
       select: { id: true, state: true, intervalDays: true, wrongCount: true },
     }),
+    canStudentSelfClearWrongQuestions(user.id),
   ]);
   const total = allWrongStates.length;
   const pending = allWrongStates.filter(isWrongQuestionState).length;
   const mastered = total - pending;
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
-  return <AppShell role="student" currentPath="/student/wrong"><div className="safe-bottom"><PageHeader title={text.title} description={text.description} action={<Link href="/student/practice/start?mode=wrong" className="inline-flex h-11 items-center gap-2 rounded-xl bg-[var(--primary)] px-5 text-sm font-bold text-white"><Target className="size-4" />{text.practice}</Link>} /><div className="mb-5 flex gap-2"><Badge tone="red">{text.pending} {pending}</Badge><Badge>{text.mastered} {mastered}</Badge></div><div className="grid gap-4">{wrongItems.length ? wrongItems.map((item) => {
+  const headerAction = (
+    <div className="flex flex-wrap items-center gap-2">
+      <Link href="/student/practice/start?mode=wrong" className="inline-flex h-11 items-center gap-2 rounded-xl bg-[var(--primary)] px-5 text-sm font-bold text-white"><Target className="size-4" />{text.practice}</Link>
+      {total > 0 && canSelfClear ? <WrongClearButton apiPath="/api/v1/student/wrong/clear" count={total} /> : null}
+    </div>
+  );
+  return <AppShell role="student" currentPath="/student/wrong"><div className="safe-bottom"><PageHeader title={text.title} description={text.description} action={headerAction} /><div className="mb-5 flex gap-2"><Badge tone="red">{text.pending} {pending}</Badge><Badge>{text.mastered} {mastered}</Badge></div><div className="grid gap-4">{wrongItems.length ? wrongItems.map((item) => {
     const masteredItem = isMasteredLearningState(item);
     return <Card key={item.id} className={masteredItem ? "opacity-70" : ""}><CardContent className="flex flex-col gap-4 sm:flex-row sm:items-center"><div className="grid size-11 place-items-center rounded-2xl bg-rose-50 text-rose-700"><BookX className="size-5" /></div><div className="flex-1"><div className="font-extrabold leading-6"><QuestionRichText text={item.question.stem} /></div><div className="mt-2 flex flex-wrap gap-2"><Badge>{item.question.knowledgePoint.code} {item.question.knowledgePoint.name}</Badge><Badge tone="green">{item.question.levels[0]?.level.code ?? "未归类"}{item.question.levels[0] ? text.level : ""}</Badge><Badge tone={item.question.type === "SINGLE_CHOICE" ? "blue" : "amber"}>{item.question.type === "SINGLE_CHOICE" ? "单选题" : "多选题"}</Badge>{item.favorite ? <Badge>{text.favorite}</Badge> : null}{item.ignored ? <Badge>{text.ignored}</Badge> : null}{masteredItem ? <Badge tone="green">{text.mastered}</Badge> : <Badge tone="amber">{stateLabel(item.state)}</Badge>}</div><div className="mt-2 text-xs text-[var(--muted-foreground)]">{text.lastResult}：{item.lastResult === "CORRECT" ? text.correct : item.lastResult === "INCORRECT" ? text.incorrect : "—"}</div><StudentExplanationCard explanation={item.question.explanationStatus === "APPROVED" ? parseStudentExplanation(item.question.explanation) : null} className="mt-3" /></div><div className="flex items-center gap-2 text-sm font-semibold text-rose-700"><AlertTriangle className="size-4" />{text.wrong} {item.wrongCount} {text.times}</div></CardContent></Card>;
   }) : <Card><CardContent className="p-12 text-center text-sm text-[var(--muted-foreground)]">{text.empty}</CardContent></Card>}</div><PaginationNav page={page} totalPages={totalPages} path="/student/wrong" /></div></AppShell>;

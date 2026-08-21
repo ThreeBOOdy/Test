@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { WrongClearButton } from "@/components/wrong-clear-button";
 
 type LevelOption = { id: string; code: string; name: string; enabled: boolean };
 type StudentRow = {
@@ -135,7 +136,10 @@ export function TeacherStudentManager({ initial }: { initial: TeacherStudentPage
                 </select>
               </StudentCell>
               <StudentCell label="操作" actions>
-                <Button size="sm" onClick={() => void saveActiveLevel(row)} disabled={savingId === row.id || !dirty}>{savingId === row.id ? "正在保存…" : "保存"}</Button>
+                <div className="flex items-center gap-2">
+                  <Button size="sm" onClick={() => void saveActiveLevel(row)} disabled={savingId === row.id || !dirty}>{savingId === row.id ? "正在保存…" : "保存"}</Button>
+                  {row.activeLevel ? <WrongClearButton apiPath={`/api/v1/teacher/students/${row.id}/wrong/clear`} buttonLabel="清除错题" successMessage="错题已清除" /> : null}
+                </div>
               </StudentCell>
             </tr>;
           })}
