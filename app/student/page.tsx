@@ -1,6 +1,6 @@
 import Link from "next/link";
 import type { LucideIcon } from "lucide-react";
-import { ArrowRight, BookCheck, Brain, CircleCheck, Clock3, Flame, Layers3, Map, Radio, Target, Timer } from "lucide-react";
+import { ArrowRight, BookCheck, BookX, Brain, CircleCheck, Clock3, Flame, ListOrdered, Map, Radio, Shuffle, Star, Timer } from "lucide-react";
 import { AiDailyEncouragement } from "@/components/ai-daily-encouragement";
 import { AppShell } from "@/components/app-shell";
 import { PageHeader } from "@/components/page-header";
@@ -29,17 +29,29 @@ export default async function StudentPage() {
   if (!user) return null;
   if (user.capability !== "FULL_STUDENT") return null;
   const sevenDaysAgo = getDaysAgo(7);
-  const [activeLevelAccess, sessions, wrongStates, levelRules, knowledgeRules, activeQuestions, focusOverview, reviewPlan, playerStatus, gamificationVisibility] = await Promise.all([
-    getStudentActiveLevelAccess(user.id),
+  const activeLevelAccess = await getStudentActiveLevelAccess(user.id);
+  const activeLevelId = activeLevelAccess.activeLevelId;
+  const [sessions, wrongStates, activeQuestions, examBlueprints, favoriteCount, focusOverview, reviewPlan, playerStatus, gamificationVisibility, studentLevelProgress] = await Promise.all([
     prisma.practiceSession.findMany({ where: { userId: user.id }, include: { level: true, knowledgePoint: true }, orderBy: { startedAt: "desc" } }),
     prisma.studentLevelQuestionState.findMany({ where: { userId: user.id, wrongCount: { gt: 0 } }, select: { levelId: true, state: true, intervalDays: true, wrongCount: true, question: { select: { knowledgePointId: true } } } }),
-    prisma.levelPracticeRule.findMany({ where: { enabled: true, level: { enabled: true } }, include: { level: true }, orderBy: { level: { sortOrder: "asc" } } }),
-    prisma.knowledgePracticeRule.findMany({ where: { enabled: true, level: { enabled: true }, knowledgePoint: { enabled: true } }, include: { level: true, knowledgePoint: true }, orderBy: [{ knowledgePoint: { sortOrder: "asc" } }, { level: { sortOrder: "asc" } }] }),
     prisma.question.findMany({ where: { status: "ACTIVE", knowledgePoint: { enabled: true } }, select: { levels: { select: { levelId: true } }, type: true, knowledgePoint: { select: { path: true } } } }),
+    activeLevelId
+      ? prisma.examBlueprint.findMany({
+          where: { levelId: activeLevelId, enabled: true },
+          include: { items: { select: { singleCount: true, multipleCount: true } } },
+          orderBy: [{ isDefault: "desc" }, { name: "asc" }],
+        })
+      : Promise.resolve([]),
+    activeLevelId
+      ? prisma.studentLevelQuestionState.count({ where: { userId: user.id, levelId: activeLevelId, favorite: true } })
+      : Promise.resolve(0),
     getFocusOverview(user.id),
     getTodayReviewPlan(user.id),
     getPlayerStatus(user.id),
     getStudentGamificationVisibility(user.id),
+    activeLevelId
+      ? prisma.studentLevelProgress.findUnique({ where: { userId_levelId: { userId: user.id, levelId: activeLevelId } } })
+      : Promise.resolve(null),
   ]);
   const completedSessions = sessions.filter((session) => session.status === "COMPLETED");
   const activeSession = sessions.find((session) => session.status === "IN_PROGRESS");
@@ -49,28 +61,28 @@ export default async function StudentPage() {
   const weeklySessions = completedSessions.filter((session) => session.startedAt >= sevenDaysAgo);
   const weeklyAnswered = weeklySessions.reduce((sum, session) => sum + session.singleCountSnapshot + session.multipleCountSnapshot, 0);
   const activeDays = new Set(weeklySessions.map((session) => session.startedAt.toLocaleDateString("en-CA", { timeZone: "Asia/Shanghai" }))).size;
-  const activeLevelId = activeLevelAccess.activeLevelId;
   const hasActiveLevel = Boolean(activeLevelId && activeLevelAccess.activeLevel?.enabled);
   const wrongQuestions = wrongStates.filter((item) => (!activeLevelId || item.levelId === activeLevelId) && isWrongQuestionState(item));
   const weakKnowledgeCount = new Set(wrongQuestions.map((item) => item.question.knowledgePointId)).size;
   const showRpgPanel = gamificationVisibility.classGamificationEnabled;
   const showMap = playerStatus.mapEnabled && gamificationVisibility.gamificationVisible;
   const masteryOverview = hasActiveLevel ? await getStudentMasteryOverview(user.id) : null;
-  const availableLevels = levelRules.filter((rule) => {
-    if (rule.levelId !== activeLevelId) return false;
-    const pool = activeQuestions.filter((question) => question.levels.some((item) => item.levelId === rule.levelId));
-    const singles = pool.filter((question) => question.type === "SINGLE_CHOICE").length;
-    return singles >= rule.singleCount && pool.length - singles >= rule.multipleCount && rule.singleCount + rule.multipleCount > 0;
-  });
-  const availableKnowledge = knowledgeRules.filter((rule) => {
-    if (rule.levelId !== activeLevelId) return false;
-    const pool = activeQuestions.filter((question) => question.levels.some((item) => item.levelId === rule.levelId) && (question.knowledgePoint.path === rule.knowledgePoint.path || question.knowledgePoint.path.startsWith(`${rule.knowledgePoint.path}/`)));
-    const singles = pool.filter((question) => question.type === "SINGLE_CHOICE").length;
-    return singles >= rule.singleCount && pool.length - singles >= rule.multipleCount && rule.singleCount + rule.multipleCount > 0;
-  }).slice(0, 6);
+  const activeLevelCode = activeLevelAccess.activeLevel?.code;
+  const activeLevelQuestionTotal = hasActiveLevel ? activeQuestions.filter((question) => question.levels.some((item) => item.levelId === activeLevelId)).length : 0;
+  const availableExams = activeLevelId
+    ? examBlueprints
+        .filter((blueprint) => blueprint.items.length > 0)
+        .map((blueprint) => ({
+          id: blueprint.id,
+          name: blueprint.name,
+          durationMinutes: blueprint.durationMinutes,
+          totalCount: blueprint.items.reduce((sum, item) => sum + item.singleCount + item.multipleCount, 0),
+        }))
+    : [];
+  const orderRoundCount = studentLevelProgress?.roundCount ?? 0;
   const primaryHref = hasActiveLevel ? (activeSession ? `/student/practice?session=${activeSession.id}` : "/student/practice/start") : null;
   const primaryTitle = !hasActiveLevel ? "未分配题库，请联系老师" : activeSession ? "继续上次练习" : "开始新的练习";
-  const primaryDescription = !hasActiveLevel ? "老师为你分配字母类后，练习入口会出现在这里。" : activeSession ? "从上次中断的位置继续作答，已选答案和训练进度都会保留。" : "从综合、顺序、随机、专项或模拟考试中挑选一种，随时开始。";
+  const primaryDescription = !hasActiveLevel ? "老师为你分配字母类后，练习入口会出现在这里。" : activeSession ? "从上次中断的位置继续作答，已选答案和训练进度都会保留。" : "从顺序、随机、错题、模拟测试或收藏列表中挑选一种，随时开始。";
 
   return <AppShell role="student" currentPath="/student"><div className="safe-bottom"><PageHeader title={`欢迎回来，${user.displayName}`} description="训练频道、学习进度和错题都会实时同步；继续练习将自动回到上次的位置。" eyebrow="PERSONAL SIGNAL DESK" />
     <section className="receiver-panel relative overflow-hidden rounded-[2rem]"><div className="grid lg:grid-cols-[1.02fr_.98fr]"><div className="relative z-10 flex flex-col justify-center p-7 sm:p-10 lg:p-12"><div className="flex flex-wrap items-center gap-3"><CallsignLabel value={`STU / ${(user.displayName || user.username).toUpperCase()}`} /><div className="flex items-center gap-2 text-xs font-bold text-[var(--primary)]"><Radio className="size-4" />当前优先训练</div></div><h2 className="mt-5 text-3xl font-black tracking-[-0.05em] sm:text-4xl">{primaryTitle}</h2><p className="mt-4 max-w-xl text-sm leading-8 text-[var(--muted-foreground)]">{primaryDescription}</p><div className="mt-6 flex items-center gap-3 text-xs text-[var(--muted-foreground)]"><SignalMeter value={activeSession ? 5 : 3} label="训练信号" />{activeSession ? "训练进度已锁定" : "等待选择训练频段"}</div><div className="mt-7">{primaryHref ? <Link href={primaryHref as never} className="inline-flex min-h-12 items-center gap-3 rounded-xl border border-cyan-200/40 bg-[var(--primary)] px-6 text-sm font-bold text-[var(--primary-foreground)] shadow-[0_14px_32px_rgba(10,134,152,.22)] transition hover:-translate-y-0.5">进入训练频道<ArrowRight className="size-4" /></Link> : <div className="inline-flex min-h-12 items-center rounded-xl border border-amber-300/30 bg-amber-400/10 px-6 text-sm font-bold text-amber-700">未分配题库，请联系老师</div>}</div><FrequencyScale active={activeSession ? 6 : 3} className="mt-8 max-w-md" /></div><div className="relative min-h-64 overflow-hidden lg:min-h-[410px]"><div className="absolute inset-0 z-10 bg-[linear-gradient(90deg,var(--surface)_0%,transparent_42%),linear-gradient(0deg,rgba(3,8,13,.72),transparent_58%)]" /><Artwork src="/art/student-direction-cabin-new.webp" alt="现代测向控制舱与频谱瀑布" sizes="(max-width: 1024px) 100vw, 48vw" preload variant="spectrum" /><div className="absolute bottom-5 right-5 z-20 rounded-xl border border-white/15 bg-black/45 px-4 py-3 backdrop-blur"><div className="font-radio text-[9px] tracking-[.14em] text-white/60">WEEKLY SIGNAL</div><div className="mt-1 font-radio text-xl font-black text-cyan-300">{accuracy}%</div></div></div></div></section>
@@ -80,7 +92,7 @@ export default async function StudentPage() {
     <section className="mt-8"><AiDailyEncouragement /></section>
     {showMap ? <section className="mt-8"><Card><CardContent className="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between"><div className="flex items-start gap-4"><div className="grid size-12 place-items-center rounded-2xl border border-cyan-600/20 bg-cyan-500/10 text-[var(--primary)]"><Map className="size-5" /></div><div><div className="text-xs font-bold text-[var(--primary)]">KNOWLEDGE MAP</div><h2 className="mt-1 text-xl font-extrabold">学习地图与副本</h2><p className="mt-2 text-sm leading-7 text-[var(--muted-foreground)]">查看知识点点亮进度，从待攻克节点进入专项练习副本。</p></div></div><Link href={"/student/map" as never} className="inline-flex min-h-11 items-center gap-2 rounded-xl bg-[var(--primary)] px-5 text-sm font-bold text-[var(--primary-foreground)]">打开学习地图<ArrowRight className="size-4" /></Link></CardContent></Card></section> : null}
     <section className="mt-8"><ReviewPlanToday plan={reviewPlan} /></section>
-    <section className="mt-8">{hasActiveLevel ? <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between"><div><div className="text-xs font-bold text-[var(--primary)]">TRAINING CHANNELS</div><h2 className="mt-1 text-xl font-extrabold">选择训练频道</h2></div><Link href="/student/practice/start" className="text-sm font-bold text-[var(--primary)]">查看全部练习</Link></div> : null}{hasActiveLevel ? (availableLevels.length || availableKnowledge.length ? <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">{availableLevels.map((rule) => <ChannelCard key={rule.id} href={`/student/practice/start?mode=level&level=${rule.level.code}`} icon={Layers3} title={`${rule.level.code}级综合训练`} description="覆盖本等级全部知识点，适合系统化检测。" meta={`单选 ${rule.singleCount} · 多选 ${rule.multipleCount}`} />)}{availableKnowledge.map((rule) => <ChannelCard key={rule.id} href={`/student/practice/start?mode=knowledge&level=${rule.level.code}&knowledge=${rule.knowledgePoint.id}`} icon={Target} title={rule.knowledgePoint.name} description="集中攻克单一知识点，练得更准、更快。" meta={`${rule.level.code}级 · ${rule.singleCount + rule.multipleCount} 题`} />)}</div> : <Card><EmptySignalState title="当前没有可用训练频道" description="教师补充题目后，新的练习就会出现在这里。" /></Card>) : <Card><EmptySignalState title="未分配题库，请联系老师" description="老师为你分配字母类后，练习入口会出现在这里。" /></Card>}</section>
+    <section className="mt-8">{hasActiveLevel ? <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between"><div><div className="text-xs font-bold text-[var(--primary)]">TRAINING CHANNELS</div><h2 className="mt-1 text-xl font-extrabold">选择训练频道</h2></div><Link href="/student/practice/start" className="text-sm font-bold text-[var(--primary)]">查看全部练习</Link></div> : null}{hasActiveLevel ? <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">{activeLevelCode && activeLevelQuestionTotal > 0 ? <ChannelCard href={`/student/practice/start?mode=order&level=${activeLevelCode}`} icon={ListOrdered} title={`${activeLevelCode}级顺序刷题`} description="按题号顺序连续刷题，支持断点续做。" meta={`${activeLevelQuestionTotal} 题 · 完成 ${orderRoundCount} 轮`} /> : null}{activeLevelCode && activeLevelQuestionTotal > 0 ? <ChannelCard href={`/student/practice/start?mode=random&level=${activeLevelCode}`} icon={Shuffle} title={`${activeLevelCode}级随机刷题`} description="优先抽取未完成题目，减少重复曝光。" meta={`${activeLevelQuestionTotal} 题`} /> : null}<ChannelCard href="/student/wrong" icon={BookX} title="错题模式" description="集中巩固未掌握错题，按复习计划优先安排。" meta={`${wrongQuestions.length} 道待巩固`} /><ChannelCard href={availableExams.length > 0 ? `/student/practice/start?mode=exam&level=${activeLevelCode ?? ""}${availableExams[0] ? `&blueprint=${availableExams[0].id}` : ""}` : "/student/practice/start"} icon={Timer} title={activeLevelCode ? `${activeLevelCode}级模拟测试` : "模拟测试"} description="按教师配置蓝图限时作答，统一交卷后查看成绩。" meta={availableExams.length > 0 ? `${availableExams[0].totalCount} 题${availableExams[0].durationMinutes ? ` · ${availableExams[0].durationMinutes} 分钟` : " · 不限时"}` : "未配置蓝图"} /><ChannelCard href="/student/favorites" icon={Star} title="收藏列表" description="查看并练习你收藏的题目。" meta={`${favoriteCount} 道收藏`} />{activeLevelQuestionTotal === 0 && wrongQuestions.length === 0 && favoriteCount === 0 && availableExams.length === 0 ? <Card><EmptySignalState title="当前没有可用训练频道" description="教师补充题目后，新的练习就会出现在这里。" /></Card> : null}</div> : <Card><EmptySignalState title="未分配题库，请联系老师" description="老师为你分配字母类后，练习入口会出现在这里。" /></Card>}</section>
     <section className="mt-8 grid gap-4 sm:grid-cols-2 xl:grid-cols-4"><StatCard icon={Clock3} label="近7日学习" value={`${activeDays} 天`} helper={`${weeklySessions.length} 次已完成训练`} tone="amber" /><StatCard icon={CircleCheck} label="累计正确率" value={`${accuracy}%`} helper={`${correct} / ${answered || 0} 题答对`} /><StatCard icon={BookCheck} label="本周完成" value={`${weeklyAnswered} 题`} helper="仅统计已完成训练" tone="blue" /><StatCard icon={Brain} label="待巩固信号" value={`${wrongQuestions.length} 题`} helper={`${weakKnowledgeCount} 个知识点`} tone="rose" /></section>
     <section className="mt-8"><AiStudentWeeklyReport /></section>
     <section className="mt-8 grid gap-4 lg:grid-cols-2"><Card><CardContent><div className="flex items-center justify-between"><div><div className="text-sm font-extrabold">最近训练</div><div className="mt-1 text-xs text-[var(--muted-foreground)]">最近完成的三个频道</div></div><Link href="/student/history" className="text-sm font-bold text-[var(--primary)]">全部记录</Link></div><div className="mt-5 space-y-3">{completedSessions.slice(0, 3).map((session) => <div key={session.id} className="flex items-center justify-between rounded-2xl bg-[var(--surface-soft)] p-4"><div><div className="font-bold">{practiceTitle(session.mode, session.level?.code, session.knowledgePoint?.name)}</div><div className="mt-1 text-xs text-[var(--muted-foreground)]">{session.startedAt.toLocaleDateString("zh-CN")}</div></div><Badge tone="green">{session.correctCount} 题正确</Badge></div>)}{completedSessions.length === 0 ? <div className="text-sm text-[var(--muted-foreground)]">完成一次训练后，这里会建立记录。</div> : null}</div></CardContent></Card><Card><CardContent><div className="flex items-start gap-4"><div className="grid size-12 place-items-center rounded-2xl border border-rose-600/15 bg-rose-500/10 text-rose-700"><Brain className="size-5" /></div><div className="flex-1"><div className="font-extrabold">错题信号待处理</div><p className="mt-2 text-sm leading-7 text-[var(--muted-foreground)]">当前有 {wrongQuestions.length} 道题需要巩固。优先按知识点聚合查看，减少重复浏览。</p><Link href="/student/wrong" className="mt-5 inline-flex items-center gap-2 text-sm font-bold text-[var(--primary)]">打开错题频道<ArrowRight className="size-4" /></Link></div></div></CardContent></Card></section>

@@ -163,7 +163,7 @@ test.describe.serial("production business flows", () => {
 
   test("student practice restores progress and closes the wrong-question loop", async ({ page }) => {
     await login(page, activatedStudentUsername, changedPassword, "/student");
-    await page.getByRole("link", { name: /A级综合训练/ }).click();
+    await page.getByRole("link", { name: /A级顺序刷题/ }).click();
     // 首次访问会冷编译路由并在服务端创建练习会话，CI 冷启动下可能超过默认 5 秒。
     await expect(page).toHaveURL(/\/student\/practice\?session=/, { timeout: 30_000 });
     await expect(page.getByText("第 1 / 10 题", { exact: true })).toBeVisible();
@@ -185,7 +185,7 @@ test.describe.serial("production business flows", () => {
     await expect(page.getByText("总题", { exact: true }).locator("..")).toContainText("10");
 
     await page.goto("/student/history");
-    await expect(page.getByText("A级综合练习").first()).toBeVisible();
+    await expect(page.getByText("A级顺序练习").first()).toBeVisible();
     await expect(page.getByText("10 题", { exact: false }).first()).toBeVisible();
 
     for (let sessionNumber = 1; sessionNumber <= 4; sessionNumber += 1) {
