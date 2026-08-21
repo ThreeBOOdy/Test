@@ -276,6 +276,75 @@ describe("production database foundation", () => {
     expect(await prisma.practiceSession.findUniqueOrThrow({ where: { id: created.id } })).toMatchObject({ status: "COMPLETED", currentIndex: 1, correctCount: 1 });
   });
 
+  it("writes StudentLevelQuestionState on first practice answer and advances it on a repeated answer", async () => {
+    const { user, level, question } = await createBaseRecords();
+    await prisma.levelPracticeRule.create({ data: { levelId: level.id, singleCount: 1, multipleCount: 0 } });
+
+    const firstSession = await createPracticeSession(user.id, { mode: "level", levelCode: level.code });
+    const correctAnswer = await correctAnswerFor(firstSession.id, question.id);
+    await submitPracticeAnswer(user.id, firstSession.id, question.id, correctAnswer, "state-first-key");
+
+    const firstState = await prisma.studentLevelQuestionState.findUniqueOrThrow({
+      where: { userId_levelId_questionId: { userId: user.id, levelId: level.id, questionId: question.id } },
+    });
+    expect(firstState).toMatchObject({
+      state: "REVIEW",
+      reps: 1,
+      lapses: 0,
+      wrongCount: 0,
+      correctCount: 1,
+      intervalDays: 1,
+      lastResult: "CORRECT",
+    });
+    expect(firstState.dueAt).not.toBeNull();
+
+    const secondSession = await createPracticeSession(user.id, { mode: "level", levelCode: level.code });
+    const secondCorrectAnswer = await correctAnswerFor(secondSession.id, question.id);
+    const wrongAnswer = ["A", "B"].filter((id) => !secondCorrectAnswer.includes(id));
+    await submitPracticeAnswer(user.id, secondSession.id, question.id, wrongAnswer, "state-second-key");
+
+    const secondState = await prisma.studentLevelQuestionState.findUniqueOrThrow({
+      where: { userId_levelId_questionId: { userId: user.id, levelId: level.id, questionId: question.id } },
+    });
+    expect(secondState).toMatchObject({
+      state: "RELEARNING",
+      reps: 2,
+      lapses: 1,
+      wrongCount: 1,
+      correctCount: 1,
+      intervalDays: 0,
+      lastResult: "INCORRECT",
+    });
+    expect(secondState.dueAt).not.toBeNull();
+  });
+
+  it("writes StudentLevelQuestionState for mock exam settlement without applying favorite/ignored rating mapping", async () => {
+    const { user, level, question } = await createBaseRecords();
+    await prisma.examRule.create({ data: { levelId: level.id, singleCount: 1, multipleCount: 0, durationMinutes: 40, passingCount: 1 } });
+    await prisma.studentLevelQuestionState.create({
+      data: { userId: user.id, levelId: level.id, questionId: question.id, favorite: true },
+    });
+
+    const session = await createPracticeSession(user.id, { mode: "exam", levelCode: level.code });
+    const correctAnswer = await correctAnswerFor(session.id, question.id);
+    await submitMockExam(user.id, session.id, [{ questionId: question.id, selectedOptionIds: correctAnswer }]);
+
+    const state = await prisma.studentLevelQuestionState.findUniqueOrThrow({
+      where: { userId_levelId_questionId: { userId: user.id, levelId: level.id, questionId: question.id } },
+    });
+    expect(state.favorite).toBe(true);
+    expect(state).toMatchObject({
+      state: "REVIEW",
+      reps: 1,
+      wrongCount: 0,
+      correctCount: 1,
+      intervalDays: 1,
+      stability: 1,
+      difficulty: 4.5,
+      lastResult: "CORRECT",
+    });
+  });
+
   it("draws practice questions from a K letter-class and injects K into snapshots", async () => {
     const user = await prisma.user.create({ data: { username: "k-practice-user", displayName: "K Practice User", passwordHash: "test", role: "STUDENT" } });
     const kLevel = await prisma.level.create({ data: { code: "K", name: "K Level" } });

@@ -7,6 +7,7 @@ import { BlueprintInsufficientQuestionError, selectExamBlueprintQuestions } from
 import { selectPracticeQuestions, selectPrioritizedRandomQuestions, shuffle, sortQuestionsByBankNumber } from "@/lib/domain/practice-engine";
 import { createQuestionSnapshot, gradeQuestionSnapshot, toPublicQuestionSnapshot, type QuestionSnapshot } from "@/lib/domain/practice-snapshot";
 import { advanceWrongQuestionMastery } from "@/lib/domain/wrong-question-mastery";
+import { upsertStudentLevelQuestionState } from "@/lib/server/learning-state-service";
 import { completeReviewCardsForSession } from "@/lib/server/review-plan-service";
 import { awardPracticeCompletion, awardWrongClearCompletion } from "@/lib/server/rpg-service";
 import { getStudentActiveLevelAccess, requireAssignedActiveLevel } from "@/lib/server/student-level-access";
@@ -112,13 +113,13 @@ async function createMockExamSession(userId: string, levelId: string, blueprintI
 async function createWrongQuestionSession(userId: string, questionId: string | undefined, activeLevelId: string): Promise<PublicPracticeSession> {
   const wrongQuestions = await prisma.wrongQuestion.findMany({
     where: { userId, mastered: false, question: { status: "ACTIVE", knowledgePoint: { enabled: true }, levels: { some: { levelId: activeLevelId } } } },
-    include: { question: { include: { levels: { include: { level: { select: { code: true } } } }, knowledgePoint: { select: { name: true } } } } },
+    include: { question: { include: { levels: { where: { levelId: activeLevelId }, include: { level: { select: { code: true } } } }, knowledgePoint: { select: { name: true } } } } },
   });
   const selected = questionId
     ? wrongQuestions.filter((item) => item.questionId === questionId)
     : shuffle(wrongQuestions).slice(0, 20);
   if (!selected.length) throw new ApiError(questionId ? "该错题不在待巩固列表" : "当前没有待巩固错题", 409);
-  const snapshots = selected.map(({ question }) => createQuestionSnapshot({ ...toDomainQuestion(question), levelId: question.levels[0]?.levelId ?? "", levelCode: question.levels[0]?.level.code ?? "未归类", knowledgeName: question.knowledgePoint.name }));
+  const snapshots = selected.map(({ question }) => createQuestionSnapshot({ ...toDomainQuestion(question), levelId: question.levels[0]?.levelId ?? activeLevelId, levelCode: question.levels[0]?.level.code ?? "未归类", knowledgeName: question.knowledgePoint.name }));
   return persistPracticeSession(userId, "WRONG_QUESTION", null, null, snapshots);
 }
 
@@ -213,6 +214,10 @@ export async function submitPracticeAnswer(userId: string, sessionId: string, qu
       const answeredCount = answeredBefore + 1;
       const correctCount = correctBefore + Number(isCorrect);
       await tx.practiceAnswer.create({ data: { sessionId, questionId, selectedOptionIds: selectedOptionIds as Prisma.InputJsonValue, idempotencyKey, isCorrect, answeredCountAtSubmission: answeredCount, correctCountAtSubmission: correctCount } });
+      const stateLevelId = sessionQuestion.session.levelId ?? (snapshot.levelId || null);
+      if (stateLevelId) {
+        await upsertStudentLevelQuestionState(tx, { userId, levelId: stateLevelId, questionId, isCorrect });
+      }
       if (!isCorrect) await recordWrongQuestionAttempt(tx, userId, questionId, "ANSWERED_WRONG");
       const total = await tx.practiceSessionQuestion.count({ where: { sessionId } });
       const completedAt = answeredCount === total ? new Date() : undefined;
@@ -297,6 +302,21 @@ async function settleMockExam(userId: string, sessionId: string, submittedAnswer
       return { questionId: item.questionId, selectedOptionIds, isCorrect: gradeQuestionSnapshot(snapshot, selectedOptionIds) };
     });
     await tx.practiceAnswer.createMany({ data: graded.map((answer) => ({ sessionId, questionId: answer.questionId, selectedOptionIds: answer.selectedOptionIds as Prisma.InputJsonValue, isCorrect: answer.isCorrect })) });
+    for (const answer of graded) {
+      const sessionQuestion = session.questions.find((item) => item.questionId === answer.questionId);
+      const snapshot = sessionQuestion?.snapshot as unknown as QuestionSnapshot | undefined;
+      const stateLevelId = session.levelId ?? (snapshot?.levelId || null);
+      if (stateLevelId) {
+        await upsertStudentLevelQuestionState(tx, {
+          userId,
+          levelId: stateLevelId,
+          questionId: answer.questionId,
+          isCorrect: answer.isCorrect,
+          now,
+          useManualMarks: false,
+        });
+      }
+    }
     const correctCount = graded.filter((answer) => answer.isCorrect).length;
     await tx.practiceSession.update({ where: { id: sessionId }, data: { status: "COMPLETED", currentIndex: graded.length, correctCount, completedAt: now, examSettlementSource: settlementSource } });
     await settleWrongQuestionMastery(tx, userId, sessionId);
