@@ -778,6 +778,59 @@ describe("production database foundation", () => {
     expect(session.questions.slice(3).every((question) => !unseenIds.has(question.id))).toBe(true);
   });
 
+  it("orders random practice by due cards, low mastery/favorites, then mastered after unseen are cleared", async () => {
+    const user = await prisma.user.create({ data: { username: "random-due-user", displayName: "Random Due User", passwordHash: "test", role: "STUDENT" } });
+    const level = await prisma.level.create({ data: { code: "A", name: "A Level" } });
+    await prisma.user.update({ where: { id: user.id }, data: { activeLevelId: level.id } });
+    const defaultType = await prisma.knowledgePointType.upsert({ where: { code: "DEFAULT" }, update: {}, create: { code: "DEFAULT", name: "默认" } });
+    const point = await prisma.knowledgePoint.create({ data: { typeId: defaultType.id, code: "9.2.3", name: "Random Due Point", path: "/9/9.2/9.2.3", depth: 2 } });
+    const ids = ["favorite-due", "urgent", "ignored", "due-later", "favorite-mastered", "low", "mastered"];
+    const questions = await Promise.all(ids.map((id) => prisma.question.create({ data: { knowledgePointId: point.id, levels: { create: { levelId: level.id } }, externalQuestionCode: `RD-${id}`, stem: id, type: "SINGLE_CHOICE", optionCount: 2, correctOptionCount: 1, selectionSpec: "2选1", options: [{ id: "A", text: "A" }, { id: "B", text: "B" }], correctOptionIds: ["A"] } })));
+    const byId = new Map(questions.map((question) => [question.externalQuestionCode, question]));
+    const past = new Date(Date.now() - 24 * 60 * 60 * 1000);
+    const earlier = new Date(Date.now() - 48 * 60 * 60 * 1000);
+    const future = new Date(Date.now() + 24 * 60 * 60 * 1000);
+    await prisma.studentLevelQuestionState.createMany({ data: [
+      { userId: user.id, levelId: level.id, questionId: byId.get("RD-favorite-due")!.id, reps: 1, favorite: true, dueAt: past, wrongCount: 4, intervalDays: 7 },
+      { userId: user.id, levelId: level.id, questionId: byId.get("RD-urgent")!.id, reps: 1, dueAt: earlier, wrongCount: 5, intervalDays: 0 },
+      { userId: user.id, levelId: level.id, questionId: byId.get("RD-ignored")!.id, reps: 1, dueAt: earlier, wrongCount: 2, intervalDays: 0, ignored: true },
+      { userId: user.id, levelId: level.id, questionId: byId.get("RD-due-later")!.id, reps: 1, dueAt: past, wrongCount: 1, intervalDays: 0 },
+      { userId: user.id, levelId: level.id, questionId: byId.get("RD-favorite-mastered")!.id, reps: 1, favorite: true, dueAt: future, wrongCount: 0, intervalDays: 7 },
+      { userId: user.id, levelId: level.id, questionId: byId.get("RD-low")!.id, reps: 1, dueAt: future, wrongCount: 1, intervalDays: 5 },
+      { userId: user.id, levelId: level.id, questionId: byId.get("RD-mastered")!.id, reps: 1, dueAt: future, wrongCount: 0, intervalDays: 7 },
+    ] });
+
+    const session = await createPracticeSession(user.id, { mode: "random", levelCode: "A" });
+
+    expect(session.stageCompleted).toBe(false);
+    expect(session.questions.map((question) => question.externalQuestionCode)).toEqual([
+      "RD-favorite-due",
+      "RD-urgent",
+      "RD-ignored",
+      "RD-due-later",
+      "RD-favorite-mastered",
+      "RD-low",
+      "RD-mastered",
+    ]);
+  });
+
+  it("marks random practice stage complete and still creates a full review session", async () => {
+    const user = await prisma.user.create({ data: { username: "random-stage-user", displayName: "Random Stage User", passwordHash: "test", role: "STUDENT" } });
+    const level = await prisma.level.create({ data: { code: "A", name: "A Level" } });
+    await prisma.user.update({ where: { id: user.id }, data: { activeLevelId: level.id } });
+    const defaultType = await prisma.knowledgePointType.upsert({ where: { code: "DEFAULT" }, update: {}, create: { code: "DEFAULT", name: "默认" } });
+    const point = await prisma.knowledgePoint.create({ data: { typeId: defaultType.id, code: "9.2.4", name: "Random Stage Point", path: "/9/9.2/9.2.4", depth: 2 } });
+    const questions = await Promise.all(Array.from({ length: 3 }, (_, index) => prisma.question.create({ data: { knowledgePointId: point.id, levels: { create: { levelId: level.id } }, externalQuestionCode: `RS-${index + 1}`, stem: `RS-${index + 1}`, type: "SINGLE_CHOICE", optionCount: 2, correctOptionCount: 1, selectionSpec: "2选1", options: [{ id: "A", text: "A" }, { id: "B", text: "B" }], correctOptionIds: ["A"] } })));
+    const future = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
+    await prisma.studentLevelQuestionState.createMany({ data: questions.map((question) => ({ userId: user.id, levelId: level.id, questionId: question.id, reps: 2, dueAt: future, intervalDays: 7, state: "REVIEW" })) });
+
+    const session = await createPracticeSession(user.id, { mode: "random", levelCode: "A" });
+
+    expect(session.stageCompleted).toBe(true);
+    expect(session.total).toBe(3);
+    expect(new Set(session.questions.map((question) => question.id))).toEqual(new Set(questions.map((question) => question.id)));
+  });
+
 it("advances learning-mode sequential progress without writing learning state and keeps progress when switching modes", async () => {
     const user = await prisma.user.create({ data: { username: "order-learning-mode-user", displayName: "Order Learning Mode User", passwordHash: "test", role: "STUDENT" } });
     const level = await prisma.level.create({ data: { code: "A", name: "A Level" } });

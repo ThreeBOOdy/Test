@@ -248,4 +248,16 @@ describe("PracticeRunner", () => {
     await waitFor(() => expect(fetch).toHaveBeenCalledWith(`/api/v1/student/question-states/${question.id}`, expect.objectContaining({ method: "PATCH", body: JSON.stringify({ ignored: true }) })));
     expect(screen.getByRole("button", { name: "忽略" })).toHaveAttribute("aria-pressed", "true");
   });
+
+  it("shows the stage-complete encouragement for random sessions that reached long-term review", () => {
+    render(<PracticeRunner session={practiceSessionFixture({ mode: "RANDOM_ALL", title: "A级 · 智能随机练习", stageCompleted: true })} />);
+
+    expect(screen.getByText("阶段性完成")).toBeInTheDocument();
+    expect(screen.getByText(/所有题目已进入长期复习/)).toBeInTheDocument();
+  });
+
+  it("does not show the stage-complete banner unless the random stage flag is true", () => {
+    render(<PracticeRunner session={practiceSessionFixture({ mode: "RANDOM_ALL", title: "A级 · 智能随机练习", stageCompleted: false })} />);
+
+    expect(screen.queryByText("阶段性完成")).not.toBeInTheDocument();  });
 });

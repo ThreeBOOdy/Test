@@ -51,10 +51,104 @@ export function selectPrioritizedRandomQuestions<T extends Pick<Question, "id">>
   return [...shuffle(unanswered, random), ...shuffle(answered, random)].slice(0, Math.max(0, count));
 }
 
-export function selectRandomPracticeQuestions<T extends Pick<Question, "id">>(questions: readonly T[], answeredQuestionIds: ReadonlySet<string>, random: () => number = Math.random): T[] {
-  const unanswered = questions.filter((question) => !answeredQuestionIds.has(question.id));
-  const answered = questions.filter((question) => answeredQuestionIds.has(question.id));
-  return [...shuffle(unanswered, random), ...shuffle(answered, random)];
+export type RandomQuestionState = {
+  reps: number;
+  favorite: boolean;
+  ignored: boolean;
+  dueAt: Date | null;
+  wrongCount: number;
+  intervalDays: number;
+};
+
+export type RandomQuestionSelectionOptions = {
+  /** Per-question FSRS/learning state for the current (user, level). */
+  stateByQuestionId?: ReadonlyMap<string, RandomQuestionState>;
+  now?: Date;
+};
+
+export const RANDOM_STAGE_INTERVAL_DAYS = 7;
+
+function randomStateFor<T extends Pick<Question, "id">>(question: T, options: RandomQuestionSelectionOptions): RandomQuestionState | undefined {
+  return options.stateByQuestionId?.get(question.id);
+}
+
+function compareRandomReviewPriority(left: { id: string; randomState?: RandomQuestionState }, right: { id: string; randomState?: RandomQuestionState }): number {
+  const leftState = left.randomState;
+  const rightState = right.randomState;
+  if ((leftState?.favorite ?? false) !== (rightState?.favorite ?? false)) return leftState?.favorite ? -1 : 1;
+  const leftDue = leftState?.dueAt?.getTime() ?? Number.MAX_SAFE_INTEGER;
+  const rightDue = rightState?.dueAt?.getTime() ?? Number.MAX_SAFE_INTEGER;
+  if (leftDue !== rightDue) return leftDue - rightDue;
+  if ((leftState?.wrongCount ?? 0) !== (rightState?.wrongCount ?? 0)) return (rightState?.wrongCount ?? 0) - (leftState?.wrongCount ?? 0);
+  if ((leftState?.ignored ?? false) !== (rightState?.ignored ?? false)) return leftState?.ignored ? 1 : -1;
+  return left.id.localeCompare(right.id);
+}
+
+function withRandomState<T extends Pick<Question, "id">>(items: readonly T[], options: RandomQuestionSelectionOptions): Array<T & { randomState?: RandomQuestionState }> {
+  return items.map((item) => ({ ...item, randomState: randomStateFor(item, options) }));
+}
+
+/**
+ * Random practice ordering:
+ * 1. Unseen questions first (preserves #11 behavior).
+ * 2. Then due cards (dueAt <= now), ordered favorite -> dueAt asc -> wrongCount desc -> ignored last.
+ * 3. Then not-due low-mastery (intervalDays < 7) or favorite cards, same priority order.
+ * 4. Finally mastered/non-favorite cards, shuffled.
+ */
+export function selectRandomPracticeQuestions<T extends Pick<Question, "id">>(
+  questions: readonly T[],
+  answeredQuestionIds: ReadonlySet<string>,
+  random: () => number = Math.random,
+  options: RandomQuestionSelectionOptions = {},
+): T[] {
+  if (!options.stateByQuestionId) {
+    const unanswered = questions.filter((question) => !answeredQuestionIds.has(question.id));
+    const answered = questions.filter((question) => answeredQuestionIds.has(question.id));
+    return [...shuffle(unanswered, random), ...shuffle(answered, random)];
+  }
+
+  const now = options.now ?? new Date();
+  const unseen: Array<T & { randomState?: RandomQuestionState }> = [];
+  const due: Array<T & { randomState?: RandomQuestionState }> = [];
+  const lowOrFavorite: Array<T & { randomState?: RandomQuestionState }> = [];
+  const mastered: Array<T & { randomState?: RandomQuestionState }> = [];
+
+  for (const question of withRandomState(questions, options)) {
+    const state = question.randomState;
+    if (answeredQuestionIds.has(question.id) && state?.reps && state.reps > 0 && state.dueAt !== null && state.dueAt.getTime() <= now.getTime()) {
+      due.push(question);
+    } else if (answeredQuestionIds.has(question.id) && state && (state.intervalDays < RANDOM_STAGE_INTERVAL_DAYS || state.favorite)) {
+      lowOrFavorite.push(question);
+    } else if (answeredQuestionIds.has(question.id) && state && state.reps > 0) {
+      mastered.push(question);
+    } else {
+      unseen.push(question);
+    }
+  }
+
+  due.sort(compareRandomReviewPriority);
+  lowOrFavorite.sort(compareRandomReviewPriority);
+  return [...shuffle(unseen, random), ...due, ...lowOrFavorite, ...shuffle(mastered, random)];
+}
+
+/**
+ * True when every question has been reviewed (reps > 0), has no due card
+ * (dueAt is null or in the future), and has reached the long-term interval
+ * (intervalDays >= 7).
+ */
+export function isRandomStageCompleted(
+  questions: readonly Pick<Question, "id">[],
+  stateByQuestionId: ReadonlyMap<string, RandomQuestionState>,
+  now: Date = new Date(),
+): boolean {
+  if (questions.length === 0) return false;
+  return questions.every((question) => {
+    const state = stateByQuestionId.get(question.id);
+    return state !== undefined
+      && state.reps > 0
+      && (state.dueAt === null || state.dueAt.getTime() > now.getTime())
+      && state.intervalDays >= RANDOM_STAGE_INTERVAL_DAYS;
+  });
 }
 
 export function selectPracticeQuestions(
