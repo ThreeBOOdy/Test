@@ -7,6 +7,7 @@ const mocks = vi.hoisted(() => ({
   importBatchFindMany: vi.fn(),
   importBatchCount: vi.fn(),
   createPracticeSession: vi.fn(),
+  setStudentQuestionState: vi.fn(),
   commitImportBatch: vi.fn(),
   getImportBatchReport: vi.fn(),
   revertImportBatch: vi.fn(),
@@ -31,6 +32,7 @@ vi.mock("@/lib/server/student-account-service", () => ({
   approveRegistration: mocks.approveRegistration,
 }));
 vi.mock("@/lib/server/practice-service", () => ({ createPracticeSession: mocks.createPracticeSession }));
+vi.mock("@/lib/server/student-question-state-service", () => ({ setStudentQuestionState: mocks.setStudentQuestionState }));
 vi.mock("@/lib/server/import-service", () => ({
   commitImportBatch: mocks.commitImportBatch,
   getImportBatchReport: mocks.getImportBatchReport,
@@ -71,6 +73,7 @@ import { POST as createKnowledgePoint } from "@/app/api/v1/teacher/knowledge-poi
 import { PUT as updateKnowledgePoint } from "@/app/api/v1/teacher/knowledge-points/[id]/route";
 import { PUT as savePracticeRules } from "@/app/api/v1/teacher/practice-rules/route";
 import { POST as createPracticeSession } from "@/app/api/v1/practice-sessions/route";
+import { PATCH as updateStudentQuestionState } from "@/app/api/v1/student/question-states/[questionId]/route";
 
 const baseUser = {
   id: "user-1",
@@ -98,6 +101,7 @@ describe("single-role API access", () => {
     mocks.importBatchFindMany.mockResolvedValue([]);
     mocks.importBatchCount.mockResolvedValue(0);
     mocks.createPracticeSession.mockResolvedValue({ id: "session-1" });
+    mocks.setStudentQuestionState.mockResolvedValue({ questionId: "question-1", levelId: "level-1", levelCode: "A", favorite: true, ignored: false });
     mocks.commitImportBatch.mockResolvedValue({ inserted: 1, skipped: 0 });
     mocks.approveRegistration.mockResolvedValue({ id: "student-1", studentStatus: "ACTIVE" });
     mocks.levelFindMany.mockResolvedValue([{ id: "level-1", enabled: true }]);
@@ -231,6 +235,22 @@ describe("single-role API access", () => {
     for (const user of [administrator, teacher]) {
       mocks.getCurrentUser.mockResolvedValue(user);
       expect((await createPracticeSession(request())).status).toBe(403);
+    }
+  });
+
+  it("allows only active students to update favorite/ignored question state", async () => {
+    const request = () => new Request("http://localhost/api/v1/student/question-states/q1", {
+      method: "PATCH",
+      headers: { "content-type": "application/json", origin: "http://localhost", host: "localhost" },
+      body: JSON.stringify({ favorite: true }),
+    });
+
+    mocks.getCurrentUser.mockResolvedValue(student);
+    expect((await updateStudentQuestionState(request(), { params: Promise.resolve({ questionId: "q1" }) })).status).toBe(200);
+
+    for (const user of [administrator, teacher]) {
+      mocks.getCurrentUser.mockResolvedValue(user);
+      expect((await updateStudentQuestionState(request(), { params: Promise.resolve({ questionId: "q1" }) })).status).toBe(403);
     }
   });
 });
