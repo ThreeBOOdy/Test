@@ -126,6 +126,18 @@ enum StudentImportStatus {
   EXPIRED
 }
 
+enum LearningState {
+  NEW
+  LEARNING
+  REVIEW
+  RELEARNING
+}
+
+enum AnswerResult {
+  CORRECT
+  INCORRECT
+}
+
 model User {
   id                         String                     @id @default(cuid())
   username                   String                     @unique
@@ -181,6 +193,7 @@ model User {
   playerProfile              PlayerProfile?
   questLogs                  QuestLog[]
   xpLogs                     XpLog[]
+  studentLevelQuestionStates StudentLevelQuestionState[]
   createdAt                  DateTime                   @default(now())
   updatedAt                  DateTime                   @updatedAt
 
@@ -277,6 +290,7 @@ model Level {
   knowledgeRules KnowledgePracticeRule[]
   sessions       PracticeSession[]
   students       User[]                  @relation("StudentActiveLevel")
+  studentLevelQuestionStates StudentLevelQuestionState[]
   createdAt      DateTime                @default(now())
   updatedAt      DateTime                @updatedAt
 
@@ -386,6 +400,7 @@ model Question {
   answers                 PracticeAnswer[]
   wrongQuestions          WrongQuestion[]
   reviewCards             ReviewCard[]
+  studentLevelQuestionStates StudentLevelQuestionState[]
   revisions               QuestionRevision[]
   aiConversations         AiConversation[]
   explanation             String?                   @db.Text
@@ -652,6 +667,38 @@ model ReviewCard {
   @@index([reviewPlanId, status])
   @@index([questionId, status])
   @@index([knowledgePointId, status])
+}
+
+model StudentLevelQuestionState {
+  id             String        @id @default(cuid())
+  userId         String
+  levelId        String
+  questionId     String
+  user           User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  level          Level         @relation(fields: [levelId], references: [id], onDelete: Restrict)
+  question       Question      @relation(fields: [questionId], references: [id], onDelete: Restrict)
+  state          LearningState @default(NEW)
+  dueAt          DateTime?
+  stability      Float         @default(0)
+  difficulty     Float         @default(5)
+  reps           Int           @default(0)
+  lapses         Int           @default(0)
+  intervalDays   Int           @default(0)
+  lastReviewedAt DateTime?
+  favorite       Boolean       @default(false)
+  ignored        Boolean       @default(false)
+  wrongCount     Int           @default(0)
+  correctCount   Int           @default(0)
+  lastResult     AnswerResult?
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+
+  @@unique([userId, levelId, questionId])
+  @@index([userId, levelId, state, dueAt])
+  @@index([userId, levelId, favorite])
+  @@index([userId, levelId, ignored])
+  @@index([questionId])
+  @@index([levelId])
 }
 
 model ImportBatch {
