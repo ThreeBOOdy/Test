@@ -61,4 +61,32 @@ describe("practice-sessions API activeLevel guard", () => {
     expect(response.status).toBe(201);
     expect(await response.json()).toEqual({ id: "session-1" });
   });
+
+  it("creates a mock exam session with an optional blueprint id", async () => {
+    mocks.createPracticeSession.mockResolvedValue({ id: "session-1" });
+    const request = new Request("http://localhost/api/v1/practice-sessions", {
+      method: "POST",
+      headers: { "content-type": "application/json", origin: "http://localhost", host: "localhost" },
+      body: JSON.stringify({ mode: "exam", levelCode: "A", blueprintId: "blueprint-1" }),
+    });
+
+    const response = await POST(request);
+
+    expect(response.status).toBe(201);
+    expect(mocks.createPracticeSession).toHaveBeenCalledWith("student-1", { mode: "exam", levelCode: "A", blueprintId: "blueprint-1" });
+  });
+
+  it("creates a mock exam session with the default blueprint when blueprint id is omitted", async () => {
+    mocks.createPracticeSession.mockResolvedValue({ id: "session-1" });
+    const request = new Request("http://localhost/api/v1/practice-sessions", {
+      method: "POST",
+      headers: { "content-type": "application/json", origin: "http://localhost", host: "localhost" },
+      body: JSON.stringify({ mode: "exam", levelCode: "A" }),
+    });
+
+    const response = await POST(request);
+
+    expect(response.status).toBe(201);
+    expect(mocks.createPracticeSession).toHaveBeenCalledWith("student-1", { mode: "exam", levelCode: "A" });
+  });
 });

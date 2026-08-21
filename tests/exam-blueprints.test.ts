@@ -1,14 +1,17 @@
 import { describe, expect, it } from "vitest";
 import {
   allocateExamBlueprintItems,
+  BlueprintInsufficientQuestionError,
   buildDefaultExamBlueprintInput,
   DEFAULT_EXAM_BLUEPRINT_NAME,
   findExamBlueprintStockIssues,
   formatExamBlueprintStockIssue,
+  selectExamBlueprintQuestions,
   validateExamBlueprint,
   validateExamBlueprintItem,
   validateExamBlueprintKnowledgePointOverlap,
 } from "@/lib/domain/exam-blueprints";
+import type { Question } from "@/lib/domain/types";
 
 const legacyRule = {
   levelId: "level-a",
@@ -193,5 +196,88 @@ describe("exam blueprint inventory validation (issue #19)", () => {
     expect(message).toContain("需要 5 题");
     expect(message).toContain("当前仅 2 题");
     expect(message).toContain("缺少 3 题");
+  });
+});
+
+function blueprintQuestion(id: string, type: Question["type"]): Question {
+  const options = type === "SINGLE_CHOICE"
+    ? [{ id: "A", text: "A" }, { id: "B", text: "B" }]
+    : [{ id: "A", text: "A" }, { id: "B", text: "B" }, { id: "C", text: "C" }];
+  return {
+    id,
+    levelIds: ["level-a"],
+    knowledgePointId: "kp-1",
+    stem: `Question ${id}`,
+    type,
+    optionCount: options.length,
+    correctOptionCount: type === "SINGLE_CHOICE" ? 1 : 2,
+    selectionSpec: type === "SINGLE_CHOICE" ? "2选1" : "3选2",
+    options,
+    correctOptionIds: type === "SINGLE_CHOICE" ? ["A"] : ["A", "C"],
+    status: "ACTIVE",
+  };
+}
+
+describe("exam blueprint mock exam drawing (issue #18)", () => {
+  it("draws each item's requested counts uniformly from its own pools and shuffles the final paper", () => {
+    const items = [
+      {
+        knowledgePointId: "kp-1",
+        knowledgePointName: "电工基础",
+        singleCount: 2,
+        multipleCount: 1,
+        singlePool: [blueprintQuestion("s1", "SINGLE_CHOICE"), blueprintQuestion("s2", "SINGLE_CHOICE"), blueprintQuestion("s3", "SINGLE_CHOICE")],
+        multiplePool: [blueprintQuestion("m1", "MULTIPLE_CHOICE"), blueprintQuestion("m2", "MULTIPLE_CHOICE")],
+      },
+      {
+        knowledgePointId: "kp-2",
+        knowledgePointName: "通信原理",
+        singleCount: 1,
+        multipleCount: 1,
+        singlePool: [blueprintQuestion("s4", "SINGLE_CHOICE")],
+        multiplePool: [blueprintQuestion("m3", "MULTIPLE_CHOICE")],
+      },
+    ];
+
+    const selected = selectExamBlueprintQuestions(items, () => 0.42);
+
+    expect(selected).toHaveLength(5);
+    expect(selected.filter((question) => question.type === "SINGLE_CHOICE")).toHaveLength(3);
+    expect(selected.filter((question) => question.type === "MULTIPLE_CHOICE")).toHaveLength(2);
+    expect(new Set(selected.map((question) => question.id)).size).toBe(5);
+  });
+
+  it("reports the exact knowledge point, type, and missing count when inventory is insufficient", () => {
+    expect(() => selectExamBlueprintQuestions([
+      {
+        knowledgePointId: "kp-1",
+        knowledgePointName: "电工基础",
+        singleCount: 2,
+        multipleCount: 0,
+        singlePool: [blueprintQuestion("s1", "SINGLE_CHOICE")],
+        multiplePool: [],
+      },
+    ])).toThrowError(BlueprintInsufficientQuestionError);
+
+    try {
+      selectExamBlueprintQuestions([
+        {
+          knowledgePointId: "kp-1",
+          knowledgePointName: "电工基础",
+          singleCount: 2,
+          multipleCount: 0,
+          singlePool: [blueprintQuestion("s1", "SINGLE_CHOICE")],
+          multiplePool: [],
+        },
+      ]);
+      throw new Error("expected selectExamBlueprintQuestions to throw");
+    } catch (error) {
+      expect(error).toBeInstanceOf(BlueprintInsufficientQuestionError);
+      if (!(error instanceof BlueprintInsufficientQuestionError)) throw error;
+      expect(error.message).toContain("电工基础");
+      expect(error.message).toContain("单选题库存不足");
+      expect(error.required).toBe(2);
+      expect(error.available).toBe(1);
+    }
   });
 });

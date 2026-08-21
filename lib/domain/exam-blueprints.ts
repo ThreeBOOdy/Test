@@ -6,8 +6,10 @@ import type {
   ExamRule,
   KnowledgePoint,
   PracticeRule,
+  Question,
 } from "@/lib/domain/types";
 import { getDescendantIds } from "@/lib/domain/knowledge-tree";
+import { shuffle } from "./practice-engine";
 
 export const DEFAULT_EXAM_BLUEPRINT_NAME = "默认模拟测试";
 
@@ -202,3 +204,50 @@ export function formatExamBlueprintStockIssue(issue: ExamBlueprintStockIssue) {
   const typeLabel = issue.questionType === "SINGLE_CHOICE" ? "单选" : "多选";
   return `知识点“${issue.knowledgePointName}”（${issue.knowledgePointCode}）${typeLabel}库存不足：需要 ${issue.required} 题，当前仅 ${issue.available} 题，缺少 ${issue.required - issue.available} 题`;
 }
+
+export class BlueprintInsufficientQuestionError extends Error {
+  constructor(
+    public readonly knowledgePointId: string,
+    public readonly knowledgePointName: string,
+    public readonly type: "SINGLE_CHOICE" | "MULTIPLE_CHOICE",
+    public readonly required: number,
+    public readonly available: number,
+  ) {
+    super(`${knowledgePointName} ${type === "SINGLE_CHOICE" ? "单选" : "多选"}题库存不足：需要 ${required} 道，当前 ${available} 道`);
+    this.name = "BlueprintInsufficientQuestionError";
+  }
+}
+
+export type ExamBlueprintQuestionPool = {
+  knowledgePointId: string;
+  knowledgePointName: string;
+  singleCount: number;
+  multipleCount: number;
+  singlePool: readonly Question[];
+  multiplePool: readonly Question[];
+};
+
+/**
+ * Draw one mock exam from a blueprint.
+ *
+ * Each blueprint item is drawn independently and uniformly at random from its
+ * knowledge-point-subtree pool of ACTIVE questions, split by question type.
+ * The per-item draws are then combined and shuffled so the final exam has no
+ * artificial ordering by blueprint item.
+ */
+export function selectExamBlueprintQuestions(
+  items: readonly ExamBlueprintQuestionPool[],
+  random: () => number = Math.random,
+): Question[] {
+  const selected: Question[] = [];
+  for (const item of items) {
+    if (item.singlePool.length < item.singleCount) {
+      throw new BlueprintInsufficientQuestionError(item.knowledgePointId, item.knowledgePointName, "SINGLE_CHOICE", item.singleCount, item.singlePool.length);
+    }
+    if (item.multiplePool.length < item.multipleCount) {
+      throw new BlueprintInsufficientQuestionError(item.knowledgePointId, item.knowledgePointName, "MULTIPLE_CHOICE", item.multipleCount, item.multiplePool.length);
+    }
+    selected.push(...shuffle(item.singlePool, random).slice(0, item.singleCount));
+    selected.push(...shuffle(item.multiplePool, random).slice(0, item.multipleCount));
+  }
+  return shuffle(selected, random);}
