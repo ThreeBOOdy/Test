@@ -30,6 +30,7 @@ describe("practice UI state", () => {
   it("builds one canonical launch URL for every practice mode", () => {
     expect(buildPracticeLaunchHref({ mode: "KNOWLEDGE_POINT", levelCode: "A", knowledgePointId: "kp-2" })).toBe("/student/practice/start?mode=knowledge&level=A&knowledge=kp-2");
     expect(buildPracticeLaunchHref({ mode: "MOCK_EXAM", levelCode: "B" })).toBe("/student/practice/start?mode=exam&level=B");
+    expect(buildPracticeLaunchHref({ mode: "MOCK_EXAM", levelCode: "B", blueprintId: "blueprint-1" })).toBe("/student/practice/start?mode=exam&level=B&blueprint=blueprint-1");
     expect(buildPracticeLaunchHref({ mode: "WRONG_QUESTION", questionId: "q-1" })).toBe("/student/practice/start?mode=wrong&question=q-1");
   });
 
@@ -37,6 +38,7 @@ describe("practice UI state", () => {
     expect(normalizePracticeLaunch({ mode: "random", level: "C" })).toEqual({ mode: "RANDOM_ALL", levelCode: "C" });
     expect(normalizePracticeLaunch({ mode: "knowledge", level: "A", knowledge: "kp-1" })).toEqual({ mode: "KNOWLEDGE_POINT", levelCode: "A", knowledgePointId: "kp-1" });
     expect(normalizePracticeLaunch({ mode: "wrong", question: "q-1" })).toEqual({ mode: "WRONG_QUESTION", questionId: "q-1" });
+    expect(normalizePracticeLaunch({ mode: "exam", level: "A", blueprint: "blueprint-1" })).toEqual({ mode: "MOCK_EXAM", levelCode: "A", blueprintId: "blueprint-1" });
   });
 
   it("does not default missing launcher levels to A", () => {

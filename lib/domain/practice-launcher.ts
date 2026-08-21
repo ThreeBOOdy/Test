@@ -5,6 +5,8 @@ export type PracticeLaunchInput = {
   levelCode?: string;
   knowledgePointId?: string;
   questionId?: string;
+  /** 模拟测试蓝图 ID；仅 MOCK_EXAM 模式使用。 */
+  blueprintId?: string;
 };
 
 export type PracticeLaunchParams = {
@@ -12,6 +14,7 @@ export type PracticeLaunchParams = {
   level?: string;
   knowledge?: string;
   question?: string;
+  blueprint?: string;
 };
 
 const MODE_TO_PARAM: Record<PracticeMode, string> = {
@@ -32,6 +35,7 @@ export function buildPracticeLaunchHref(input: PracticeLaunchInput) {
   if (input.levelCode) params.set("level", input.levelCode);
   if (input.knowledgePointId) params.set("knowledge", input.knowledgePointId);
   if (input.questionId) params.set("question", input.questionId);
+  if (input.blueprintId) params.set("blueprint", input.blueprintId);
   return `/student/practice/start?${params.toString()}`;
 }
 
@@ -40,6 +44,9 @@ export function normalizePracticeLaunch(params: PracticeLaunchParams): PracticeL
   if (mode === "WRONG_QUESTION") return { mode, questionId: params.question || undefined };
   if (mode === "KNOWLEDGE_POINT") {
     return { mode, levelCode: params.level, knowledgePointId: params.knowledge ?? "" };
+  }
+  if (mode === "MOCK_EXAM") {
+    return { mode, levelCode: params.level, blueprintId: params.blueprint || undefined };
   }
   return { mode, levelCode: params.level };
 }

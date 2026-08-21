@@ -16,7 +16,7 @@ import { createPracticeSession } from "@/lib/server/practice-service";
 
 type LaunchCardProps = { href: string; title: string; description: string; meta: string; icon: typeof Brain; art?: string };
 
-export default async function PracticeStartPage({ searchParams }: { searchParams: Promise<{ mode?: string; level?: string; knowledge?: string }> }) {
+export default async function PracticeStartPage({ searchParams }: { searchParams: Promise<{ mode?: string; level?: string; knowledge?: string; blueprint?: string }> }) {
   const user = await getCurrentUser();
   if (!user || user.capability !== "FULL_STUDENT") redirect("/login?next=/student/practice/start");
   const activeLevelAccess = await getStudentActiveLevelAccess(user.id);
@@ -30,16 +30,20 @@ export default async function PracticeStartPage({ searchParams }: { searchParams
         : launch.mode === "KNOWLEDGE_POINT" ? { mode: "knowledge", levelCode: launch.levelCode ?? "", knowledgePointId: launch.knowledgePointId ?? "" }
           : launch.mode === "QUESTION_ORDER" ? { mode: "order", levelCode: launch.levelCode ?? "" }
             : launch.mode === "RANDOM_ALL" ? { mode: "random", levelCode: launch.levelCode ?? "" }
-              : launch.mode === "MOCK_EXAM" ? { mode: "exam", levelCode: launch.levelCode ?? "" }
+              : launch.mode === "MOCK_EXAM" ? { mode: "exam", levelCode: launch.levelCode ?? "", blueprintId: launch.blueprintId }
                 : { mode: "level", levelCode: launch.levelCode ?? "" });
     redirect(`/student/practice?session=${session.id}`);
   }
-  const [levels, points, levelRules, knowledgeRules, examRules, questions, studentLevelProgress, activeSession] = await Promise.all([
+  const [levels, points, levelRules, knowledgeRules, examBlueprints, questions, studentLevelProgress, activeSession] = await Promise.all([
     prisma.level.findMany({ where: { enabled: true }, orderBy: [{ sortOrder: "asc" }, { code: "asc" }] }),
     prisma.knowledgePoint.findMany({ where: { enabled: true }, orderBy: [{ depth: "asc" }, { sortOrder: "asc" }, { code: "asc" }] }),
     prisma.levelPracticeRule.findMany({ where: { enabled: true, level: { enabled: true } }, include: { level: true } }),
     prisma.knowledgePracticeRule.findMany({ where: { enabled: true, level: { enabled: true } }, include: { level: true, knowledgePoint: true } }),
-    prisma.examRule.findMany({ where: { enabled: true, level: { enabled: true } }, include: { level: true } }),
+    prisma.examBlueprint.findMany({
+      where: { levelId: activeLevelAccess.activeLevelId ?? "", enabled: true },
+      include: { items: { select: { singleCount: true, multipleCount: true } } },
+      orderBy: [{ isDefault: "desc" }, { name: "asc" }],
+    }),
     prisma.question.findMany({ where: { status: "ACTIVE", knowledgePoint: { enabled: true } }, select: { levels: { select: { levelId: true } }, knowledgePointId: true, type: true } }),
     activeLevelAccess.activeLevelId
       ? prisma.studentLevelProgress.findUnique({ where: { userId_levelId: { userId: user.id, levelId: activeLevelAccess.activeLevelId } } })
@@ -64,11 +68,16 @@ export default async function PracticeStartPage({ searchParams }: { searchParams
     const inventory = getKnowledgeRuleInventory(questions.flatMap((question) => question.levels.map((item) => ({ knowledgePointId: question.knowledgePointId, type: question.type, status: "ACTIVE" as const, levelId: item.levelId }))), rule.levelId, rule.knowledgePointId);
     return isPracticeRuleWithinInventory(rule, inventory);
   });
-  const availableExams = examRules.filter((rule) => {
-    if (rule.levelId !== activeLevelAccess.activeLevelId) return false;
-    const inventory = questions.reduce((result, question) => question.levels.some((item) => item.levelId === rule.levelId) ? { singleCount: result.singleCount + (question.type === "SINGLE_CHOICE" ? 1 : 0), multipleCount: result.multipleCount + (question.type === "MULTIPLE_CHOICE" ? 1 : 0) } : result, { singleCount: 0, multipleCount: 0 });
-    return levelById.has(rule.levelId) && rule.singleCount <= inventory.singleCount && rule.multipleCount <= inventory.multipleCount;
-  });
+  const availableExams = activeLevelAccess.activeLevelId
+    ? examBlueprints
+        .filter((blueprint) => blueprint.items.length > 0)
+        .map((blueprint) => ({
+          id: blueprint.id,
+          name: blueprint.name,
+          durationMinutes: blueprint.durationMinutes,
+          totalCount: blueprint.items.reduce((sum, item) => sum + item.singleCount + item.multipleCount, 0),
+        }))
+    : [];
   const selectedKnowledge = params.knowledge ?? availableKnowledge[0]?.knowledgePointId;
   const orderLevel = activeLevelAccess.activeLevel?.enabled ? activeLevelAccess.activeLevel : null;
   const orderTotal = activeLevelAccess.activeLevelId ? questions.filter((question) => question.levels.some((item) => item.levelId === activeLevelAccess.activeLevelId)).length : 0;
@@ -78,7 +87,7 @@ export default async function PracticeStartPage({ searchParams }: { searchParams
       ? `已完成 ${studentLevelProgress.roundCount} 轮，开始新一轮`
       : "从第一题开始连续刷题";
   const channelCount = availableLevels.length + availableKnowledge.length + availableExams.length + (orderLevel && orderTotal > 0 ? 1 : 0);
-  return <AppShell role="student" currentPath="/student/practice/start"><div className="safe-bottom"><div className="receiver-panel instrument-grid rounded-[2rem] p-6 sm:p-8"><div className="flex flex-col gap-6 sm:flex-row sm:items-end sm:justify-between"><div><div className="flex flex-wrap items-center gap-3"><CallsignLabel value="TRAIN / MODE SELECT" /><Badge tone="blue">训练启动器</Badge></div><h1 className="mt-4 text-4xl font-black tracking-[-0.055em]">选择一条清晰的训练频段</h1><p className="mt-3 max-w-2xl text-sm leading-7 text-[var(--muted-foreground)]">所有练习模式统一在这里调谐；完成训练后可返回任务台查看成长记录或整理错题信号。</p><div className="mt-5 flex items-center gap-3 text-xs text-[var(--muted-foreground)]"><SignalMeter value={availableLevels.length ? 5 : 1} label="训练频道库存" />已发现 {channelCount} 个可用频道</div></div>{hasActiveLevel && activeSession ? <Link href={`/student/practice?session=${activeSession.id}`} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-[var(--primary)] px-5 text-sm font-bold text-[var(--primary-foreground)]"><ArrowRight className="size-4" />继续上次练习</Link> : null}</div><FrequencyScale active={4} className="mt-7" /></div>{hasActiveLevel ? <div className="mt-8 grid gap-5 md:grid-cols-2 xl:grid-cols-3">{availableLevels.map((rule) => <LaunchCard key={`level-${rule.id}`} href={buildPracticeLaunchHref({ mode: "LEVEL_COMPREHENSIVE", levelCode: rule.level.code })} title={`${rule.level.code}级综合训练`} description="覆盖本等级所有启用知识点，适合完整检测。" meta={`单选 ${rule.singleCount} · 多选 ${rule.multipleCount}`} icon={BookOpenCheck} />)}{availableKnowledge.filter((rule) => rule.knowledgePointId === selectedKnowledge || !params.knowledge).slice(0, 12).map((rule) => <LaunchCard key={`knowledge-${rule.id}`} href={buildPracticeLaunchHref({ mode: "KNOWLEDGE_POINT", levelCode: rule.level.code, knowledgePointId: rule.knowledgePointId })} title={rule.knowledgePoint.name} description="聚焦一个末级知识点，快速定位薄弱环节。" meta={`${rule.level.code}级 · ${rule.singleCount + rule.multipleCount} 题`} icon={Brain} />)}{orderLevel && orderTotal > 0 ? <LaunchCard key="order-active-level" href={buildPracticeLaunchHref({ mode: "QUESTION_ORDER", levelCode: orderLevel.code })} title={`${orderLevel.code}级顺序训练`} description={orderResumeDescription} meta={`${orderTotal} 题 · 完成 ${studentLevelProgress?.roundCount ?? 0} 轮`} icon={ListOrdered} /> : null}{availableLevels.filter((rule) => levelById.has(rule.levelId)).map((rule) => <LaunchCard key={`random-${rule.id}`} href={buildPracticeLaunchHref({ mode: "RANDOM_ALL", levelCode: rule.level.code })} title={`${rule.level.code}级智能随机`} description="优先抽取尚未完成的题目，减少重复曝光。" meta={`${rule.singleCount + rule.multipleCount} 题`} icon={Shuffle} />)}{availableExams.map((rule) => <LaunchCard key={`exam-${rule.id}`} href={buildPracticeLaunchHref({ mode: "MOCK_EXAM", levelCode: rule.level.code })} title={`${rule.level.code}级模拟考试`} description="限时作答，统一交卷后查看成绩。" meta={`${rule.singleCount + rule.multipleCount} 题 · ${rule.durationMinutes} 分钟`} icon={TimerReset} art="/art/exam-countdown-console.webp" />)}</div> : <div className="mt-8"><Card><CardContent className="p-12 text-center"><div className="text-lg font-extrabold">未分配题库，请联系老师</div><p className="mt-2 text-sm text-[var(--muted-foreground)]">老师为你分配字母类后，练习入口会出现在这里。</p></CardContent></Card></div>}</div></AppShell>;
+  return <AppShell role="student" currentPath="/student/practice/start"><div className="safe-bottom"><div className="receiver-panel instrument-grid rounded-[2rem] p-6 sm:p-8"><div className="flex flex-col gap-6 sm:flex-row sm:items-end sm:justify-between"><div><div className="flex flex-wrap items-center gap-3"><CallsignLabel value="TRAIN / MODE SELECT" /><Badge tone="blue">训练启动器</Badge></div><h1 className="mt-4 text-4xl font-black tracking-[-0.055em]">选择一条清晰的训练频段</h1><p className="mt-3 max-w-2xl text-sm leading-7 text-[var(--muted-foreground)]">所有练习模式统一在这里调谐；完成训练后可返回任务台查看成长记录或整理错题信号。</p><div className="mt-5 flex items-center gap-3 text-xs text-[var(--muted-foreground)]"><SignalMeter value={availableLevels.length ? 5 : 1} label="训练频道库存" />已发现 {channelCount} 个可用频道</div></div>{hasActiveLevel && activeSession ? <Link href={`/student/practice?session=${activeSession.id}`} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-[var(--primary)] px-5 text-sm font-bold text-[var(--primary-foreground)]"><ArrowRight className="size-4" />继续上次练习</Link> : null}</div><FrequencyScale active={4} className="mt-7" /></div>{hasActiveLevel ? <div className="mt-8 grid gap-5 md:grid-cols-2 xl:grid-cols-3">{availableLevels.map((rule) => <LaunchCard key={`level-${rule.id}`} href={buildPracticeLaunchHref({ mode: "LEVEL_COMPREHENSIVE", levelCode: rule.level.code })} title={`${rule.level.code}级综合训练`} description="覆盖本等级所有启用知识点，适合完整检测。" meta={`单选 ${rule.singleCount} · 多选 ${rule.multipleCount}`} icon={BookOpenCheck} />)}{availableKnowledge.filter((rule) => rule.knowledgePointId === selectedKnowledge || !params.knowledge).slice(0, 12).map((rule) => <LaunchCard key={`knowledge-${rule.id}`} href={buildPracticeLaunchHref({ mode: "KNOWLEDGE_POINT", levelCode: rule.level.code, knowledgePointId: rule.knowledgePointId })} title={rule.knowledgePoint.name} description="聚焦一个末级知识点，快速定位薄弱环节。" meta={`${rule.level.code}级 · ${rule.singleCount + rule.multipleCount} 题`} icon={Brain} />)}{orderLevel && orderTotal > 0 ? <LaunchCard key="order-active-level" href={buildPracticeLaunchHref({ mode: "QUESTION_ORDER", levelCode: orderLevel.code })} title={`${orderLevel.code}级顺序训练`} description={orderResumeDescription} meta={`${orderTotal} 题 · 完成 ${studentLevelProgress?.roundCount ?? 0} 轮`} icon={ListOrdered} /> : null}{availableLevels.filter((rule) => levelById.has(rule.levelId)).map((rule) => <LaunchCard key={`random-${rule.id}`} href={buildPracticeLaunchHref({ mode: "RANDOM_ALL", levelCode: rule.level.code })} title={`${rule.level.code}级智能随机`} description="优先抽取尚未完成的题目，减少重复曝光。" meta={`${rule.singleCount + rule.multipleCount} 题`} icon={Shuffle} />)}{availableExams.length > 0 ? availableExams.map((blueprint) => <LaunchCard key={`exam-${blueprint.id}`} href={buildPracticeLaunchHref({ mode: "MOCK_EXAM", levelCode: activeLevelAccess.activeLevel!.code, blueprintId: blueprint.id })} title={`${activeLevelAccess.activeLevel!.code}级·${blueprint.name}`} description="按教师配置的蓝图抽题，限时作答，统一交卷后查看成绩。" meta={`${blueprint.totalCount} 题 · ${blueprint.durationMinutes ? blueprint.durationMinutes + " 分钟" : "不限时"}`} icon={TimerReset} art="/art/exam-countdown-console.webp" />) : <Card><CardContent className="p-10 text-center"><div className="text-lg font-extrabold">尚未配置模拟测试蓝图</div><p className="mt-2 text-sm text-[var(--muted-foreground)]">老师为当前字母类配置蓝图后，模拟考试入口会出现在这里。</p></CardContent></Card>}</div> : <div className="mt-8"><Card><CardContent className="p-12 text-center"><div className="text-lg font-extrabold">未分配题库，请联系老师</div><p className="mt-2 text-sm text-[var(--muted-foreground)]">老师为你分配字母类后，练习入口会出现在这里。</p></CardContent></Card></div>}</div></AppShell>;
 }
 
 function LaunchCard({ href, title, description, meta, icon: Icon, art }: LaunchCardProps) {
