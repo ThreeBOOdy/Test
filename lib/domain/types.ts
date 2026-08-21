@@ -212,6 +212,8 @@ export type PublicPracticeSession = {
     expiresAt: string;
   };
   examResult?: PublicExamResult;
+  /** 随机刷题阶段性完成：全部题目已满足 reps>0、无到期、intervalDays>=7。 */
+  stageCompleted?: boolean;
   /** 顺序刷题跨会话进度：lastIndex 表示当前轮已完成题数，roundCount 表示已完整刷完的轮次。 */
   sequentialProgress?: {
     lastIndex: number;

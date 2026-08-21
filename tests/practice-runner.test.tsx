@@ -182,4 +182,17 @@ describe("PracticeRunner", () => {
     expect(screen.getByText("第 2 / 2 题")).toBeInTheDocument();
     expect(screen.getByText("下列哪些做法有助于减少业余电台干扰？")).toBeInTheDocument();
   });
+
+  it("shows the stage-complete encouragement for random sessions that reached long-term review", () => {
+    render(<PracticeRunner session={practiceSessionFixture({ mode: "RANDOM_ALL", title: "A级 · 智能随机练习", stageCompleted: true })} />);
+
+    expect(screen.getByText("阶段性完成")).toBeInTheDocument();
+    expect(screen.getByText(/所有题目已进入长期复习/)).toBeInTheDocument();
+  });
+
+  it("does not show the stage-complete banner unless the random stage flag is true", () => {
+    render(<PracticeRunner session={practiceSessionFixture({ mode: "RANDOM_ALL", title: "A级 · 智能随机练习", stageCompleted: false })} />);
+
+    expect(screen.queryByText("阶段性完成")).not.toBeInTheDocument();
+  });
 });

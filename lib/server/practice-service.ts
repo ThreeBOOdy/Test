@@ -4,7 +4,7 @@ import { prisma } from "@/lib/db";
 import { ApiError } from "@/lib/domain/api-error";
 import { parseJsonStringArray } from "@/lib/domain/json-string-array";
 import { BlueprintInsufficientQuestionError, selectExamBlueprintQuestions } from "@/lib/domain/exam-blueprints";
-import { selectPracticeQuestions, selectRandomPracticeQuestions, shuffle, sortQuestionsByBankNumber } from "@/lib/domain/practice-engine";
+import { isRandomStageCompleted, selectPracticeQuestions, selectRandomPracticeQuestions, sortQuestionsByBankNumber, type RandomQuestionState } from "@/lib/domain/practice-engine";
 import { createQuestionSnapshot, gradeQuestionSnapshot, toPublicQuestionSnapshot, type QuestionSnapshot } from "@/lib/domain/practice-snapshot";
 import { isWrongQuestionState, sortWrongQuestionStates } from "@/lib/domain/learning-state";
 import { advanceWrongQuestionMastery } from "@/lib/domain/wrong-question-mastery";
@@ -55,10 +55,13 @@ export async function createPracticeSession(userId: string, input: CreatePractic
   const records = await findQuestionRecords(level.id, point?.id, point?.path);
   const domainQuestions = records.map(toDomainQuestion);
   let selected: Question[];
+  let stageCompleted: boolean | undefined;
   if (mode === "RANDOM_ALL") {
     if (domainQuestions.length === 0) throw new ApiError("当前字母类下没有可用的题目", 409);
-    const answeredIds = await findAnsweredQuestionIds(userId, level.id);
-    selected = selectRandomPracticeQuestions(domainQuestions, answeredIds);
+    const stateByQuestionId = await findRandomQuestionStates(userId, level.id, domainQuestions.map((question) => question.id));
+    const answeredIds = new Set([...stateByQuestionId].filter(([, state]) => state.reps > 0).map(([questionId]) => questionId));
+    selected = selectRandomPracticeQuestions(domainQuestions, answeredIds, undefined, { stateByQuestionId });
+    stageCompleted = isRandomStageCompleted(domainQuestions, stateByQuestionId);
   } else {
     const rule = input.mode === "knowledge"
       ? await prisma.knowledgePracticeRule.findUnique({ where: { knowledgePointId_levelId: { knowledgePointId: point!.id, levelId: level.id } } })
@@ -66,7 +69,7 @@ export async function createPracticeSession(userId: string, input: CreatePractic
     if (!rule || !rule.enabled || (rule.singleCount === 0 && rule.multipleCount === 0)) throw new ApiError("教师尚未配置该练习的抽题规则", 409);
     selected = selectPracticeQuestions(domainQuestions, { mode, levelId: level.id, knowledgePointIds: point ? [...new Set(domainQuestions.map((question) => question.knowledgePointId))] : undefined, rule }).questions;
   }
-  return persistPracticeSession(userId, mode, level.id, point?.id ?? null, createSnapshots(records, selected));
+  return persistPracticeSession(userId, mode, level.id, point?.id ?? null, createSnapshots(records, selected), undefined, stageCompleted);
 }
 
 async function createMockExamSession(userId: string, levelId: string, blueprintId?: string) {
@@ -139,7 +142,7 @@ async function createWrongQuestionSession(userId: string, questionId: string | u
   return persistPracticeSession(userId, "WRONG_QUESTION", null, null, snapshots);
 }
 
-async function persistPracticeSession(userId: string, mode: PracticeMode, levelId: string | null, knowledgePointId: string | null, snapshots: QuestionSnapshot[], examRule?: { durationMinutes: number | null; passingCount: number }): Promise<PublicPracticeSession> {
+async function persistPracticeSession(userId: string, mode: PracticeMode, levelId: string | null, knowledgePointId: string | null, snapshots: QuestionSnapshot[], examRule?: { durationMinutes: number | null; passingCount: number }, stageCompleted?: boolean): Promise<PublicPracticeSession> {
   const singleCount = snapshots.filter((snapshot) => snapshot.type === "SINGLE_CHOICE").length;
   const multipleCount = snapshots.length - singleCount;
   const startedAt = new Date();
@@ -159,7 +162,7 @@ async function persistPracticeSession(userId: string, mode: PracticeMode, levelI
     });
     sequentialProgress = await getSequentialProgress(userId, levelId);
   }
-  return toPublicSession(session, snapshots, {}, publicExam, undefined, undefined, sequentialProgress ?? undefined);
+  return toPublicSession(session, snapshots, {}, publicExam, undefined, undefined, sequentialProgress ?? undefined, stageCompleted);
 }
 
 export async function getPracticeSession(userId: string, sessionId: string): Promise<PublicPracticeSession | null> {
@@ -183,7 +186,14 @@ export async function getPracticeSession(userId: string, sessionId: string): Pro
     ? toPublicExamResult(session.correctCount, session.questions.length, session.passingCountSnapshot ?? session.questions.length, session.completedAt, session.examSettlementSource ?? "STUDENT_SUBMISSION")
     : undefined;
   const sequentialProgress = session.mode === "QUESTION_ORDER" && session.levelId ? await getSequentialProgress(userId, session.levelId) : undefined;
-  return toPublicSession(session, snapshots, results, exam, draft, examResult, sequentialProgress ?? undefined);
+  let stageCompleted: boolean | undefined;
+  if (session.mode === "RANDOM_ALL" && session.levelId) {
+    const records = await findQuestionRecords(session.levelId);
+    const domainQuestions = records.map(toDomainQuestion);
+    const stateByQuestionId = await findRandomQuestionStates(userId, session.levelId, domainQuestions.map((question) => question.id));
+    stageCompleted = isRandomStageCompleted(domainQuestions, stateByQuestionId);
+  }
+  return toPublicSession(session, snapshots, results, exam, draft, examResult, sequentialProgress ?? undefined, stageCompleted);
 }
 
 export async function saveExamDraft(userId: string, sessionId: string, input: { answers: Record<string, string[]>; currentIndex: number; version: number }) {
@@ -385,12 +395,19 @@ async function findQuestionRecords(levelId: string, knowledgePointId?: string, k
   });
 }
 
-async function findAnsweredQuestionIds(userId: string, levelId: string) {
+async function findRandomQuestionStates(userId: string, levelId: string, questionIds: string[]): Promise<Map<string, RandomQuestionState>> {
   const states = await prisma.studentLevelQuestionState.findMany({
-    where: { userId, levelId, reps: { gt: 0 } },
-    select: { questionId: true },
+    where: { userId, levelId, questionId: { in: questionIds } },
+    select: { questionId: true, reps: true, favorite: true, ignored: true, dueAt: true, wrongCount: true, intervalDays: true },
   });
-  return new Set(states.map((state) => state.questionId));
+  return new Map(states.map((state) => [state.questionId, {
+    reps: state.reps,
+    favorite: state.favorite,
+    ignored: state.ignored,
+    dueAt: state.dueAt,
+    wrongCount: state.wrongCount,
+    intervalDays: state.intervalDays,
+  }]));
 }
 
 async function getSequentialProgress(userId: string, levelId: string) {
@@ -423,8 +440,8 @@ function createSnapshots(records: QuestionRecord[], questions: Question[]) {
   });
 }
 
-function toPublicSession(session: { id: string; mode: PracticeMode; learningMode: boolean; status: "IN_PROGRESS" | "COMPLETED" | "ABANDONED" }, snapshots: QuestionSnapshot[], results: Record<string, PublicAnswerResult>, exam?: { durationMinutes: number; passingCount: number; expiresAt: Date }, draft?: PublicPracticeSession["draft"], examResult?: PublicExamResult, sequentialProgress?: { lastIndex: number; roundCount: number }): PublicPracticeSession {
-  return { id: session.id, mode: session.mode, learningMode: session.learningMode, status: session.status, title: sessionTitle(session.mode, snapshots), total: snapshots.length, questions: snapshots.map(toPublicQuestionSnapshot), initialResults: session.mode === "MOCK_EXAM" ? {} : results, ...(exam ? { exam: { durationMinutes: exam.durationMinutes, passingCount: exam.passingCount, expiresAt: exam.expiresAt.toISOString() } } : {}), ...(draft ? { draft } : {}), ...(examResult ? { examResult } : {}), ...(sequentialProgress ? { sequentialProgress } : {}) };
+function toPublicSession(session: { id: string; mode: PracticeMode; learningMode: boolean; status: "IN_PROGRESS" | "COMPLETED" | "ABANDONED" }, snapshots: QuestionSnapshot[], results: Record<string, PublicAnswerResult>, exam?: { durationMinutes: number; passingCount: number; expiresAt: Date }, draft?: PublicPracticeSession["draft"], examResult?: PublicExamResult, sequentialProgress?: { lastIndex: number; roundCount: number }, stageCompleted?: boolean): PublicPracticeSession {
+  return { id: session.id, mode: session.mode, learningMode: session.learningMode, status: session.status, title: sessionTitle(session.mode, snapshots), total: snapshots.length, questions: snapshots.map(toPublicQuestionSnapshot), initialResults: session.mode === "MOCK_EXAM" ? {} : results, ...(exam ? { exam: { durationMinutes: exam.durationMinutes, passingCount: exam.passingCount, expiresAt: exam.expiresAt.toISOString() } } : {}), ...(draft ? { draft } : {}), ...(examResult ? { examResult } : {}), ...(sequentialProgress ? { sequentialProgress } : {}), ...(stageCompleted !== undefined ? { stageCompleted } : {}) };
 }
 
 async function getApprovedExplanations(questionIds: string[]): Promise<Array<StudentExplanation | null>> {

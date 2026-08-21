@@ -1,9 +1,13 @@
 import { describe, expect, it } from "vitest";
-import { InsufficientQuestionError, isAnswerCorrect, selectPracticeQuestions, selectPrioritizedRandomQuestions, selectRandomPracticeQuestions, sortQuestionsByBankNumber } from "../lib/domain/practice-engine";
+import { InsufficientQuestionError, isAnswerCorrect, isRandomStageCompleted, selectPracticeQuestions, selectPrioritizedRandomQuestions, selectRandomPracticeQuestions, sortQuestionsByBankNumber, type RandomQuestionState } from "../lib/domain/practice-engine";
 import type { Question } from "../lib/domain/types";
 
 function question(id: string, type: Question["type"], levelId = "A", knowledgePointId = "kp-1"): Question {
   return { id, type, levelIds: [levelId], knowledgePointId, stem: id, optionCount: 4, correctOptionCount: type === "SINGLE_CHOICE" ? 1 : 2, selectionSpec: type === "SINGLE_CHOICE" ? "4选1" : "4选2", options: [{ id: "A", text: "A" }, { id: "B", text: "B" }, { id: "C", text: "C" }, { id: "D", text: "D" }], correctOptionIds: type === "SINGLE_CHOICE" ? ["A"] : ["A", "C"], status: "ACTIVE" };
+}
+
+function randomState(overrides: Partial<RandomQuestionState> = {}): RandomQuestionState {
+  return { reps: 1, favorite: false, ignored: false, dueAt: null, wrongCount: 0, intervalDays: 0, ...overrides };
 }
 
 const bank = [
@@ -99,4 +103,121 @@ describe("practice engine", () => {
     expect(result).toHaveLength(5);
     expect(new Set(result.map((item) => item.id))).toEqual(new Set(questions.map((item) => item.id)));
   });
+
+  it("keeps unseen questions ahead of due cards and low-mastery cards", () => {
+
+    const now = new Date("2026-08-21T00:00:00.000Z");
+
+    const questions = ["unseen", "due", "low", "mastered"].map((id) => question(id, "SINGLE_CHOICE"));
+
+    const answeredIds = new Set(["due", "low", "mastered"]);
+
+    const stateByQuestionId = new Map<string, RandomQuestionState>([
+
+      ["due", randomState({ dueAt: new Date("2026-08-20T00:00:00.000Z"), wrongCount: 3 })],
+
+      ["low", randomState({ dueAt: new Date("2026-08-22T00:00:00.000Z"), intervalDays: 4 })],
+
+      ["mastered", randomState({ dueAt: new Date("2026-08-22T00:00:00.000Z"), intervalDays: 7 })],
+
+    ]);
+
+
+
+    const result = selectRandomPracticeQuestions(questions, answeredIds, () => 0.42, { stateByQuestionId, now });
+
+
+
+    expect(result[0].id).toBe("unseen");
+
+    expect(result.slice(1).map((item) => item.id)).toEqual(["due", "low", "mastered"]);
+
+  });
+
+
+
+  it("orders due cards by favorite, dueAt, wrongCount, then ignored after unseen are cleared", () => {
+
+    const now = new Date("2026-08-21T00:00:00.000Z");
+
+    const earlier = new Date("2026-08-19T00:00:00.000Z");
+
+    const laterDue = new Date("2026-08-20T00:00:00.000Z");
+
+    const future = new Date("2026-08-22T00:00:00.000Z");
+
+    const questions = ["favorite-due", "urgent", "ignored", "due-later", "favorite-mastered", "low", "mastered"].map((id) => question(id, "SINGLE_CHOICE"));
+
+    const answeredIds = new Set(questions.map((question) => question.id));
+
+    const stateByQuestionId = new Map<string, RandomQuestionState>([
+
+      ["favorite-due", randomState({ favorite: true, dueAt: laterDue, wrongCount: 4 })],
+
+      ["urgent", randomState({ dueAt: earlier, wrongCount: 5 })],
+
+      ["ignored", randomState({ dueAt: earlier, wrongCount: 2, ignored: true })],
+
+      ["due-later", randomState({ dueAt: laterDue, wrongCount: 1 })],
+
+      ["favorite-mastered", randomState({ favorite: true, dueAt: future, intervalDays: 7 })],
+
+      ["low", randomState({ dueAt: future, intervalDays: 5, wrongCount: 1 })],
+
+      ["mastered", randomState({ dueAt: future, intervalDays: 7 })],
+
+    ]);
+
+
+
+    const result = selectRandomPracticeQuestions(questions, answeredIds, () => 0.42, { stateByQuestionId, now });
+
+
+
+    expect(result.map((item) => item.id)).toEqual([
+
+      "favorite-due",
+
+      "urgent",
+
+      "ignored",
+
+      "due-later",
+
+      "favorite-mastered",
+
+      "low",
+
+      "mastered",
+
+    ]);
+
+  });
+
+
+
+  it("detects random stage completion only when every question has reps, no due card, and intervalDays >= 7", () => {
+
+    const now = new Date("2026-08-21T00:00:00.000Z");
+
+    const future = new Date("2026-08-28T00:00:00.000Z");
+
+    const mastered = randomState({ reps: 2, dueAt: future, intervalDays: 7 });
+
+
+
+    expect(isRandomStageCompleted([{ id: "q1" }, { id: "q2" }], new Map([["q1", mastered], ["q2", mastered]]), now)).toBe(true);
+
+    expect(isRandomStageCompleted([{ id: "q1" }, { id: "q2" }], new Map([["q1", mastered]]), now)).toBe(false);
+
+    expect(isRandomStageCompleted([{ id: "q1" }], new Map([["q1", { ...mastered, dueAt: new Date("2026-08-20T00:00:00.000Z") }]]), now)).toBe(false);
+
+    expect(isRandomStageCompleted([{ id: "q1" }], new Map([["q1", { ...mastered, intervalDays: 6 }]]), now)).toBe(false);
+
+    expect(isRandomStageCompleted([{ id: "q1" }], new Map([["q1", { ...mastered, reps: 0 }]]), now)).toBe(false);
+
+    expect(isRandomStageCompleted([], new Map(), now)).toBe(false);
+
+  });
+
 });
