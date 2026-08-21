@@ -38,6 +38,7 @@ beforeEach(async () => {
   await prisma.practiceAnswer.deleteMany();
   await prisma.practiceSessionQuestion.deleteMany();
   await prisma.practiceSession.deleteMany();
+  await prisma.studentLevelQuestionState.deleteMany();
   await prisma.wrongQuestion.deleteMany();
   await prisma.questionRevision.deleteMany();
   await prisma.questionImage.deleteMany();
@@ -47,6 +48,8 @@ beforeEach(async () => {
   await prisma.importBatch.deleteMany();
   await prisma.knowledgePracticeRule.deleteMany();
   await prisma.examRule.deleteMany();
+  await prisma.examBlueprintItem.deleteMany();
+  await prisma.examBlueprint.deleteMany();
   await prisma.levelPracticeRule.deleteMany();
   await deleteKnowledgePoints();
   // User.activeLevel has a RESTRICT FK to Level, so detach it before deleting levels.
@@ -72,6 +75,19 @@ async function createBaseRecords() {
   const point = await prisma.knowledgePoint.create({ data: { typeId: defaultType.id, code: "1.1", name: "Point", path: "/1/1.1", depth: 1 } });
   const question = await prisma.question.create({ data: { knowledgePointId: point.id, levels: { create: { levelId: level.id } }, externalQuestionCode: "Q-1", stem: "Original", type: "SINGLE_CHOICE", optionCount: 2, correctOptionCount: 1, selectionSpec: "2选1", options: [{ id: "A", text: "A" }, { id: "B", text: "B" }], correctOptionIds: ["A"] } });
   return { user, level, point, question };
+}
+
+async function createDefaultMockBlueprint(levelId: string, knowledgePointId: string, singleCount: number, multipleCount: number, durationMinutes = 40, passingCount = 1) {
+  return prisma.examBlueprint.create({
+    data: {
+      levelId,
+      name: "默认模拟测试",
+      durationMinutes,
+      passingCount,
+      isDefault: true,
+      items: { create: [{ knowledgePointId, singleCount, multipleCount }] },
+    },
+  });
 }
 
 async function correctAnswerFor(sessionId: string, questionId: string): Promise<string[]> {
@@ -480,7 +496,7 @@ describe("production database foundation", () => {
   const point = await prisma.knowledgePoint.create({ data: { typeId: defaultType.id, code: "9.3.1", name: "Exam Point", path: "/9/9.3/9.3.1", depth: 2 } });
     const single = await prisma.question.create({ data: { knowledgePointId: point.id, levels: { create: { levelId: level.id } }, externalQuestionCode: "E-1", stem: "Single", type: "SINGLE_CHOICE", optionCount: 2, correctOptionCount: 1, selectionSpec: "2选1", options: [{ id: "A", text: "A" }, { id: "B", text: "B" }], correctOptionIds: ["A"] } });
     const multiple = await prisma.question.create({ data: { knowledgePointId: point.id, levels: { create: { levelId: level.id } }, externalQuestionCode: "E-2", stem: "Multiple", type: "MULTIPLE_CHOICE", optionCount: 3, correctOptionCount: 2, selectionSpec: "3选2", options: [{ id: "A", text: "A" }, { id: "B", text: "B" }, { id: "C", text: "C" }], correctOptionIds: ["A", "C"] } });
-    await prisma.examRule.create({ data: { levelId: level.id, singleCount: 1, multipleCount: 1, durationMinutes: 40, passingCount: 1 } });
+    await createDefaultMockBlueprint(level.id, point.id, 1, 1);
 
     const session = await createPracticeSession(user.id, { mode: "exam", levelCode: "A" });
     const reloaded = await getPracticeSession(user.id, session.id);
@@ -494,9 +510,85 @@ describe("production database foundation", () => {
     expect(await prisma.practiceSession.findUniqueOrThrow({ where: { id: session.id } })).toMatchObject({ status: "COMPLETED", durationMinutesSnapshot: 40, passingCountSnapshot: 1, correctCount: 1, examSettlementSource: "STUDENT_SUBMISSION" });
   });
 
+  it("draws mock exam questions from blueprint item subtrees and ignores favorite/ignored flags", async () => {
+    const user = await prisma.user.create({ data: { username: "blueprint-subtree-user", displayName: "Blueprint Subtree User", passwordHash: "test", role: "STUDENT" } });
+    const level = await prisma.level.create({ data: { code: "A", name: "A Level" } });
+    await prisma.user.update({ where: { id: user.id }, data: { activeLevelId: level.id } });
+    const defaultType = await prisma.knowledgePointType.upsert({ where: { code: "DEFAULT" }, update: {}, create: { code: "DEFAULT", name: "默认" } });
+    const root = await prisma.knowledgePoint.create({ data: { typeId: defaultType.id, code: "BLUE", name: "Blueprint Root", path: "/blue/blueprint", depth: 0 } });
+    const childA = await prisma.knowledgePoint.create({ data: { typeId: defaultType.id, code: "BLUE.1", name: "Child A", path: "/blue/blueprint/blue.1", depth: 1, parentId: root.id } });
+    const childB = await prisma.knowledgePoint.create({ data: { typeId: defaultType.id, code: "BLUE.2", name: "Child B", path: "/blue/blueprint/blue.2", depth: 1, parentId: root.id } });
+    const outsidePoint = await prisma.knowledgePoint.create({ data: { typeId: defaultType.id, code: "BLUE.OUT", name: "Outside Point", path: "/blue/outside", depth: 0 } });
+    const single1 = await prisma.question.create({ data: { knowledgePointId: childA.id, levels: { create: { levelId: level.id } }, externalQuestionCode: "BLUE-S1", stem: "Blue S1", type: "SINGLE_CHOICE", optionCount: 2, correctOptionCount: 1, selectionSpec: "2选1", options: [{ id: "A", text: "A" }, { id: "B", text: "B" }], correctOptionIds: ["A"] } });
+    const single2 = await prisma.question.create({ data: { knowledgePointId: childA.id, levels: { create: { levelId: level.id } }, externalQuestionCode: "BLUE-S2", stem: "Blue S2", type: "SINGLE_CHOICE", optionCount: 2, correctOptionCount: 1, selectionSpec: "2选1", options: [{ id: "A", text: "A" }, { id: "B", text: "B" }], correctOptionIds: ["A"] } });
+    const multiple = await prisma.question.create({ data: { knowledgePointId: childB.id, levels: { create: { levelId: level.id } }, externalQuestionCode: "BLUE-M1", stem: "Blue M1", type: "MULTIPLE_CHOICE", optionCount: 3, correctOptionCount: 2, selectionSpec: "3选2", options: [{ id: "A", text: "A" }, { id: "B", text: "B" }, { id: "C", text: "C" }], correctOptionIds: ["A", "C"] } });
+    const outside = await prisma.question.create({ data: { knowledgePointId: outsidePoint.id, levels: { create: { levelId: level.id } }, externalQuestionCode: "BLUE-OUT", stem: "Outside", type: "SINGLE_CHOICE", optionCount: 2, correctOptionCount: 1, selectionSpec: "2选1", options: [{ id: "A", text: "A" }, { id: "B", text: "B" }], correctOptionIds: ["A"] } });
+    await prisma.examBlueprint.create({
+      data: {
+        levelId: level.id,
+        name: "按子树抽题",
+        durationMinutes: 40,
+        passingCount: 2,
+        isDefault: true,
+        items: {
+          create: [
+            { knowledgePointId: childA.id, singleCount: 2, multipleCount: 0 },
+            { knowledgePointId: childB.id, singleCount: 0, multipleCount: 1 },
+          ],
+        },
+      },
+    });
+    await prisma.studentLevelQuestionState.createMany({
+      data: [
+        { userId: user.id, levelId: level.id, questionId: single1.id, favorite: true },
+        { userId: user.id, levelId: level.id, questionId: single2.id, ignored: true },
+        { userId: user.id, levelId: level.id, questionId: multiple.id, ignored: true },
+      ],
+    });
+
+    const session = await createPracticeSession(user.id, { mode: "exam", levelCode: level.code });
+
+    expect(session.questions).toHaveLength(3);
+    expect(new Set(session.questions.map((question) => question.id))).toEqual(new Set([single1.id, single2.id, multiple.id]));
+    expect(session.questions.some((question) => question.id === outside.id)).toBe(false);
+  });
+
+  it("uses the requested non-default blueprint when creating a mock exam", async () => {
+    const user = await prisma.user.create({ data: { username: "blueprint-selected-user", displayName: "Blueprint Selected User", passwordHash: "test", role: "STUDENT" } });
+    const level = await prisma.level.create({ data: { code: "A", name: "A Level" } });
+    await prisma.user.update({ where: { id: user.id }, data: { activeLevelId: level.id } });
+    const defaultType = await prisma.knowledgePointType.upsert({ where: { code: "DEFAULT" }, update: {}, create: { code: "DEFAULT", name: "默认" } });
+    const defaultPoint = await prisma.knowledgePoint.create({ data: { typeId: defaultType.id, code: "BLUE.D", name: "Default Point", path: "/blue/default", depth: 0 } });
+    const selectedPoint = await prisma.knowledgePoint.create({ data: { typeId: defaultType.id, code: "BLUE.S", name: "Selected Point", path: "/blue/selected", depth: 0 } });
+    const defaultQuestion = await prisma.question.create({ data: { knowledgePointId: defaultPoint.id, levels: { create: { levelId: level.id } }, externalQuestionCode: "BLUE-DEF", stem: "Default Question", type: "SINGLE_CHOICE", optionCount: 2, correctOptionCount: 1, selectionSpec: "2选1", options: [{ id: "A", text: "A" }, { id: "B", text: "B" }], correctOptionIds: ["A"] } });
+    const selectedQuestion = await prisma.question.create({ data: { knowledgePointId: selectedPoint.id, levels: { create: { levelId: level.id } }, externalQuestionCode: "BLUE-SEL", stem: "Selected Question", type: "SINGLE_CHOICE", optionCount: 2, correctOptionCount: 1, selectionSpec: "2选1", options: [{ id: "A", text: "A" }, { id: "B", text: "B" }], correctOptionIds: ["A"] } });
+    await prisma.examBlueprint.create({ data: { levelId: level.id, name: "默认模拟测试", durationMinutes: 40, passingCount: 1, isDefault: true, items: { create: [{ knowledgePointId: defaultPoint.id, singleCount: 1, multipleCount: 0 }] } } });
+    const selectedBlueprint = await prisma.examBlueprint.create({ data: { levelId: level.id, name: "提高卷", durationMinutes: 40, passingCount: 1, isDefault: false, items: { create: [{ knowledgePointId: selectedPoint.id, singleCount: 1, multipleCount: 0 }] } } });
+
+    const session = await createPracticeSession(user.id, { mode: "exam", levelCode: level.code, blueprintId: selectedBlueprint.id });
+
+    expect(session.questions.map((question) => question.id)).toEqual([selectedQuestion.id]);
+    expect(session.questions.some((question) => question.id === defaultQuestion.id)).toBe(false);
+  });
+
+  it("blocks mock exam creation when blueprint inventory is insufficient", async () => {
+    const user = await prisma.user.create({ data: { username: "blueprint-insufficient-user", displayName: "Blueprint Insufficient User", passwordHash: "test", role: "STUDENT" } });
+    const level = await prisma.level.create({ data: { code: "A", name: "A Level" } });
+    await prisma.user.update({ where: { id: user.id }, data: { activeLevelId: level.id } });
+    const defaultType = await prisma.knowledgePointType.upsert({ where: { code: "DEFAULT" }, update: {}, create: { code: "DEFAULT", name: "默认" } });
+    const point = await prisma.knowledgePoint.create({ data: { typeId: defaultType.id, code: "BLUE.I", name: "Inventory Point", path: "/blue/inventory", depth: 0 } });
+    await prisma.question.create({ data: { knowledgePointId: point.id, levels: { create: { levelId: level.id } }, externalQuestionCode: "BLUE-INS", stem: "Only One", type: "SINGLE_CHOICE", optionCount: 2, correctOptionCount: 1, selectionSpec: "2选1", options: [{ id: "A", text: "A" }, { id: "B", text: "B" }], correctOptionIds: ["A"] } });
+    await createDefaultMockBlueprint(level.id, point.id, 2, 0);
+
+    await expect(createPracticeSession(user.id, { mode: "exam", levelCode: level.code })).rejects.toMatchObject({
+      status: 409,
+      message: expect.stringContaining("Inventory Point"),
+    });
+  });
+
   it("settles expired mock exams from drafts without exposing answer keys", async () => {
-    const { user, level, question } = await createBaseRecords();
-    await prisma.examRule.create({ data: { levelId: level.id, singleCount: 1, multipleCount: 0, durationMinutes: 40, passingCount: 1 } });
+    const { user, level, point, question } = await createBaseRecords();
+    await createDefaultMockBlueprint(level.id, point.id, 1, 0);
     const session = await createPracticeSession(user.id, { mode: "exam", levelCode: level.code });
     await saveExamDraft(user.id, session.id, { answers: { [question.id]: await correctAnswerFor(session.id, question.id) }, currentIndex: 0, version: 0 });
     await prisma.practiceSession.update({ where: { id: session.id }, data: { expiresAt: new Date(Date.now() - 1_000) } });
@@ -515,8 +607,8 @@ describe("production database foundation", () => {
   });
 
   it("abandons an active mock exam without grading it or updating wrong questions", async () => {
-    const { user, level, question } = await createBaseRecords();
-    await prisma.examRule.create({ data: { levelId: level.id, singleCount: 1, multipleCount: 0, durationMinutes: 40, passingCount: 1 } });
+    const { user, level, point, question } = await createBaseRecords();
+    await createDefaultMockBlueprint(level.id, point.id, 1, 0);
     const session = await createPracticeSession(user.id, { mode: "exam", levelCode: level.code });
     await saveExamDraft(user.id, session.id, { answers: { [question.id]: ["B"] }, currentIndex: 0, version: 0 });
 
@@ -621,7 +713,7 @@ describe("production database foundation", () => {
   it("persists and resumes versioned mock exam drafts without exposing grading data", async () => {
     const { user, level, point, question } = await createBaseRecords();
     const second = await prisma.question.create({ data: { knowledgePointId: point.id, levels: { create: { levelId: level.id } }, externalQuestionCode: "Q-2", stem: "Second", type: "SINGLE_CHOICE", optionCount: 2, correctOptionCount: 1, selectionSpec: "2选1", options: [{ id: "A", text: "A" }, { id: "B", text: "B" }], correctOptionIds: ["B"] } });
-    await prisma.examRule.create({ data: { levelId: level.id, singleCount: 2, multipleCount: 0, durationMinutes: 40, passingCount: 1 } });
+    await createDefaultMockBlueprint(level.id, point.id, 2, 0);
     const session = await createPracticeSession(user.id, { mode: "exam", levelCode: level.code });
 
     const saved = await saveExamDraft(user.id, session.id, { answers: { [question.id]: ["A"] }, currentIndex: 1, version: 0 });
@@ -636,8 +728,8 @@ describe("production database foundation", () => {
   });
 
   it("rejects draft writes after mock exam settlement and removes the draft", async () => {
-    const { user, level, question } = await createBaseRecords();
-    await prisma.examRule.create({ data: { levelId: level.id, singleCount: 1, multipleCount: 0, durationMinutes: 40, passingCount: 1 } });
+    const { user, level, point, question } = await createBaseRecords();
+    await createDefaultMockBlueprint(level.id, point.id, 1, 0);
     const session = await createPracticeSession(user.id, { mode: "exam", levelCode: level.code });
     await saveExamDraft(user.id, session.id, { answers: { [question.id]: ["A"] }, currentIndex: 0, version: 0 });
     await submitMockExam(user.id, session.id, [{ questionId: question.id, selectedOptionIds: ["A"] }]);
@@ -647,8 +739,8 @@ describe("production database foundation", () => {
   });
 
   it("rejects draft writes after an abandoned mock exam", async () => {
-    const { user, level, question } = await createBaseRecords();
-    await prisma.examRule.create({ data: { levelId: level.id, singleCount: 1, multipleCount: 0, durationMinutes: 40, passingCount: 1 } });
+    const { user, level, point, question } = await createBaseRecords();
+    await createDefaultMockBlueprint(level.id, point.id, 1, 0);
     const session = await createPracticeSession(user.id, { mode: "exam", levelCode: level.code });
     await prisma.practiceSession.update({ where: { id: session.id }, data: { status: "ABANDONED" } });
 

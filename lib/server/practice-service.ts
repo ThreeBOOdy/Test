@@ -3,6 +3,7 @@ import { ExamSettlementSource, Prisma } from "@/generated/prisma/client";
 import { prisma } from "@/lib/db";
 import { ApiError } from "@/lib/domain/api-error";
 import { parseJsonStringArray } from "@/lib/domain/json-string-array";
+import { BlueprintInsufficientQuestionError, selectExamBlueprintQuestions } from "@/lib/domain/exam-blueprints";
 import { selectPracticeQuestions, selectPrioritizedRandomQuestions, shuffle, sortQuestionsByBankNumber } from "@/lib/domain/practice-engine";
 import { createQuestionSnapshot, gradeQuestionSnapshot, toPublicQuestionSnapshot, type QuestionSnapshot } from "@/lib/domain/practice-snapshot";
 import { advanceWrongQuestionMastery } from "@/lib/domain/wrong-question-mastery";
@@ -10,10 +11,11 @@ import { completeReviewCardsForSession } from "@/lib/server/review-plan-service"
 import { awardPracticeCompletion, awardWrongClearCompletion } from "@/lib/server/rpg-service";
 import { getStudentActiveLevelAccess, requireAssignedActiveLevel } from "@/lib/server/student-level-access";
 import { parseStudentExplanation, type StudentExplanation } from "@/lib/domain/student-explanation";
-import type { ExamRule, PracticeMode, PublicAnswerResult, PublicExamResult, PublicPracticeSession, Question, QuestionOption } from "@/lib/domain/types";
+import type { PracticeMode, PublicAnswerResult, PublicExamResult, PublicPracticeSession, Question, QuestionOption } from "@/lib/domain/types";
 
 type CreatePracticeRequest =
-  | { mode: "level" | "order" | "random" | "exam"; levelCode: string }
+  | { mode: "level" | "order" | "random"; levelCode: string }
+  | { mode: "exam"; levelCode: string; blueprintId?: string }
   | { mode: "knowledge"; levelCode: string; knowledgePointId: string }
   | { mode: "wrong"; questionId?: string };
 
@@ -42,7 +44,7 @@ export async function createPracticeSession(userId: string, input: CreatePractic
   if (activeLevel.code !== input.levelCode) throw new ApiError("只能练习当前分配的字母类", 403);
   const level = await prisma.level.findFirst({ where: { code: input.levelCode, enabled: true } });
   if (!level) throw new ApiError("所选等级不存在或已停用", 404);
-  if (input.mode === "exam") return createMockExamSession(userId, level.id);
+  if (input.mode === "exam") return createMockExamSession(userId, level.id, input.blueprintId);
 
   const mode: PracticeMode = input.mode === "knowledge" ? "KNOWLEDGE_POINT" : input.mode === "order" ? "QUESTION_ORDER" : input.mode === "random" ? "RANDOM_ALL" : "LEVEL_COMPREHENSIVE";
   const point = input.mode === "knowledge" ? await prisma.knowledgePoint.findFirst({ where: { id: input.knowledgePointId, enabled: true } }) : null;
@@ -67,14 +69,43 @@ export async function createPracticeSession(userId: string, input: CreatePractic
   return persistPracticeSession(userId, mode, level.id, point?.id ?? null, createSnapshots(records, selected));
 }
 
-async function createMockExamSession(userId: string, levelId: string) {
-  const rule = await prisma.examRule.findFirst({ where: { levelId } });
-  if (!rule || !rule.enabled) throw new ApiError("教师尚未配置该等级的模拟考试", 409);
-  const records = await findQuestionRecords(levelId);
-  const questions = selectPracticeQuestions(records.map(toDomainQuestion), { mode: "MOCK_EXAM", levelId, rule }).questions;
-  return persistPracticeSession(userId, "MOCK_EXAM", levelId, null, createSnapshots(records, questions), {
-    durationMinutes: rule.durationMinutes,
-    passingCount: rule.passingCount,
+async function createMockExamSession(userId: string, levelId: string, blueprintId?: string) {
+  const blueprint = await prisma.examBlueprint.findFirst({
+    where: { levelId, enabled: true, ...(blueprintId ? { id: blueprintId } : { isDefault: true }) },
+    include: { items: { include: { knowledgePoint: { select: { id: true, name: true, path: true } } } } },
+  });
+  if (!blueprint) throw new ApiError(blueprintId ? "所选模拟测试蓝图不存在或已停用" : "教师尚未配置该等级的模拟考试", 409);
+  if (blueprint.items.length === 0) throw new ApiError("模拟测试蓝图未配置题目", 409);
+
+  const itemResults = await Promise.all(blueprint.items.map(async (item) => {
+    const records = await findQuestionRecords(levelId, item.knowledgePointId, item.knowledgePoint.path);
+    const questions = records.map(toDomainQuestion);
+    return {
+      records,
+      pool: {
+        knowledgePointId: item.knowledgePointId,
+        knowledgePointName: item.knowledgePoint.name,
+        singleCount: item.singleCount,
+        multipleCount: item.multipleCount,
+        singlePool: questions.filter((question) => question.type === "SINGLE_CHOICE"),
+        multiplePool: questions.filter((question) => question.type === "MULTIPLE_CHOICE"),
+      },
+    };
+  }));
+  const allRecords = itemResults.flatMap((result) => result.records);
+  const pools = itemResults.map((result) => result.pool);
+
+  let questions: Question[];
+  try {
+    questions = selectExamBlueprintQuestions(pools);
+  } catch (error) {
+    if (error instanceof BlueprintInsufficientQuestionError) throw new ApiError(error.message, 409);
+    throw error;
+  }
+
+  return persistPracticeSession(userId, "MOCK_EXAM", levelId, null, createSnapshots(allRecords, questions), {
+    durationMinutes: blueprint.durationMinutes,
+    passingCount: blueprint.passingCount,
   });
 }
 
@@ -91,17 +122,18 @@ async function createWrongQuestionSession(userId: string, questionId: string | u
   return persistPracticeSession(userId, "WRONG_QUESTION", null, null, snapshots);
 }
 
-async function persistPracticeSession(userId: string, mode: PracticeMode, levelId: string | null, knowledgePointId: string | null, snapshots: QuestionSnapshot[], examRule?: Pick<ExamRule, "durationMinutes" | "passingCount">): Promise<PublicPracticeSession> {
+async function persistPracticeSession(userId: string, mode: PracticeMode, levelId: string | null, knowledgePointId: string | null, snapshots: QuestionSnapshot[], examRule?: { durationMinutes: number | null; passingCount: number }): Promise<PublicPracticeSession> {
   const singleCount = snapshots.filter((snapshot) => snapshot.type === "SINGLE_CHOICE").length;
   const multipleCount = snapshots.length - singleCount;
   const startedAt = new Date();
-  const expiresAt = examRule ? new Date(startedAt.getTime() + examRule.durationMinutes * 60_000) : null;
+  const expiresAt = examRule && examRule.durationMinutes != null ? new Date(startedAt.getTime() + examRule.durationMinutes * 60_000) : null;
   const session = await prisma.$transaction(async (tx) => {
     const created = await tx.practiceSession.create({ data: { userId, mode, levelId, knowledgePointId, singleCountSnapshot: singleCount, multipleCountSnapshot: multipleCount, startedAt, expiresAt, durationMinutesSnapshot: examRule?.durationMinutes, passingCountSnapshot: examRule?.passingCount } });
     await tx.practiceSessionQuestion.createMany({ data: snapshots.map((snapshot, position) => ({ sessionId: created.id, questionId: snapshot.questionId, position, snapshot: snapshot as unknown as Prisma.InputJsonValue })) });
     return created;
   });
-  return toPublicSession(session, snapshots, {}, examRule && expiresAt ? { ...examRule, expiresAt } : undefined);
+  const publicExam = examRule && examRule.durationMinutes != null && expiresAt ? { durationMinutes: examRule.durationMinutes, passingCount: examRule.passingCount, expiresAt } : undefined;
+  return toPublicSession(session, snapshots, {}, publicExam);
 }
 
 export async function getPracticeSession(userId: string, sessionId: string): Promise<PublicPracticeSession | null> {
