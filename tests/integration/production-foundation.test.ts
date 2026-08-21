@@ -6,6 +6,7 @@ import { commitImportBatch, getImportBatchReport, revertImportBatch } from "../.
 import { abandonMockExam, createPracticeSession, getPracticeSession, saveExamDraft, settleExpiredMockExams, submitMockExam, submitPracticeAnswer } from "../../lib/server/practice-service";
 import { createSession, findSessionUser, revokeSession, revokeUserSessions } from "../../lib/server/session";
 import { getTeacherLearningStatistics } from "../../lib/server/learning-statistics-service";
+import { getTodayReviewPlan } from "../../lib/server/review-plan-service";
 
 const connectionString = process.env.DATABASE_URL;
 if (!connectionString) throw new Error("DATABASE_URL is required for integration tests");
@@ -344,6 +345,94 @@ describe("production database foundation", () => {
       difficulty: 4.5,
       lastResult: "CORRECT",
     });
+  });
+
+  it("generates today's review from FSRS due states and weak knowledge points, not legacy WrongQuestion rows", async () => {
+    const level = await prisma.level.create({ data: { code: "A", name: "A Level" } });
+    const user = await prisma.user.create({ data: { username: "review-fsrs-user", displayName: "Review FSRS User", passwordHash: "test", role: "STUDENT", activeLevelId: level.id } });
+    const defaultType = await prisma.knowledgePointType.upsert({ where: { code: "DEFAULT" }, update: {}, create: { code: "DEFAULT", name: "默认" } });
+    const duePoint = await prisma.knowledgePoint.create({ data: { typeId: defaultType.id, code: "FSRS.1", name: "Due Point", path: "/fsrs/due", depth: 1 } });
+    const weakPoint = await prisma.knowledgePoint.create({ data: { typeId: defaultType.id, code: "FSRS.2", name: "Weak Point", path: "/fsrs/weak", depth: 1 } });
+    const legacyPoint = await prisma.knowledgePoint.create({ data: { typeId: defaultType.id, code: "FSRS.3", name: "Legacy Point", path: "/fsrs/legacy", depth: 1 } });
+    const [dueQuestion, weakQuestionOne, weakQuestionTwo, legacyQuestion] = await Promise.all([
+      prisma.question.create({ data: { knowledgePointId: duePoint.id, levels: { create: { levelId: level.id } }, externalQuestionCode: "FSRS-DUE", stem: "Due FSRS question", type: "SINGLE_CHOICE", optionCount: 2, correctOptionCount: 1, selectionSpec: "2选1", options: [{ id: "A", text: "A" }, { id: "B", text: "B" }], correctOptionIds: ["A"] } }),
+      prisma.question.create({ data: { knowledgePointId: weakPoint.id, levels: { create: { levelId: level.id } }, externalQuestionCode: "FSRS-WEAK-1", stem: "Weak one", type: "SINGLE_CHOICE", optionCount: 2, correctOptionCount: 1, selectionSpec: "2选1", options: [{ id: "A", text: "A" }, { id: "B", text: "B" }], correctOptionIds: ["A"] } }),
+      prisma.question.create({ data: { knowledgePointId: weakPoint.id, levels: { create: { levelId: level.id } }, externalQuestionCode: "FSRS-WEAK-2", stem: "Weak two", type: "SINGLE_CHOICE", optionCount: 2, correctOptionCount: 1, selectionSpec: "2选1", options: [{ id: "A", text: "A" }, { id: "B", text: "B" }], correctOptionIds: ["A"] } }),
+      prisma.question.create({ data: { knowledgePointId: legacyPoint.id, levels: { create: { levelId: level.id } }, externalQuestionCode: "FSRS-LEGACY", stem: "Legacy wrong only", type: "SINGLE_CHOICE", optionCount: 2, correctOptionCount: 1, selectionSpec: "2选1", options: [{ id: "A", text: "A" }, { id: "B", text: "B" }], correctOptionIds: ["A"] } }),
+    ]);
+    await prisma.wrongQuestion.create({ data: { userId: user.id, questionId: legacyQuestion.id, wrongCount: 9 } });
+    await prisma.studentLevelQuestionState.createMany({
+      data: [
+        {
+          userId: user.id,
+          levelId: level.id,
+          questionId: dueQuestion.id,
+          state: "RELEARNING",
+          dueAt: new Date("2026-08-21T00:00:00.000Z"),
+          stability: 0.8,
+          difficulty: 8,
+          reps: 3,
+          lapses: 2,
+          intervalDays: 0,
+          lastReviewedAt: new Date("2026-08-21T00:00:00.000Z"),
+          favorite: false,
+          ignored: false,
+          wrongCount: 3,
+          correctCount: 0,
+          lastResult: "INCORRECT",
+        },
+        {
+          userId: user.id,
+          levelId: level.id,
+          questionId: weakQuestionOne.id,
+          state: "REVIEW",
+          dueAt: new Date("2026-08-22T00:00:00.000Z"),
+          stability: 2,
+          difficulty: 9,
+          reps: 6,
+          lapses: 2,
+          intervalDays: 1,
+          lastReviewedAt: new Date("2026-08-20T00:00:00.000Z"),
+          favorite: false,
+          ignored: false,
+          wrongCount: 4,
+          correctCount: 2,
+          lastResult: "CORRECT",
+        },
+        {
+          userId: user.id,
+          levelId: level.id,
+          questionId: weakQuestionTwo.id,
+          state: "REVIEW",
+          dueAt: new Date("2026-08-22T00:00:00.000Z"),
+          stability: 1.5,
+          difficulty: 7,
+          reps: 3,
+          lapses: 1,
+          intervalDays: 1,
+          lastReviewedAt: new Date("2026-08-20T00:00:00.000Z"),
+          favorite: false,
+          ignored: false,
+          wrongCount: 2,
+          correctCount: 1,
+          lastResult: "CORRECT",
+        },
+      ],
+    });
+
+    const now = new Date("2026-08-21T12:00:00.000Z");
+    const plan = await getTodayReviewPlan(user.id, now);
+    const cardQuestionIds = plan.cards.map((card) => card.questionId);
+
+    expect(cardQuestionIds).toContain(dueQuestion.id);
+    expect(cardQuestionIds).toContain(weakQuestionOne.id);
+    expect(cardQuestionIds).toContain(weakQuestionTwo.id);
+    expect(cardQuestionIds).not.toContain(legacyQuestion.id);
+    expect(plan.cards.find((card) => card.questionId === dueQuestion.id)).toMatchObject({ source: "WRONG_QUESTION" });
+    expect(plan.cards.filter((card) => card.questionId === weakQuestionOne.id || card.questionId === weakQuestionTwo.id).every((card) => card.source === "WEAK_KNOWLEDGE")).toBe(true);
+
+    const existing = await getTodayReviewPlan(user.id, now);
+    expect(existing.id).toBe(plan.id);
   });
 
   it("draws practice questions from a K letter-class and injects K into snapshots", async () => {

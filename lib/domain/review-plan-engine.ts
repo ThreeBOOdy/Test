@@ -7,11 +7,17 @@ export type ReviewCardDraft = {
   priority: number;
 };
 
-export type WrongQuestionCandidate = {
+export type FsrsDueQuestionCandidate = {
   questionId: string;
   knowledgePointId: string;
+  dueAt: Date | string;
+  difficulty: number;
+  stability: number;
+  lapses: number;
   wrongCount: number;
-  lastWrongAt: Date | string;
+  favorite: boolean;
+  ignored: boolean;
+  lastReviewedAt: Date | string | null;
 };
 
 export type WeakKnowledgeCandidate = {
@@ -19,6 +25,8 @@ export type WeakKnowledgeCandidate = {
   answered: number;
   correct: number;
   accuracy: number;
+  maxDifficulty?: number;
+  totalLapses?: number;
 };
 
 export type QuestionCandidate = {
@@ -27,17 +35,18 @@ export type QuestionCandidate = {
 };
 
 export type BuildReviewCardsInput = {
-  wrongQuestions: WrongQuestionCandidate[];
+  dueQuestions: FsrsDueQuestionCandidate[];
   weakKnowledgePoints: WeakKnowledgeCandidate[];
   questions: QuestionCandidate[];
   target: number;
-  wrongQuestionLimit?: number;
+  dueQuestionLimit?: number;
   weakKnowledgeLimit?: number;
   random?: () => number;
 };
 
 export const DAILY_REVIEW_TARGET = 10;
-export const DEFAULT_WRONG_QUESTION_LIMIT = 5;
+export const DEFAULT_DUE_QUESTION_LIMIT = 5;
+export const DEFAULT_WRONG_QUESTION_LIMIT = DEFAULT_DUE_QUESTION_LIMIT;
 export const DEFAULT_WEAK_KNOWLEDGE_LIMIT = 5;
 export const MIN_WEAK_ANSWER_COUNT = 3;
 export const WEAK_ACCURACY_THRESHOLD = 80;
@@ -57,6 +66,26 @@ function timestamp(value: Date | string) {
   return value instanceof Date ? value.getTime() : new Date(value).getTime();
 }
 
+function compareDue(
+  left: FsrsDueQuestionCandidate,
+  right: FsrsDueQuestionCandidate,
+): number {
+  if (left.favorite !== right.favorite) return left.favorite ? -1 : 1;
+  const leftDue = timestamp(left.dueAt);
+  const rightDue = timestamp(right.dueAt);
+  if (leftDue !== rightDue) return leftDue - rightDue;
+  if (left.wrongCount !== right.wrongCount) return right.wrongCount - left.wrongCount;
+  if (left.difficulty !== right.difficulty) return right.difficulty - left.difficulty;
+  return Number(left.ignored) - Number(right.ignored);
+}
+
+function duePriority(item: FsrsDueQuestionCandidate): number {
+  const difficultyBoost = Math.max(0, Math.round((item.difficulty - 5) * 100));
+  const lapseBoost = item.lapses * 20;
+  const wrongBoost = Math.min(999, item.wrongCount * 10);
+  return 2000 + difficultyBoost + lapseBoost + wrongBoost;
+}
+
 export function computeExamSprintTarget(input: { totalCandidates: number; daysUntilExam: number; baseTarget?: number }): number {
   const base = input.baseTarget ?? DAILY_REVIEW_TARGET;
   const days = Math.max(1, Math.floor(input.daysUntilExam));
@@ -67,27 +96,32 @@ export function computeExamSprintTarget(input: { totalCandidates: number; daysUn
 export function buildReviewCards(input: BuildReviewCardsInput): ReviewCardDraft[] {
   const random = input.random ?? Math.random;
   const target = Math.max(0, Math.floor(input.target));
-  const wrongQuestionLimit = Math.max(0, input.wrongQuestionLimit ?? DEFAULT_WRONG_QUESTION_LIMIT);
+  const dueQuestionLimit = Math.max(0, input.dueQuestionLimit ?? DEFAULT_DUE_QUESTION_LIMIT);
   const weakKnowledgeLimit = Math.max(0, input.weakKnowledgeLimit ?? DEFAULT_WEAK_KNOWLEDGE_LIMIT);
 
-  const selectedWrong = [...input.wrongQuestions]
-    .sort((left, right) => right.wrongCount - left.wrongCount || timestamp(left.lastWrongAt) - timestamp(right.lastWrongAt))
-    .slice(0, Math.min(wrongQuestionLimit, target))
+  const selectedDue = [...input.dueQuestions]
+    .sort(compareDue)
+    .slice(0, Math.min(dueQuestionLimit, target))
     .map((item) => ({
       questionId: item.questionId,
       knowledgePointId: item.knowledgePointId,
       source: "WRONG_QUESTION" as const,
-      priority: 1000 + item.wrongCount,
+      priority: duePriority(item),
     }));
 
-  const usedQuestionIds = new Set(selectedWrong.map((item) => item.questionId));
-  const cards: ReviewCardDraft[] = [...selectedWrong];
+  const usedQuestionIds = new Set(selectedDue.map((item) => item.questionId));
+  const cards: ReviewCardDraft[] = [...selectedDue];
 
   if (cards.length >= target) return cards;
 
   const weakPoints = input.weakKnowledgePoints
     .filter((point) => point.answered >= MIN_WEAK_ANSWER_COUNT && point.accuracy < WEAK_ACCURACY_THRESHOLD)
-    .sort((left, right) => left.accuracy - right.accuracy || right.answered - left.answered)
+    .sort(
+      (left, right) =>
+        left.accuracy - right.accuracy ||
+        right.answered - left.answered ||
+        (right.maxDifficulty ?? 0) - (left.maxDifficulty ?? 0),
+    )
     .slice(0, weakKnowledgeLimit);
 
   const pools = weakPoints

@@ -3,15 +3,37 @@ import {
   buildReviewCards,
   computeExamSprintTarget,
   DAILY_REVIEW_TARGET,
+  DEFAULT_DUE_QUESTION_LIMIT,
   DEFAULT_WEAK_KNOWLEDGE_LIMIT,
-  DEFAULT_WRONG_QUESTION_LIMIT,
   WEAK_ACCURACY_THRESHOLD,
 } from "@/lib/domain/review-plan-engine";
-import type { BuildReviewCardsInput } from "@/lib/domain/review-plan-engine";
+import type { BuildReviewCardsInput, FsrsDueQuestionCandidate } from "@/lib/domain/review-plan-engine";
 
-const wrongQuestions = [
-  { questionId: "w-1", knowledgePointId: "kp-1", wrongCount: 3, lastWrongAt: new Date("2026-08-01T00:00:00.000Z") },
-  { questionId: "w-2", knowledgePointId: "kp-2", wrongCount: 1, lastWrongAt: new Date("2026-08-10T00:00:00.000Z") },
+const dueQuestions: FsrsDueQuestionCandidate[] = [
+  {
+    questionId: "d-1",
+    knowledgePointId: "kp-1",
+    dueAt: new Date("2026-08-01T00:00:00.000Z"),
+    difficulty: 7,
+    stability: 2,
+    lapses: 1,
+    wrongCount: 3,
+    favorite: false,
+    ignored: false,
+    lastReviewedAt: new Date("2026-07-30T00:00:00.000Z"),
+  },
+  {
+    questionId: "d-2",
+    knowledgePointId: "kp-2",
+    dueAt: new Date("2026-08-10T00:00:00.000Z"),
+    difficulty: 6,
+    stability: 1.5,
+    lapses: 0,
+    wrongCount: 1,
+    favorite: false,
+    ignored: false,
+    lastReviewedAt: new Date("2026-08-09T00:00:00.000Z"),
+  },
 ];
 
 const weakKnowledgePoints = [
@@ -22,17 +44,17 @@ const weakKnowledgePoints = [
 ];
 
 const questions = [
-  { id: "q-1", knowledgePointId: "kp-3", levelId: "A" },
-  { id: "q-2", knowledgePointId: "kp-3", levelId: "A" },
-  { id: "q-3", knowledgePointId: "kp-4", levelId: "A" },
-  { id: "q-4", knowledgePointId: "kp-4", levelId: "A" },
-  { id: "q-5", knowledgePointId: "kp-5", levelId: "A" },
-  { id: "q-6", knowledgePointId: "kp-6", levelId: "A" },
+  { id: "q-1", knowledgePointId: "kp-3" },
+  { id: "q-2", knowledgePointId: "kp-3" },
+  { id: "q-3", knowledgePointId: "kp-4" },
+  { id: "q-4", knowledgePointId: "kp-4" },
+  { id: "q-5", knowledgePointId: "kp-5" },
+  { id: "q-6", knowledgePointId: "kp-6" },
 ];
 
 function input(overrides: Partial<BuildReviewCardsInput> = {}): BuildReviewCardsInput {
   return {
-    wrongQuestions,
+    dueQuestions,
     weakKnowledgePoints,
     questions,
     target: DAILY_REVIEW_TARGET,
@@ -41,13 +63,77 @@ function input(overrides: Partial<BuildReviewCardsInput> = {}): BuildReviewCards
 }
 
 describe("review plan engine", () => {
-  it("puts unmastered wrong questions first with higher priority", () => {
+  it("puts due FSRS questions first with higher priority", () => {
     const cards = buildReviewCards(input({ target: 10, random: () => 0.42 }));
 
-    expect(cards.slice(0, 2).map((card) => card.questionId)).toEqual(["w-1", "w-2"]);
+    expect(cards.slice(0, 2).map((card) => card.questionId)).toEqual(["d-1", "d-2"]);
     expect(cards.slice(0, 2).every((card) => card.source === "WRONG_QUESTION")).toBe(true);
     expect(cards[0].priority).toBeGreaterThan(cards[2].priority);
     expect(cards[0].priority).toBeGreaterThan(cards[1].priority);
+  });
+
+  it("sorts due questions by favorite, dueAt, wrong count, and defers ignored", () => {
+    const due = [
+      {
+        questionId: "later-wrong",
+        knowledgePointId: "kp-1",
+        dueAt: new Date("2026-08-12T00:00:00.000Z"),
+        difficulty: 5,
+        stability: 1,
+        lapses: 0,
+        wrongCount: 1,
+        favorite: false,
+        ignored: false,
+        lastReviewedAt: null,
+      },
+      {
+        questionId: "favorite",
+        knowledgePointId: "kp-2",
+        dueAt: new Date("2026-08-12T00:00:00.000Z"),
+        difficulty: 8,
+        stability: 1,
+        lapses: 2,
+        wrongCount: 4,
+        favorite: true,
+        ignored: false,
+        lastReviewedAt: null,
+      },
+      {
+        questionId: "urgent",
+        knowledgePointId: "kp-3",
+        dueAt: new Date("2026-08-11T00:00:00.000Z"),
+        difficulty: 6,
+        stability: 1,
+        lapses: 0,
+        wrongCount: 5,
+        favorite: false,
+        ignored: false,
+        lastReviewedAt: null,
+      },
+      {
+        questionId: "ignored",
+        knowledgePointId: "kp-4",
+        dueAt: new Date("2026-08-11T00:00:00.000Z"),
+        difficulty: 9,
+        stability: 1,
+        lapses: 1,
+        wrongCount: 2,
+        favorite: false,
+        ignored: true,
+        lastReviewedAt: null,
+      },
+    ];
+
+    const cards = buildReviewCards(input({
+      dueQuestions: due,
+      weakKnowledgePoints: [],
+      questions: [],
+      target: 4,
+      dueQuestionLimit: 4,
+      random: () => 0.42,
+    }));
+
+    expect(cards.map((card) => card.questionId)).toEqual(["favorite", "urgent", "ignored", "later-wrong"]);
   });
 
   it("filters weak knowledge points by answer count and accuracy", () => {
@@ -68,8 +154,8 @@ describe("review plan engine", () => {
     expect(cards.filter((card) => card.source === "WEAK_KNOWLEDGE")).toHaveLength(4);
   });
 
-  it("respects wrong question and weak knowledge limits", () => {
-    const cards = buildReviewCards(input({ target: 10, wrongQuestionLimit: 1, weakKnowledgeLimit: 1, random: () => 0.42 }));
+  it("respects due question and weak knowledge limits", () => {
+    const cards = buildReviewCards(input({ target: 10, dueQuestionLimit: 1, weakKnowledgeLimit: 1, random: () => 0.42 }));
 
     const weakCards = cards.filter((card) => card.source === "WEAK_KNOWLEDGE");
     expect(cards.filter((card) => card.source === "WRONG_QUESTION")).toHaveLength(1);
@@ -94,7 +180,7 @@ describe("review plan engine", () => {
 describe("review plan defaults", () => {
   it("keeps constants in a sane range for the current product", () => {
     expect(DAILY_REVIEW_TARGET).toBeGreaterThanOrEqual(5);
-    expect(DEFAULT_WRONG_QUESTION_LIMIT).toBeGreaterThan(0);
+    expect(DEFAULT_DUE_QUESTION_LIMIT).toBeGreaterThan(0);
     expect(DEFAULT_WEAK_KNOWLEDGE_LIMIT).toBeGreaterThan(0);
     expect(WEAK_ACCURACY_THRESHOLD).toBeLessThanOrEqual(100);
   });
