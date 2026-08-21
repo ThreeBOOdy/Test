@@ -194,6 +194,7 @@ model User {
   questLogs                  QuestLog[]
   xpLogs                     XpLog[]
   studentLevelQuestionStates StudentLevelQuestionState[]
+  studentLevelProgresses     StudentLevelProgress[]
   createdAt                  DateTime                   @default(now())
   updatedAt                  DateTime                   @updatedAt
 
@@ -292,6 +293,7 @@ model Level {
   sessions       PracticeSession[]
   students       User[]                  @relation("StudentActiveLevel")
   studentLevelQuestionStates StudentLevelQuestionState[]
+  studentLevelProgresses     StudentLevelProgress[]
   createdAt      DateTime                @default(now())
   updatedAt      DateTime                @updatedAt
 
@@ -732,6 +734,21 @@ model StudentLevelQuestionState {
   @@index([userId, levelId, favorite])
   @@index([userId, levelId, ignored])
   @@index([questionId])
+  @@index([levelId])
+}
+
+model StudentLevelProgress {
+  id         String   @id @default(cuid())
+  userId     String
+  levelId    String
+  lastIndex  Int      @default(0)
+  roundCount Int      @default(0)
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  level      Level    @relation(fields: [levelId], references: [id], onDelete: Restrict)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@unique([userId, levelId])
   @@index([levelId])
 }
 
