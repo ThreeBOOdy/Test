@@ -4,7 +4,7 @@ import { prisma } from "@/lib/db";
 import { ApiError } from "@/lib/domain/api-error";
 import { parseJsonStringArray } from "@/lib/domain/json-string-array";
 import { BlueprintInsufficientQuestionError, selectExamBlueprintQuestions } from "@/lib/domain/exam-blueprints";
-import { selectPracticeQuestions, selectPrioritizedRandomQuestions, shuffle, sortQuestionsByBankNumber } from "@/lib/domain/practice-engine";
+import { selectPracticeQuestions, selectRandomPracticeQuestions, shuffle, sortQuestionsByBankNumber } from "@/lib/domain/practice-engine";
 import { createQuestionSnapshot, gradeQuestionSnapshot, toPublicQuestionSnapshot, type QuestionSnapshot } from "@/lib/domain/practice-snapshot";
 import { advanceWrongQuestionMastery } from "@/lib/domain/wrong-question-mastery";
 import { upsertStudentLevelQuestionState } from "@/lib/server/learning-state-service";
@@ -51,18 +51,18 @@ export async function createPracticeSession(userId: string, input: CreatePractic
   const point = input.mode === "knowledge" ? await prisma.knowledgePoint.findFirst({ where: { id: input.knowledgePointId, enabled: true } }) : null;
   if (input.mode === "knowledge" && !point) throw new ApiError("所选知识点不存在或已停用", 404);
 
-  const rule = input.mode === "knowledge"
-    ? await prisma.knowledgePracticeRule.findUnique({ where: { knowledgePointId_levelId: { knowledgePointId: point!.id, levelId: level.id } } })
-    : await prisma.levelPracticeRule.findFirst({ where: { levelId: level.id } });
-  if (!rule || !rule.enabled || (rule.singleCount === 0 && rule.multipleCount === 0)) throw new ApiError("教师尚未配置该练习的抽题规则", 409);
-
   const records = await findQuestionRecords(level.id, point?.id, point?.path);
   const domainQuestions = records.map(toDomainQuestion);
   let selected: Question[];
   if (mode === "RANDOM_ALL") {
+    if (domainQuestions.length === 0) throw new ApiError("当前字母类下没有可用的题目", 409);
     const answeredIds = await findAnsweredQuestionIds(userId, level.id);
-    selected = selectRandomQuestions(domainQuestions, answeredIds, rule);
+    selected = selectRandomPracticeQuestions(domainQuestions, answeredIds);
   } else {
+    const rule = input.mode === "knowledge"
+      ? await prisma.knowledgePracticeRule.findUnique({ where: { knowledgePointId_levelId: { knowledgePointId: point!.id, levelId: level.id } } })
+      : await prisma.levelPracticeRule.findFirst({ where: { levelId: level.id } });
+    if (!rule || !rule.enabled || (rule.singleCount === 0 && rule.multipleCount === 0)) throw new ApiError("教师尚未配置该练习的抽题规则", 409);
     selected = selectPracticeQuestions(domainQuestions, { mode, levelId: level.id, knowledgePointIds: point ? [...new Set(domainQuestions.map((question) => question.knowledgePointId))] : undefined, rule }).questions;
   }
   return persistPracticeSession(userId, mode, level.id, point?.id ?? null, createSnapshots(records, selected));
@@ -369,8 +369,11 @@ async function findQuestionRecords(levelId: string, knowledgePointId?: string, k
 }
 
 async function findAnsweredQuestionIds(userId: string, levelId: string) {
-  const answers = await prisma.practiceAnswer.findMany({ where: { session: { userId }, question: { levels: { some: { levelId } } } }, select: { questionId: true }, distinct: ["questionId"] });
-  return new Set(answers.map((answer) => answer.questionId));
+  const states = await prisma.studentLevelQuestionState.findMany({
+    where: { userId, levelId, reps: { gt: 0 } },
+    select: { questionId: true },
+  });
+  return new Set(states.map((state) => state.questionId));
 }
 
 async function getSequentialProgress(userId: string, levelId: string) {
@@ -393,16 +396,6 @@ async function updateSequentialProgress(tx: Prisma.TransactionClient, userId: st
     update: next,
     create: { userId, levelId, ...next },
   });
-}
-
-function selectRandomQuestions(questions: Question[], answeredIds: ReadonlySet<string>, rule: { singleCount: number; multipleCount: number }) {
-  const singles = questions.filter((question) => question.type === "SINGLE_CHOICE");
-  const multiples = questions.filter((question) => question.type === "MULTIPLE_CHOICE");
-  if (singles.length < rule.singleCount || multiples.length < rule.multipleCount) throw new ApiError("题库库存不足，无法创建随机练习", 409);
-  return shuffle([
-    ...selectPrioritizedRandomQuestions(singles, answeredIds, rule.singleCount),
-    ...selectPrioritizedRandomQuestions(multiples, answeredIds, rule.multipleCount),
-  ]);
 }
 
 function createSnapshots(records: QuestionRecord[], questions: Question[]) {
