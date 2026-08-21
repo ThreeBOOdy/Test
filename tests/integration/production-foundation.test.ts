@@ -3,7 +3,7 @@ import { PrismaMariaDb } from "@prisma/adapter-mariadb";
 import { Prisma, PrismaClient } from "../../generated/prisma/client";
 import { assertDatabaseName } from "../../lib/domain/database-url";
 import { commitImportBatch, getImportBatchReport, revertImportBatch } from "../../lib/server/import-service";
-import { abandonMockExam, createPracticeSession, getPracticeSession, saveExamDraft, settleExpiredMockExams, submitMockExam, submitPracticeAnswer } from "../../lib/server/practice-service";
+import { abandonMockExam, createPracticeSession, getPracticeSession, saveExamDraft, settleExpiredMockExams, submitMockExam, submitPracticeAnswer, updatePracticeSessionLearningMode } from "../../lib/server/practice-service";
 import { createSession, findSessionUser, revokeSession, revokeUserSessions } from "../../lib/server/session";
 import { getTeacherLearningStatistics } from "../../lib/server/learning-statistics-service";
 import { getTodayReviewPlan } from "../../lib/server/review-plan-service";
@@ -635,6 +635,41 @@ describe("production database foundation", () => {
     const nextRound = await createPracticeSession(user.id, { mode: "order", levelCode: "A" });
     expect(nextRound.id).not.toBe(first.id);
     expect(nextRound.questions.map((question) => question.externalQuestionCode)).toEqual(["P1", "P2", "P3"]);
+  });
+
+  it("advances learning-mode sequential progress without writing learning state and keeps progress when switching modes", async () => {
+    const user = await prisma.user.create({ data: { username: "order-learning-mode-user", displayName: "Order Learning Mode User", passwordHash: "test", role: "STUDENT" } });
+    const level = await prisma.level.create({ data: { code: "A", name: "A Level" } });
+    await prisma.user.update({ where: { id: user.id }, data: { activeLevelId: level.id } });
+    const defaultType = await prisma.knowledgePointType.upsert({ where: { code: "DEFAULT" }, update: {}, create: { code: "DEFAULT", name: "默认" } });
+    const point = await prisma.knowledgePoint.create({ data: { typeId: defaultType.id, code: "9.1.3", name: "Order Learning Mode Point", path: "/9/9.1/9.1.3", depth: 2 } });
+    const questions = await Promise.all(["L1", "L2", "L3"].map((code) => prisma.question.create({ data: { knowledgePointId: point.id, levels: { create: { levelId: level.id } }, externalQuestionCode: code, stem: code, type: "SINGLE_CHOICE", optionCount: 2, correctOptionCount: 1, selectionSpec: "2选1", options: [{ id: "A", text: "A" }, { id: "B", text: "B" }], correctOptionIds: ["A"] } })));
+
+    const session = await createPracticeSession(user.id, { mode: "order", levelCode: "A" });
+    expect(session.learningMode).toBe(false);
+
+    await updatePracticeSessionLearningMode(user.id, session.id, true);
+    expect((await getPracticeSession(user.id, session.id))?.learningMode).toBe(true);
+
+    // Wrong answer in learning mode: no FSRS state or wrong-question side effects, only position advances.
+    await submitPracticeAnswer(user.id, session.id, questions[0].id, ["B"], "learning-mode-1");
+    expect(await prisma.studentLevelQuestionState.count({ where: { userId: user.id, levelId: level.id } })).toBe(0);
+    expect(await prisma.wrongQuestion.count({ where: { userId: user.id } })).toBe(0);
+    expect(await prisma.studentLevelProgress.findUniqueOrThrow({ where: { userId_levelId: { userId: user.id, levelId: level.id } } })).toMatchObject({ lastIndex: 1, roundCount: 0 });
+
+    // Switching back to practice mode mid-round keeps the same session and progress.
+    await updatePracticeSessionLearningMode(user.id, session.id, false);
+    await submitPracticeAnswer(user.id, session.id, questions[1].id, ["A"], "learning-mode-2");
+    expect(await prisma.studentLevelQuestionState.count({ where: { userId: user.id, levelId: level.id } })).toBe(1);
+    expect(await prisma.studentLevelProgress.findUniqueOrThrow({ where: { userId_levelId: { userId: user.id, levelId: level.id } } })).toMatchObject({ lastIndex: 2, roundCount: 0 });
+
+    // Completing a round in learning mode still increments the round without RPG rewards.
+    await updatePracticeSessionLearningMode(user.id, session.id, true);
+    await submitPracticeAnswer(user.id, session.id, questions[2].id, ["A"], "learning-mode-3");
+    expect(await prisma.practiceSession.findUniqueOrThrow({ where: { id: session.id } })).toMatchObject({ status: "COMPLETED" });
+    expect(await prisma.studentLevelProgress.findUniqueOrThrow({ where: { userId_levelId: { userId: user.id, levelId: level.id } } })).toMatchObject({ lastIndex: 0, roundCount: 1 });
+    expect(await prisma.studentLevelQuestionState.count({ where: { userId: user.id, levelId: level.id } })).toBe(1);
+    expect(await prisma.playerProfile.count({ where: { userId: user.id } })).toBe(0);
   });
 
   it("fills random practice entirely from unanswered questions when enough are available", async () => {

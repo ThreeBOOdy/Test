@@ -504,6 +504,7 @@ model PracticeSession {
   userId                  String
   user                    User                      @relation(fields: [userId], references: [id])
   mode                    PracticeMode
+  learningMode            Boolean                   @default(false)
   levelId                 String?
   level                   Level?                    @relation(fields: [levelId], references: [id], onDelete: Restrict)
   knowledgePointId        String?
