@@ -49,12 +49,12 @@ export function createQuestionSnapshot(question: Omit<QuestionSnapshot, "questio
   };
 }
 
-export function toPublicQuestionSnapshot(snapshot: QuestionSnapshot) {
+export function toPublicQuestionSnapshot(snapshot: QuestionSnapshot, marks?: { favorite?: boolean; ignored?: boolean }) {
   const { questionId, correctOptionIds: _correctOptionIds, correctOptionCount: _correctOptionCount, selectionSpec: _selectionSpec, ...question } = snapshot;
   void _correctOptionIds;
   void _correctOptionCount;
   void _selectionSpec;
-  return { id: questionId, ...question };
+  return { id: questionId, ...question, favorite: marks?.favorite ?? false, ignored: marks?.ignored ?? false };
 }
 
 export function gradeQuestionSnapshot(snapshot: QuestionSnapshot, selectedOptionIds: readonly string[]) {

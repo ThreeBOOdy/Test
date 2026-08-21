@@ -182,4 +182,70 @@ describe("PracticeRunner", () => {
     expect(screen.getByText("第 2 / 2 题")).toBeInTheDocument();
     expect(screen.getByText("下列哪些做法有助于减少业余电台干扰？")).toBeInTheDocument();
   });
+
+  it.each(["QUESTION_ORDER", "RANDOM_ALL", "WRONG_QUESTION"] as const)("shows favorite and ignore buttons for %s", (mode) => {
+    render(<PracticeRunner session={practiceSessionFixture({ mode, title: "练习" })} />);
+
+    expect(screen.getByRole("button", { name: "收藏" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "忽略" })).toBeInTheDocument();
+  });
+
+  it("does not show favorite and ignore buttons in mock exams", () => {
+    const question = practiceSessionFixture().questions[0];
+    render(<PracticeRunner session={practiceSessionFixture({
+      mode: "MOCK_EXAM",
+      title: "A级 · 模拟考试",
+      questions: [question],
+      total: 1,
+      exam: { durationMinutes: 40, passingCount: 1, expiresAt: new Date(Date.now() + 40 * 60_000).toISOString() },
+    })} />);
+
+    expect(screen.queryByRole("button", { name: "收藏" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "忽略" })).not.toBeInTheDocument();
+  });
+
+  it("does not show favorite and ignore buttons in level comprehensive practice", () => {
+    render(<PracticeRunner session={practiceSessionFixture()} />);
+
+    expect(screen.queryByRole("button", { name: "收藏" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "忽略" })).not.toBeInTheDocument();
+  });
+
+  it("reflects existing favorite/ignored marks from the session", () => {
+    const question = { ...practiceSessionFixture().questions[0], favorite: true, ignored: true };
+    render(<PracticeRunner session={practiceSessionFixture({ mode: "QUESTION_ORDER", questions: [question], total: 1 })} />);
+
+    expect(screen.getByRole("button", { name: "收藏" })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByRole("button", { name: "忽略" })).toHaveAttribute("aria-pressed", "true");
+  });
+
+  it("toggles favorite through the question state API and updates immediately", async () => {
+    const user = userEvent.setup();
+    const question = practiceSessionFixture().questions[0];
+    vi.mocked(fetch).mockResolvedValue(new Response(JSON.stringify({ questionId: question.id, levelId: "level-a", levelCode: "A", favorite: true, ignored: false }), { status: 200, headers: { "Content-Type": "application/json" } }));
+
+    render(<PracticeRunner session={practiceSessionFixture({ mode: "QUESTION_ORDER", questions: [question], total: 1 })} />);
+    const favoriteButton = screen.getByRole("button", { name: "收藏" });
+    expect(favoriteButton).toHaveAttribute("aria-pressed", "false");
+
+    await user.click(favoriteButton);
+
+    await waitFor(() => expect(fetch).toHaveBeenCalledWith(`/api/v1/student/question-states/${question.id}`, expect.objectContaining({ method: "PATCH", body: JSON.stringify({ favorite: true }) })));
+    expect(screen.getByRole("button", { name: "收藏" })).toHaveAttribute("aria-pressed", "true");
+  });
+
+  it("toggles ignore through the question state API and updates immediately", async () => {
+    const user = userEvent.setup();
+    const question = practiceSessionFixture().questions[0];
+    vi.mocked(fetch).mockResolvedValue(new Response(JSON.stringify({ questionId: question.id, levelId: "level-a", levelCode: "A", favorite: false, ignored: true }), { status: 200, headers: { "Content-Type": "application/json" } }));
+
+    render(<PracticeRunner session={practiceSessionFixture({ mode: "RANDOM_ALL", questions: [question], total: 1 })} />);
+    const ignoreButton = screen.getByRole("button", { name: "忽略" });
+    expect(ignoreButton).toHaveAttribute("aria-pressed", "false");
+
+    await user.click(ignoreButton);
+
+    await waitFor(() => expect(fetch).toHaveBeenCalledWith(`/api/v1/student/question-states/${question.id}`, expect.objectContaining({ method: "PATCH", body: JSON.stringify({ ignored: true }) })));
+    expect(screen.getByRole("button", { name: "忽略" })).toHaveAttribute("aria-pressed", "true");
+  });
 });
