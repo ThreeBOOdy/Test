@@ -415,6 +415,17 @@ describe("MySQL project configuration", () => {
     expect(schema).toMatch(/@@unique\(\[userId, levelId\]\)/);
     expect(schema).toMatch(/studentLevelProgresses\s+StudentLevelProgress\[\]/);
   });
+
+  it("adds the sequential learning/practice mode switch to PracticeSession", () => {
+    const migration = fs.readFileSync(path.resolve("prisma/migrations/20260821140000_practice_session_learning_mode/migration.sql"), "utf8");
+    const schema = fs.readFileSync(path.resolve("prisma/schema.prisma"), "utf8");
+
+    expect(migration).toContain("ALTER TABLE `PracticeSession` ADD COLUMN `learningMode` BOOLEAN NOT NULL DEFAULT false");
+    expect(migration).not.toMatch(/DROP TABLE `(PracticeSession|User|Level)`|DELETE FROM `(PracticeSession|User|Level)`/);
+
+    expect(schema).toContain("model PracticeSession {");
+    expect(schema).toMatch(/learningMode\s+Boolean\s+@default\(false\)/);
+  });
 });
 
 describe("MySQL database URL protection", () => {

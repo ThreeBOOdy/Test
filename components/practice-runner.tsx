@@ -28,6 +28,8 @@ export function PracticeRunner({ session }: { session: PublicPracticeSession }) 
   const [summaryVisible, setSummaryVisible] = useState(() => Boolean(session.examResult) || Object.keys(session.initialResults).length === session.questions.length);
   const [error, setError] = useState("");
   const [pending, setPending] = useState(false);
+  const [learningMode, setLearningMode] = useState(session.learningMode ?? false);
+  const [modeSaving, setModeSaving] = useState(false);
   const [remainingSeconds, setRemainingSeconds] = useState(() => session.exam ? Math.max(0, Math.ceil((new Date(session.exam.expiresAt).getTime() - Date.now()) / 1000)) : 0);
   const autoSubmitted = useRef(false);
   const answerRequestKeys = useRef<Record<string, string>>({});
@@ -50,6 +52,25 @@ export function PracticeRunner({ session }: { session: PublicPracticeSession }) 
     setIndex(boundedIndex);
     setError("");
   }, [session.questions.length]);
+
+  const changeLearningMode = useCallback(async (next: boolean) => {
+    if (modeSaving || next === learningMode) return;
+    setModeSaving(true);
+    setError("");
+    try {
+      const response = await fetch(`/api/v1/practice-sessions/${session.id}/mode`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ learningMode: next }) });
+      const data = await response.json() as { learningMode?: boolean; message?: string };
+      if (!response.ok) {
+        setError(data.message ?? "切换模式失败，请稍后重试");
+        return;
+      }
+      setLearningMode(data.learningMode ?? next);
+    } catch {
+      setError("切换模式失败，请稍后重试");
+    } finally {
+      setModeSaving(false);
+    }
+  }, [learningMode, modeSaving, session.id]);
 
   const flushDraftSave = useCallback(async () => {
     if (!isExam || draftRequestInFlight.current || !pendingDraft.current || summaryVisible) return;
@@ -202,7 +223,7 @@ export function PracticeRunner({ session }: { session: PublicPracticeSession }) 
   const progressCount = isExam ? draftedCount : answeredCount;
   const sequentialResumeLabel = session.sequentialProgress && session.sequentialProgress.lastIndex > 0 ? `上次做到第 ${Math.min(session.sequentialProgress.lastIndex + 1, session.total)} / ${session.total} 题` : "";
   return <div className="practice-reading safe-bottom mx-auto max-w-7xl">
-    <div className="mb-5 flex flex-wrap items-center justify-between gap-4">{isExam ? <button type="button" onClick={() => void abandonExam()} className="flex min-h-10 items-center gap-2 rounded-xl px-3 text-sm font-semibold text-[var(--muted-foreground)] transition hover:bg-[var(--surface-soft)] hover:text-[var(--foreground)]"><ArrowLeft className="size-4" />放弃考试</button> : <Link href="/student" className="flex min-h-10 items-center gap-2 rounded-xl px-3 text-sm font-semibold text-[var(--muted-foreground)] transition hover:bg-[var(--surface-soft)] hover:text-[var(--foreground)]"><ArrowLeft className="size-4" />退出训练</Link>}<div className="flex flex-wrap items-center gap-2">{session.mode === "QUESTION_ORDER" && session.sequentialProgress ? <div className="flex items-center gap-2 rounded-full border border-[var(--border)] bg-[var(--surface-glass)] px-3 py-2 text-sm font-semibold backdrop-blur"><span>完成 {session.sequentialProgress.roundCount} 轮</span>{sequentialResumeLabel ? <span className="text-[var(--muted-foreground)]">{sequentialResumeLabel}</span> : null}</div> : null}<div className={cn("flex items-center gap-2 rounded-full border border-[var(--border)] bg-[var(--surface-glass)] px-3 py-2 text-sm font-semibold backdrop-blur", isExam && remainingSeconds <= 300 ? "text-rose-600" : "text-[var(--primary)]")}><Clock3 className="size-4" />{isExam ? `剩余 ${formatDuration(remainingSeconds)}` : "训练频道已连接"}</div></div></div>
+    <div className="mb-5 flex flex-wrap items-center justify-between gap-4">{isExam ? <button type="button" onClick={() => void abandonExam()} className="flex min-h-10 items-center gap-2 rounded-xl px-3 text-sm font-semibold text-[var(--muted-foreground)] transition hover:bg-[var(--surface-soft)] hover:text-[var(--foreground)]"><ArrowLeft className="size-4" />放弃考试</button> : <Link href="/student" className="flex min-h-10 items-center gap-2 rounded-xl px-3 text-sm font-semibold text-[var(--muted-foreground)] transition hover:bg-[var(--surface-soft)] hover:text-[var(--foreground)]"><ArrowLeft className="size-4" />退出训练</Link>}<div className="flex flex-wrap items-center gap-2">{session.mode === "QUESTION_ORDER" ? <div role="group" aria-label="刷题模式" className="flex items-center gap-1 rounded-full border border-[var(--border)] bg-[var(--surface-glass)] p-1 text-sm font-semibold backdrop-blur"><button type="button" aria-pressed={!learningMode} disabled={modeSaving} onClick={() => void changeLearningMode(false)} className={cn("rounded-full px-3 py-1.5 transition", !learningMode ? "bg-[var(--primary)] text-[var(--primary-foreground)]" : "text-[var(--muted-foreground)] hover:text-[var(--foreground)]")}>练习模式</button><button type="button" aria-pressed={learningMode} disabled={modeSaving} onClick={() => void changeLearningMode(true)} className={cn("rounded-full px-3 py-1.5 transition", learningMode ? "bg-[var(--primary)] text-[var(--primary-foreground)]" : "text-[var(--muted-foreground)] hover:text-[var(--foreground)]")}>学习模式</button></div> : null}{session.mode === "QUESTION_ORDER" && session.sequentialProgress ? <div className="flex items-center gap-2 rounded-full border border-[var(--border)] bg-[var(--surface-glass)] px-3 py-2 text-sm font-semibold backdrop-blur"><span>完成 {session.sequentialProgress.roundCount} 轮</span>{sequentialResumeLabel ? <span className="text-[var(--muted-foreground)]">{sequentialResumeLabel}</span> : null}</div> : null}<div className={cn("flex items-center gap-2 rounded-full border border-[var(--border)] bg-[var(--surface-glass)] px-3 py-2 text-sm font-semibold backdrop-blur", isExam && remainingSeconds <= 300 ? "text-rose-600" : "text-[var(--primary)]")}><Clock3 className="size-4" />{isExam ? `剩余 ${formatDuration(remainingSeconds)}` : "训练频道已连接"}</div></div></div>
     {isExam ? <div className="mb-5"><BossBattle mode="exam" total={session.total} passingCount={session.exam?.passingCount} /></div> : null}
     <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_280px]">
       <Card variant="receiver" className="practice-console overflow-hidden text-slate-50"><div className="border-b border-cyan-200/10 bg-[#08121e]/95 px-5 py-5 sm:px-7"><div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between"><div><div className="font-radio flex items-center gap-2 text-[10px] font-bold tracking-[.14em] text-cyan-300"><Radio className="size-3.5" />{studentFacingTitle}</div><div className="mt-1.5 text-base font-bold text-slate-100">第 {index + 1} / {session.total} 题</div></div><div className="w-full sm:max-w-64"><div className="font-radio mb-2 flex justify-between text-[10px] text-slate-400"><span>{isExam ? "答题进度" : "训练进度"}</span><span>{progressCount} / {session.total}</span></div><SpectrumProgress answered={progressCount} total={session.total} /></div></div></div>

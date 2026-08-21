@@ -4,6 +4,7 @@ export function practiceSessionFixture(overrides: Partial<PublicPracticeSession>
   return {
     id: "session-1",
     mode: "LEVEL_COMPREHENSIVE",
+    learningMode: false,
     status: "IN_PROGRESS",
     title: "A级综合练习",
     total: 2,

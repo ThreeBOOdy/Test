@@ -198,6 +198,8 @@ export type FocusOverview = {
 export type PublicPracticeSession = {
   id: string;
   mode: PracticeMode;
+  /** 顺序刷题模式：true = 学习模式（不写学习状态），false = 练习模式（默认）。 */
+  learningMode: boolean;
   status: "IN_PROGRESS" | "COMPLETED" | "ABANDONED";
   title: string;
   total: number;

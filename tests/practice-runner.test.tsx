@@ -152,4 +152,34 @@ describe("PracticeRunner", () => {
     expect(screen.getByText("完成 2 轮")).toBeInTheDocument();
     expect(screen.getByText("上次做到第 2 / 2 题")).toBeInTheDocument();
   });
+
+  it("shows the sequential mode switch and defaults to practice mode", () => {
+    render(<PracticeRunner session={practiceSessionFixture({ mode: "QUESTION_ORDER", title: "A级 · 顺序练习", sequentialProgress: { lastIndex: 0, roundCount: 0 } })} />);
+
+    const practiceButton = screen.getByRole("button", { name: "练习模式" });
+    const learningButton = screen.getByRole("button", { name: "学习模式" });
+    expect(practiceButton).toHaveAttribute("aria-pressed", "true");
+    expect(learningButton).toHaveAttribute("aria-pressed", "false");
+  });
+
+  it("switches sequential mode without resetting current round progress", async () => {
+    const session = practiceSessionFixture({
+      mode: "QUESTION_ORDER",
+      title: "A级 · 顺序练习",
+      sequentialProgress: { lastIndex: 1, roundCount: 0 },
+      initialResults: { "question-1": { isCorrect: true, correctOptionIds: ["A"], selectedOptionIds: ["A"], answeredCount: 1, correctCount: 1 } },
+    });
+    vi.mocked(fetch).mockResolvedValue(new Response(JSON.stringify({ learningMode: true }), { status: 200, headers: { "Content-Type": "application/json" } }));
+
+    render(<PracticeRunner session={session} />);
+    expect(screen.getByText("第 2 / 2 题")).toBeInTheDocument();
+    expect(screen.getByText("下列哪些做法有助于减少业余电台干扰？")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "学习模式" }));
+
+    await waitFor(() => expect(fetch).toHaveBeenCalledWith("/api/v1/practice-sessions/session-1/mode", expect.objectContaining({ method: "PATCH", body: JSON.stringify({ learningMode: true }) })));
+    expect(screen.getByRole("button", { name: "学习模式" })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByText("第 2 / 2 题")).toBeInTheDocument();
+    expect(screen.getByText("下列哪些做法有助于减少业余电台干扰？")).toBeInTheDocument();
+  });
 });
