@@ -10,6 +10,7 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { prisma } from "@/lib/db";
 import { getCurrentUser } from "@/lib/server/session";
+import { getStudentActiveLevelAccess } from "@/lib/server/student-level-access";
 import { normalizePagination } from "@/lib/server/pagination";
 
 const text = {
@@ -32,12 +33,17 @@ export default async function WrongPage({ searchParams }: { searchParams: Promis
   const user = await getCurrentUser();
   if (!user) return null;
   if (user.capability !== "FULL_STUDENT") return null;
+  const activeLevelAccess = await getStudentActiveLevelAccess(user.id);
+  if (!activeLevelAccess.activeLevelId || !activeLevelAccess.activeLevel?.enabled) {
+    return <AppShell role="student" currentPath="/student/wrong"><div className="safe-bottom"><PageHeader title="我的错题" description="答错的题目会自动收进这里；在不同练习中连续答对三次，就会标记为已掌握。" /><Card><CardContent className="p-12 text-center"><div className="text-lg font-extrabold">未分配题库，请联系老师</div><p className="mt-2 text-sm text-[var(--muted-foreground)]">老师为你分配字母类后，错题练习入口会出现在这里。</p></CardContent></Card></div></AppShell>;
+  }
+  const activeLevelId = activeLevelAccess.activeLevelId;
   const params = await searchParams;
   const { page, pageSize, skip } = normalizePagination({ page: params.page });
   const [wrongItems, total, pending] = await Promise.all([
-    prisma.wrongQuestion.findMany({ where: { userId: user.id }, include: { question: { include: { levels: { include: { level: true } }, knowledgePoint: true } } }, orderBy: [{ mastered: "asc" }, { lastWrongAt: "desc" }], skip, take: pageSize }),
-    prisma.wrongQuestion.count({ where: { userId: user.id } }),
-    prisma.wrongQuestion.count({ where: { userId: user.id, mastered: false } }),
+    prisma.wrongQuestion.findMany({ where: { userId: user.id, question: { levels: { some: { levelId: activeLevelId } } } }, include: { question: { include: { levels: { include: { level: true } }, knowledgePoint: true } } }, orderBy: [{ mastered: "asc" }, { lastWrongAt: "desc" }], skip, take: pageSize }),
+    prisma.wrongQuestion.count({ where: { userId: user.id, question: { levels: { some: { levelId: activeLevelId } } } } }),
+    prisma.wrongQuestion.count({ where: { userId: user.id, mastered: false, question: { levels: { some: { levelId: activeLevelId } } } } }),
   ]);
   const mastered = total - pending;
   const totalPages = Math.max(1, Math.ceil(total / pageSize));

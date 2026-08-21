@@ -66,8 +66,8 @@ async function deleteKnowledgePoints() {
 }
 
 async function createBaseRecords() {
-  const user = await prisma.user.create({ data: { username: "student", displayName: "Student", passwordHash: "test", role: "STUDENT" } });
   const level = await prisma.level.create({ data: { code: "A", name: "A Level" } });
+  const user = await prisma.user.create({ data: { username: "student", displayName: "Student", passwordHash: "test", role: "STUDENT", activeLevelId: level.id } });
   const defaultType = await prisma.knowledgePointType.upsert({ where: { code: "DEFAULT" }, update: {}, create: { code: "DEFAULT", name: "默认" } });
   const point = await prisma.knowledgePoint.create({ data: { typeId: defaultType.id, code: "1.1", name: "Point", path: "/1/1.1", depth: 1 } });
   const question = await prisma.question.create({ data: { knowledgePointId: point.id, levels: { create: { levelId: level.id } }, externalQuestionCode: "Q-1", stem: "Original", type: "SINGLE_CHOICE", optionCount: 2, correctOptionCount: 1, selectionSpec: "2选1", options: [{ id: "A", text: "A" }, { id: "B", text: "B" }], correctOptionIds: ["A"] } });
@@ -263,6 +263,7 @@ describe("production database foundation", () => {
   it("draws practice questions from a K letter-class and injects K into snapshots", async () => {
     const user = await prisma.user.create({ data: { username: "k-practice-user", displayName: "K Practice User", passwordHash: "test", role: "STUDENT" } });
     const kLevel = await prisma.level.create({ data: { code: "K", name: "K Level" } });
+    await prisma.user.update({ where: { id: user.id }, data: { activeLevelId: kLevel.id } });
     const aLevel = await prisma.level.create({ data: { code: "A", name: "A Level" } });
     const defaultType = await prisma.knowledgePointType.upsert({ where: { code: "DEFAULT" }, update: {}, create: { code: "DEFAULT", name: "默认" } });
     const point = await prisma.knowledgePoint.create({ data: { typeId: defaultType.id, code: "K.1", name: "K Point", path: "/K/K.1", depth: 1 } });
@@ -276,6 +277,42 @@ describe("production database foundation", () => {
     expect(session.questions[0]).toMatchObject({ id: kQuestion.id, levelId: kLevel.id, levelCode: "K" });
     const stored = await prisma.practiceSessionQuestion.findFirstOrThrow({ where: { sessionId: session.id } });
     expect(stored.snapshot).toMatchObject({ questionId: kQuestion.id, levelId: kLevel.id, levelCode: "K" });
+  });
+
+  it("blocks unassigned students from creating any practice session", async () => {
+    const user = await prisma.user.create({ data: { username: "unassigned-practice-user", displayName: "Unassigned Practice User", passwordHash: "test", role: "STUDENT" } });
+    const level = await prisma.level.create({ data: { code: "A", name: "A Level" } });
+    await prisma.user.update({ where: { id: user.id }, data: { activeLevelId: null } });
+    await prisma.levelPracticeRule.create({ data: { levelId: level.id, singleCount: 1, multipleCount: 0 } });
+
+    await expect(createPracticeSession(user.id, { mode: "level", levelCode: "A" })).rejects.toMatchObject({ status: 403, message: "未分配题库，请联系老师" });
+    await expect(createPracticeSession(user.id, { mode: "wrong" })).rejects.toMatchObject({ status: 403, message: "未分配题库，请联系老师" });
+  });
+
+  it("rejects creating practice for a level other than the student activeLevel", async () => {
+    const levelA = await prisma.level.create({ data: { code: "A", name: "A Level" } });
+    const levelB = await prisma.level.create({ data: { code: "B", name: "B Level" } });
+    const user = await prisma.user.create({ data: { username: "mismatch-practice-user", displayName: "Mismatch Practice User", passwordHash: "test", role: "STUDENT", activeLevelId: levelA.id } });
+    await prisma.levelPracticeRule.create({ data: { levelId: levelB.id, singleCount: 1, multipleCount: 0 } });
+
+    await expect(createPracticeSession(user.id, { mode: "level", levelCode: "B" })).rejects.toMatchObject({ status: 403, message: "只能练习当前分配的字母类" });
+  });
+
+  it("limits wrong-question practice to the student activeLevel", async () => {
+    const levelA = await prisma.level.create({ data: { code: "A", name: "A Level" } });
+    const levelB = await prisma.level.create({ data: { code: "B", name: "B Level" } });
+    const user = await prisma.user.create({ data: { username: "wrong-level-practice-user", displayName: "Wrong Level Practice User", passwordHash: "test", role: "STUDENT", activeLevelId: levelA.id } });
+    const defaultType = await prisma.knowledgePointType.upsert({ where: { code: "DEFAULT" }, update: {}, create: { code: "DEFAULT", name: "默认" } });
+    const point = await prisma.knowledgePoint.create({ data: { typeId: defaultType.id, code: "W.1", name: "Wrong Point", path: "/W/W.1", depth: 1 } });
+    const [questionA, questionB] = await Promise.all([
+      prisma.question.create({ data: { knowledgePointId: point.id, levels: { create: { levelId: levelA.id } }, externalQuestionCode: "WA-1", stem: "A wrong", type: "SINGLE_CHOICE", optionCount: 2, correctOptionCount: 1, selectionSpec: "2选1", options: [{ id: "A", text: "A" }, { id: "B", text: "B" }], correctOptionIds: ["A"] } }),
+      prisma.question.create({ data: { knowledgePointId: point.id, levels: { create: { levelId: levelB.id } }, externalQuestionCode: "WB-1", stem: "B wrong", type: "SINGLE_CHOICE", optionCount: 2, correctOptionCount: 1, selectionSpec: "2选1", options: [{ id: "A", text: "A" }, { id: "B", text: "B" }], correctOptionIds: ["A"] } }),
+    ]);
+    await prisma.wrongQuestion.createMany({ data: [{ userId: user.id, questionId: questionA.id }, { userId: user.id, questionId: questionB.id }] });
+
+    const session = await createPracticeSession(user.id, { mode: "wrong" });
+
+    expect(session.questions.map((question) => question.id)).toEqual([questionA.id]);
   });
 
   it("loads legacy practice sessions from stored snapshots even when current level associations change", async () => {
@@ -362,6 +399,7 @@ describe("production database foundation", () => {
   it("creates at most twenty wrong-question items and updates mastery", async () => {
     const user = await prisma.user.create({ data: { username: "wrong-user", displayName: "Wrong User", passwordHash: "test", role: "STUDENT" } });
     const level = await prisma.level.create({ data: { code: "A", name: "A Level" } });
+    await prisma.user.update({ where: { id: user.id }, data: { activeLevelId: level.id } });
     const defaultType = await prisma.knowledgePointType.upsert({ where: { code: "DEFAULT" }, update: {}, create: { code: "DEFAULT", name: "默认" } });
   const point = await prisma.knowledgePoint.create({ data: { typeId: defaultType.id, code: "8.1.1", name: "Wrong Point", path: "/8/8.1/8.1.1", depth: 2 } });
     const questions = await Promise.all(Array.from({ length: 25 }, (_, index) => prisma.question.create({ data: { knowledgePointId: point.id, levels: { create: { levelId: level.id } }, externalQuestionCode: `WRONG-${index + 1}`, stem: `Wrong ${index + 1}`, type: "SINGLE_CHOICE", optionCount: 2, correctOptionCount: 1, selectionSpec: "2选1", options: [{ id: "A", text: "A" }, { id: "B", text: "B" }], correctOptionIds: ["A"] } })));
@@ -384,6 +422,7 @@ describe("production database foundation", () => {
   it("creates sequential practice in strict natural question-number order", async () => {
     const user = await prisma.user.create({ data: { username: "order-user", displayName: "Order User", passwordHash: "test", role: "STUDENT" } });
     const level = await prisma.level.create({ data: { code: "A", name: "A Level" } });
+    await prisma.user.update({ where: { id: user.id }, data: { activeLevelId: level.id } });
     const defaultType = await prisma.knowledgePointType.upsert({ where: { code: "DEFAULT" }, update: {}, create: { code: "DEFAULT", name: "默认" } });
   const point = await prisma.knowledgePoint.create({ data: { typeId: defaultType.id, code: "9.1.1", name: "Order Point", path: "/9/9.1/9.1.1", depth: 2 } });
     const questions = await Promise.all(["A10", "A2", "A1"].map((code) => prisma.question.create({ data: { knowledgePointId: point.id, levels: { create: { levelId: level.id } }, externalQuestionCode: code, stem: code, type: "SINGLE_CHOICE", optionCount: 2, correctOptionCount: 1, selectionSpec: "2选1", options: [{ id: "A", text: "A" }, { id: "B", text: "B" }], correctOptionIds: ["A"] } })));
@@ -400,6 +439,7 @@ describe("production database foundation", () => {
   it("fills random practice entirely from unanswered questions when enough are available", async () => {
     const user = await prisma.user.create({ data: { username: "random-user", displayName: "Random User", passwordHash: "test", role: "STUDENT" } });
     const level = await prisma.level.create({ data: { code: "A", name: "A Level" } });
+    await prisma.user.update({ where: { id: user.id }, data: { activeLevelId: level.id } });
     const defaultType = await prisma.knowledgePointType.upsert({ where: { code: "DEFAULT" }, update: {}, create: { code: "DEFAULT", name: "默认" } });
   const point = await prisma.knowledgePoint.create({ data: { typeId: defaultType.id, code: "9.2.1", name: "Random Point", path: "/9/9.2/9.2.1", depth: 2 } });
     const questions = await Promise.all(Array.from({ length: 5 }, (_, index) => prisma.question.create({ data: { knowledgePointId: point.id, levels: { create: { levelId: level.id } }, externalQuestionCode: `R-${index + 1}`, stem: `R-${index + 1}`, type: "SINGLE_CHOICE", optionCount: 2, correctOptionCount: 1, selectionSpec: "2选1", options: [{ id: "A", text: "A" }, { id: "B", text: "B" }], correctOptionIds: ["A"] } })));
@@ -416,6 +456,7 @@ describe("production database foundation", () => {
   it("keeps each practice session's frozen option order after reload", async () => {
     const user = await prisma.user.create({ data: { username: "option-order-user", displayName: "Option Order User", passwordHash: "test", role: "STUDENT" } });
     const level = await prisma.level.create({ data: { code: "A", name: "A Level" } });
+    await prisma.user.update({ where: { id: user.id }, data: { activeLevelId: level.id } });
     const defaultType = await prisma.knowledgePointType.upsert({ where: { code: "DEFAULT" }, update: {}, create: { code: "DEFAULT", name: "默认" } });
   const point = await prisma.knowledgePoint.create({ data: { typeId: defaultType.id, code: "9.2.2", name: "Option Order Point", path: "/9/9.2/9.2.2", depth: 2 } });
     const options = ["A", "B", "C", "D"].map((id) => ({ id, text: `Option ${id}` }));
@@ -434,6 +475,7 @@ describe("production database foundation", () => {
   it("snapshots and grades a timed mock exam on final submission", async () => {
     const user = await prisma.user.create({ data: { username: "exam-user", displayName: "Exam User", passwordHash: "test", role: "STUDENT" } });
     const level = await prisma.level.create({ data: { code: "A", name: "A Level" } });
+    await prisma.user.update({ where: { id: user.id }, data: { activeLevelId: level.id } });
     const defaultType = await prisma.knowledgePointType.upsert({ where: { code: "DEFAULT" }, update: {}, create: { code: "DEFAULT", name: "默认" } });
   const point = await prisma.knowledgePoint.create({ data: { typeId: defaultType.id, code: "9.3.1", name: "Exam Point", path: "/9/9.3/9.3.1", depth: 2 } });
     const single = await prisma.question.create({ data: { knowledgePointId: point.id, levels: { create: { levelId: level.id } }, externalQuestionCode: "E-1", stem: "Single", type: "SINGLE_CHOICE", optionCount: 2, correctOptionCount: 1, selectionSpec: "2选1", options: [{ id: "A", text: "A" }, { id: "B", text: "B" }], correctOptionIds: ["A"] } });

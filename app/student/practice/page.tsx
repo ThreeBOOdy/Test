@@ -1,8 +1,9 @@
-﻿import { redirect } from "next/navigation";
+import { redirect } from "next/navigation";
 import { PracticeRunner } from "@/components/practice-runner";
 import { normalizePracticeLaunch } from "@/lib/domain/practice-launcher";
 import { createPracticeSession, getPracticeSession } from "@/lib/server/practice-service";
 import { getCurrentUser } from "@/lib/server/session";
+import { getStudentActiveLevelAccess } from "@/lib/server/student-level-access";
 
 export default async function PracticePage({ searchParams }: { searchParams: Promise<{ mode?: string; level?: string; knowledge?: string; session?: string }> }) {
   const user = await getCurrentUser();
@@ -14,6 +15,8 @@ export default async function PracticePage({ searchParams }: { searchParams: Pro
     if (!session) redirect("/student");
     return <main className="practice-workbench min-h-screen px-4 py-6 sm:px-8"><PracticeRunner session={session} /></main>;
   }
+  const activeLevelAccess = await getStudentActiveLevelAccess(user.id);
+  if (!activeLevelAccess.activeLevelId || !activeLevelAccess.activeLevel?.enabled) redirect("/student/practice/start");
   const launch = normalizePracticeLaunch(params);
   const session = await createPracticeSession(user.id,
     launch.mode === "WRONG_QUESTION" ? { mode: "wrong", questionId: launch.questionId }

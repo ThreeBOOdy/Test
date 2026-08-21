@@ -8,6 +8,7 @@ import { createQuestionSnapshot, gradeQuestionSnapshot, toPublicQuestionSnapshot
 import { advanceWrongQuestionMastery } from "@/lib/domain/wrong-question-mastery";
 import { completeReviewCardsForSession } from "@/lib/server/review-plan-service";
 import { awardPracticeCompletion, awardWrongClearCompletion } from "@/lib/server/rpg-service";
+import { getStudentActiveLevelAccess, requireAssignedActiveLevel } from "@/lib/server/student-level-access";
 import { parseStudentExplanation, type StudentExplanation } from "@/lib/domain/student-explanation";
 import type { ExamRule, PracticeMode, PublicAnswerResult, PublicExamResult, PublicPracticeSession, Question, QuestionOption } from "@/lib/domain/types";
 
@@ -35,7 +36,10 @@ type QuestionRecord = {
 };
 
 export async function createPracticeSession(userId: string, input: CreatePracticeRequest): Promise<PublicPracticeSession> {
-  if (input.mode === "wrong") return createWrongQuestionSession(userId, input.questionId);
+  const access = await getStudentActiveLevelAccess(userId);
+  const activeLevel = requireAssignedActiveLevel(access);
+  if (input.mode === "wrong") return createWrongQuestionSession(userId, input.questionId, activeLevel.id);
+  if (activeLevel.code !== input.levelCode) throw new ApiError("只能练习当前分配的字母类", 403);
   const level = await prisma.level.findFirst({ where: { code: input.levelCode, enabled: true } });
   if (!level) throw new ApiError("所选等级不存在或已停用", 404);
   if (input.mode === "exam") return createMockExamSession(userId, level.id);
@@ -74,9 +78,9 @@ async function createMockExamSession(userId: string, levelId: string) {
   });
 }
 
-async function createWrongQuestionSession(userId: string, questionId?: string): Promise<PublicPracticeSession> {
+async function createWrongQuestionSession(userId: string, questionId: string | undefined, activeLevelId: string): Promise<PublicPracticeSession> {
   const wrongQuestions = await prisma.wrongQuestion.findMany({
-    where: { userId, mastered: false, question: { status: "ACTIVE", knowledgePoint: { enabled: true } } },
+    where: { userId, mastered: false, question: { status: "ACTIVE", knowledgePoint: { enabled: true }, levels: { some: { levelId: activeLevelId } } } },
     include: { question: { include: { levels: { include: { level: { select: { code: true } } } }, knowledgePoint: { select: { name: true } } } } },
   });
   const selected = questionId
