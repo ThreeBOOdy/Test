@@ -18,8 +18,8 @@ const types = [
 ];
 
 const points = [
-  { id: "point-1", code: "4.1", name: "电路基础", depth: 0, sortOrder: 1, enabled: true, version: 1, childCount: 1, questionCount: 0 },
-  { id: "point-2", code: "4.1.1", name: "导体和绝缘体", depth: 1, sortOrder: 1, enabled: true, version: 2, childCount: 0, questionCount: 3 },
+  { id: "point-1", parentId: null, code: "4.1", name: "电路基础", depth: 0, sortOrder: 1, enabled: true, version: 1, childCount: 1, questionCount: 0 },
+  { id: "point-2", parentId: "point-1", code: "4.1.1", name: "导体和绝缘体", depth: 1, sortOrder: 1, enabled: true, version: 2, childCount: 0, questionCount: 3 },
 ];
 
 describe("KnowledgePointTypeManager", () => {
@@ -38,6 +38,7 @@ describe("KnowledgePointTypeManager", () => {
     expect(within(typeDg).getByText("启用")).toBeInTheDocument();
     expect(within(screen.getByTestId("knowledge-point-type-type-tx")).getByText("停用")).toBeInTheDocument();
     expect(screen.getByText("知识点树：电工基础")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "展开" }));
     expect(screen.getByText("导体和绝缘体")).toBeInTheDocument();
   });
 

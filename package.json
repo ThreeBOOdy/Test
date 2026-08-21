@@ -9,7 +9,7 @@
     "start": "next start",
     "lint": "eslint .",
     "test": "vitest run",
-    "test:integration": "vitest run --config vitest.integration.config.ts",
+    "test:integration": "node --env-file=.env scripts/run-integration-tests.mjs",
     "test:e2e": "playwright test",
     "exam:settlement-worker": "node --conditions=react-server --import tsx scripts/exam-settlement-worker.ts",
     "ai:explain": "node --conditions=react-server --import tsx scripts/ai-explanation-worker.ts",

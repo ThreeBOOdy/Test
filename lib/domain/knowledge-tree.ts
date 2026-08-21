@@ -2,6 +2,8 @@ import type { KnowledgePoint } from "@/lib/domain/types";
 
 export type KnowledgeTreeNode = KnowledgePoint & { children: KnowledgeTreeNode[] };
 
+const knowledgeCodeCollator = new Intl.Collator("zh-CN", { numeric: true, sensitivity: "base" });
+
 export function buildKnowledgeTree(points: readonly KnowledgePoint[]): KnowledgeTreeNode[] {
   const nodes = new Map<string, KnowledgeTreeNode>();
   for (const point of points) nodes.set(point.id, { ...point, children: [] });
@@ -13,7 +15,7 @@ export function buildKnowledgeTree(points: readonly KnowledgePoint[]): Knowledge
   }
 
   const sort = (items: KnowledgeTreeNode[]) => {
-    items.sort((left, right) => left.sortOrder - right.sortOrder || left.code.localeCompare(right.code));
+    items.sort((left, right) => knowledgeCodeCollator.compare(left.code, right.code) || left.sortOrder - right.sortOrder);
     items.forEach((item) => sort(item.children));
   };
   sort(roots);

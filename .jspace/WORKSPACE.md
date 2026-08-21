@@ -1,7 +1,7 @@
 # J-Space Workspace Ledger
 
 ## Goal
-输出题库导入ABC分类灵活化规格文档并拆分为独立可执行分片
+简化首页/登录引导：一屏品牌页+登录页极简，保留注册审核与统一账号路由
 
 ## Core
 - 字母类可扩展+导入后归类 — Level 动态 A/B/C/K，题目先入公共池
@@ -42,9 +42,11 @@
 - ✓18 规格文档第三版完成：自定义类别字典+导入后归类向导，分片 S1-S9 — verified by: read the v3 spec; sections cover categories/import/wizard/practice/impact/tests/slices
 - ✓19 规格文档第四版完成：字母类可扩展+知识点类型字典+动态导入向导，分片 S1-S11 — verified by: read the v4 spec; sections cover letter classes/kp types/import wizard/tree insertion/practice/impact/tests/slices
 - ✓20 规格补充 7.5：字母类拉取具体实现方案（commit返回questionIds+批量接口+未归类筛选+省事措施） — verified by: read the updated spec; section 7.5 covers commit response/batch API/UI/convenience
+- ✓21 Ticket 01 完成：seed/env/reset/e2e 密码统一 123456 — verified by: lint 0 errors; tsc --noEmit 通过; vitest 731 通过; db:reset-passwords 本地运行成功; e2e 因缺 Chrome/libnspr4 未跑
+- ✓22 Ticket 03 完成：首页改为一屏品牌页、已登录按 capability 重定向、静态测试同步更新；已提交 26b1ef6 — verified by: git diff review + lint 0 errors + tsc --noEmit + vitest 113 files/732 tests (含6个超时文件单独重跑通过) + e2e 因缺 Chrome 未跑
 
 ## Open
 - ?01 当前用户量和题库量是否足够支撑 FSRS/MCP 等后期功能 — settled by: 用现有统计数据或种子数据量估算，再决定是否提前建设
 
 ## Next
-等待用户确认后进入 S1 实现
+E2E环境已修复并提交 a08cb9f；公开入口测试通过，完整套件在WSL有3个无关失败待Windows/CI验证

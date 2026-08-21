@@ -278,7 +278,7 @@ export async function approveRegistration(administratorId: string, studentId: st
 
 function mapReviewConflict(error: unknown): never {
   if (error instanceof ApiError) throw error;
-  if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2034") throw new ApiError("STALE_ACCOUNT_STATE", 409);
+  if (error instanceof Prisma.PrismaClientKnownRequestError && (error.code === "P2034" || error.code === "P2039")) throw new ApiError("STALE_ACCOUNT_STATE", 409);
   throw error;
 }
 

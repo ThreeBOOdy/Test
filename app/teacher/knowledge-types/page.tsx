@@ -39,6 +39,7 @@ export default async function KnowledgeTypesPage({ searchParams }: { searchParam
           }))}
           points={points.map((point) => ({
             id: point.id,
+            parentId: point.parentId,
             code: point.code,
             name: point.name,
             depth: point.depth,
