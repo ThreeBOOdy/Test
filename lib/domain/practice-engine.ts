@@ -51,6 +51,12 @@ export function selectPrioritizedRandomQuestions<T extends Pick<Question, "id">>
   return [...shuffle(unanswered, random), ...shuffle(answered, random)].slice(0, Math.max(0, count));
 }
 
+export function selectRandomPracticeQuestions<T extends Pick<Question, "id">>(questions: readonly T[], answeredQuestionIds: ReadonlySet<string>, random: () => number = Math.random): T[] {
+  const unanswered = questions.filter((question) => !answeredQuestionIds.has(question.id));
+  const answered = questions.filter((question) => answeredQuestionIds.has(question.id));
+  return [...shuffle(unanswered, random), ...shuffle(answered, random)];
+}
+
 export function selectPracticeQuestions(
   questions: readonly Question[],
   input: CreatePracticeInput,

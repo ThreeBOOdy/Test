@@ -637,21 +637,27 @@ describe("production database foundation", () => {
     expect(nextRound.questions.map((question) => question.externalQuestionCode)).toEqual(["P1", "P2", "P3"]);
   });
 
-  it("fills random practice entirely from unanswered questions when enough are available", async () => {
+  it("creates random practice from all active questions without a quantity limit, prioritizing unseen questions", async () => {
     const user = await prisma.user.create({ data: { username: "random-user", displayName: "Random User", passwordHash: "test", role: "STUDENT" } });
     const level = await prisma.level.create({ data: { code: "A", name: "A Level" } });
     await prisma.user.update({ where: { id: user.id }, data: { activeLevelId: level.id } });
     const defaultType = await prisma.knowledgePointType.upsert({ where: { code: "DEFAULT" }, update: {}, create: { code: "DEFAULT", name: "默认" } });
-  const point = await prisma.knowledgePoint.create({ data: { typeId: defaultType.id, code: "9.2.1", name: "Random Point", path: "/9/9.2/9.2.1", depth: 2 } });
+    const point = await prisma.knowledgePoint.create({ data: { typeId: defaultType.id, code: "9.2.1", name: "Random Point", path: "/9/9.2/9.2.1", depth: 2 } });
     const questions = await Promise.all(Array.from({ length: 5 }, (_, index) => prisma.question.create({ data: { knowledgePointId: point.id, levels: { create: { levelId: level.id } }, externalQuestionCode: `R-${index + 1}`, stem: `R-${index + 1}`, type: "SINGLE_CHOICE", optionCount: 2, correctOptionCount: 1, selectionSpec: "2选1", options: [{ id: "A", text: "A" }, { id: "B", text: "B" }], correctOptionIds: ["A"] } })));
-    await prisma.levelPracticeRule.create({ data: { levelId: level.id, singleCount: 3, multipleCount: 0 } });
-    const answeredSession = await prisma.practiceSession.create({ data: { userId: user.id, mode: "LEVEL_COMPREHENSIVE", levelId: level.id, singleCountSnapshot: 2, multipleCountSnapshot: 0, status: "COMPLETED", completedAt: new Date() } });
-    await prisma.practiceAnswer.createMany({ data: questions.slice(0, 2).map((question) => ({ sessionId: answeredSession.id, questionId: question.id, selectedOptionIds: ["A"], isCorrect: true })) });
+    await prisma.studentLevelQuestionState.createMany({ data: [
+      { userId: user.id, levelId: level.id, questionId: questions[0].id, reps: 1 },
+      { userId: user.id, levelId: level.id, questionId: questions[1].id, reps: 1 },
+      { userId: user.id, levelId: level.id, questionId: questions[2].id, reps: 0 },
+    ] });
 
     const session = await createPracticeSession(user.id, { mode: "random", levelCode: "A" });
 
     expect(session.mode).toBe("RANDOM_ALL");
-    expect(new Set(session.questions.map((question) => question.id))).toEqual(new Set(questions.slice(2).map((question) => question.id)));
+    expect(session.total).toBe(5);
+    expect(new Set(session.questions.map((question) => question.id))).toEqual(new Set(questions.map((question) => question.id)));
+    const unseenIds = new Set(questions.slice(2).map((question) => question.id));
+    expect(session.questions.slice(0, 3).every((question) => unseenIds.has(question.id))).toBe(true);
+    expect(session.questions.slice(3).every((question) => !unseenIds.has(question.id))).toBe(true);
   });
 
   it("keeps each practice session's frozen option order after reload", async () => {

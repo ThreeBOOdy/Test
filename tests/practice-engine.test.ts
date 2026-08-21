@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { InsufficientQuestionError, isAnswerCorrect, selectPracticeQuestions, selectPrioritizedRandomQuestions, sortQuestionsByBankNumber } from "../lib/domain/practice-engine";
+import { InsufficientQuestionError, isAnswerCorrect, selectPracticeQuestions, selectPrioritizedRandomQuestions, selectRandomPracticeQuestions, sortQuestionsByBankNumber } from "../lib/domain/practice-engine";
 import type { Question } from "../lib/domain/types";
 
 function question(id: string, type: Question["type"], levelId = "A", knowledgePointId = "kp-1"): Question {
@@ -74,5 +74,29 @@ describe("practice engine", () => {
 
     expect(result).toHaveLength(4);
     expect(result.filter((item) => !["q-1", "q-2", "q-3"].includes(item.id))).toHaveLength(3);
+  });
+
+  it("selects every active random question without a quantity limit and puts unseen questions first", () => {
+    const questions = [
+      ...Array.from({ length: 4 }, (_, index) => question(`s-${index + 1}`, "SINGLE_CHOICE")),
+      ...Array.from({ length: 3 }, (_, index) => question(`m-${index + 1}`, "MULTIPLE_CHOICE")),
+    ];
+    const answeredIds = new Set(["s-1", "s-2", "m-1"]);
+    const result = selectRandomPracticeQuestions(questions, answeredIds, () => 0.42);
+
+    expect(result).toHaveLength(questions.length);
+    expect(new Set(result.map((item) => item.id))).toEqual(new Set(questions.map((item) => item.id)));
+    expect(result.slice(0, 4).every((item) => !answeredIds.has(item.id))).toBe(true);
+    expect(result.slice(4).every((item) => answeredIds.has(item.id))).toBe(true);
+  });
+
+  it("selects all random questions when none are answered", () => {
+    const questions = Array.from({ length: 5 }, (_, index) => question(`q-${index + 1}`, "SINGLE_CHOICE"));
+    const answeredIds = new Set<string>();
+
+    const result = selectRandomPracticeQuestions(questions, answeredIds, () => 0.42);
+
+    expect(result).toHaveLength(5);
+    expect(new Set(result.map((item) => item.id))).toEqual(new Set(questions.map((item) => item.id)));
   });
 });
