@@ -7,7 +7,10 @@ import {
   buildReviewCards,
   computeExamSprintTarget,
   DAILY_REVIEW_TARGET,
+  type FsrsDueQuestionCandidate,
+  type QuestionCandidate,
   type ReviewCardDraft,
+  type WeakKnowledgeCandidate,
 } from "@/lib/domain/review-plan-engine";
 import type {
   PublicReviewCard,
@@ -17,9 +20,8 @@ import type {
   ReviewPlanType,
 } from "@/lib/domain/review-plan";
 import { awardReviewCompletion } from "@/lib/server/rpg-service";
+import { getStudentActiveLevelAccess } from "@/lib/server/student-level-access";
 import { getBusinessDate } from "@/lib/server/time";
-
-const WEAK_KNOWLEDGE_WINDOW_DAYS = 14;
 
 type PlanWithCards = Prisma.ReviewPlanGetPayload<{
   include: {
@@ -138,62 +140,92 @@ export async function generateReviewPlan(
   const existing = await findPlan(userId, planDateValue, type);
   if (existing) return toPublicPlan(existing);
 
-  const wrongQuestions = await prisma.wrongQuestion.findMany({
-    where: { userId, mastered: false, question: { status: "ACTIVE", knowledgePoint: { enabled: true } } },
-    select: {
-      questionId: true,
-      wrongCount: true,
-      lastWrongAt: true,
-      question: { select: { knowledgePointId: true } },
-    },
-  });
-  const wrongCandidates = wrongQuestions.map((item) => ({
-    questionId: item.questionId,
-    knowledgePointId: item.question.knowledgePointId,
-    wrongCount: item.wrongCount,
-    lastWrongAt: item.lastWrongAt,
-  }));
+  const access = await getStudentActiveLevelAccess(userId);
+  const activeLevel = access.activeLevel && access.activeLevel.enabled ? access.activeLevel : null;
+  const levelId = activeLevel?.id ?? null;
 
-  const since = new Date(now);
-  since.setDate(since.getDate() - WEAK_KNOWLEDGE_WINDOW_DAYS);
-  const weakRows = await prisma.$queryRaw<Array<{ knowledgePointId: string; answered: number; correct: number }>>(Prisma.sql`
-    SELECT q.\`knowledgePointId\` AS knowledgePointId,
-           CAST(COUNT(pa.id) AS SIGNED) AS answered,
-           CAST(COALESCE(SUM(CASE WHEN pa.\`isCorrect\` = TRUE THEN 1 ELSE 0 END), 0) AS SIGNED) AS correct
-    FROM \`PracticeAnswer\` pa
-    JOIN \`PracticeSession\` ps ON ps.id = pa.\`sessionId\`
-    JOIN \`Question\` q ON q.id = pa.\`questionId\`
-    WHERE ps.\`userId\` = ${userId} AND ps.\`status\` = 'COMPLETED' AND ps.\`completedAt\` >= ${since}
-    GROUP BY q.\`knowledgePointId\`
-  `);
-  const weakKnowledgePoints = weakRows.map((row) => {
-    const answered = Number(row.answered);
-    const correct = Number(row.correct);
-    return {
-      knowledgePointId: row.knowledgePointId,
-      answered,
-      correct,
-      accuracy: answered ? Math.round((correct / answered) * 100) : 0,
-    };
-  });
+  const dueQuestions: FsrsDueQuestionCandidate[] = [];
+  let weakKnowledgePoints: WeakKnowledgeCandidate[] = [];
+  let questions: QuestionCandidate[] = [];
 
-  const weakPointIds = weakKnowledgePoints.map((point) => point.knowledgePointId);
-  const questions = weakPointIds.length
-    ? await prisma.question.findMany({
-        where: { status: "ACTIVE", knowledgePoint: { enabled: true, id: { in: weakPointIds } } },
+  if (levelId) {
+    const [states, activeQuestions] = await Promise.all([
+      prisma.studentLevelQuestionState.findMany({
+        where: {
+          userId,
+          levelId,
+          reps: { gt: 0 },
+          question: { status: "ACTIVE", knowledgePoint: { enabled: true } },
+        },
+        select: {
+          questionId: true,
+          dueAt: true,
+          difficulty: true,
+          stability: true,
+          lapses: true,
+          wrongCount: true,
+          favorite: true,
+          ignored: true,
+          lastReviewedAt: true,
+          correctCount: true,
+          question: { select: { knowledgePointId: true } },
+        },
+      }),
+      prisma.question.findMany({
+        where: { status: "ACTIVE", knowledgePoint: { enabled: true }, levels: { some: { levelId } } },
         select: { id: true, knowledgePointId: true },
-      })
-    : [];
+      }),
+    ]);
+
+    const nowTime = now.getTime();
+    for (const state of states) {
+      if (state.dueAt && state.dueAt.getTime() <= nowTime) {
+        dueQuestions.push({
+          questionId: state.questionId,
+          knowledgePointId: state.question.knowledgePointId,
+          dueAt: state.dueAt,
+          difficulty: state.difficulty,
+          stability: state.stability,
+          lapses: state.lapses,
+          wrongCount: state.wrongCount,
+          favorite: state.favorite,
+          ignored: state.ignored,
+          lastReviewedAt: state.lastReviewedAt,
+        });
+      }
+    }
+
+    const statsByPoint = new Map<string, { answered: number; correct: number; maxDifficulty: number; totalLapses: number }>();
+    for (const state of states) {
+      const pointId = state.question.knowledgePointId;
+      const current = statsByPoint.get(pointId) ?? { answered: 0, correct: 0, maxDifficulty: 0, totalLapses: 0 };
+      current.answered += state.correctCount + state.wrongCount;
+      current.correct += state.correctCount;
+      current.maxDifficulty = Math.max(current.maxDifficulty, state.difficulty);
+      current.totalLapses += state.lapses;
+      statsByPoint.set(pointId, current);
+    }
+    weakKnowledgePoints = [...statsByPoint.entries()].map(([knowledgePointId, stats]) => ({
+      knowledgePointId,
+      answered: stats.answered,
+      correct: stats.correct,
+      accuracy: stats.answered ? Math.round((stats.correct / stats.answered) * 100) : 0,
+      maxDifficulty: stats.maxDifficulty,
+      totalLapses: stats.totalLapses,
+    }));
+
+    questions = activeQuestions;
+  }
 
   let target = DAILY_REVIEW_TARGET;
   if (type === "EXAM_SPRINT" && input.examDate) {
     const daysUntilExam = daysBetween(planDate, input.examDate);
-    const totalCandidates = wrongCandidates.length + weakKnowledgePoints.length;
+    const totalCandidates = dueQuestions.length + weakKnowledgePoints.length;
     target = computeExamSprintTarget({ totalCandidates, daysUntilExam });
   }
 
   const drafts: ReviewCardDraft[] = buildReviewCards({
-    wrongQuestions: wrongCandidates,
+    dueQuestions,
     weakKnowledgePoints,
     questions,
     target,
