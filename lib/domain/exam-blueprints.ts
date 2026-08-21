@@ -4,7 +4,10 @@ import type {
   ExamBlueprintItem,
   ExamBlueprintItemWeight,
   ExamRule,
+  KnowledgePoint,
+  PracticeRule,
 } from "@/lib/domain/types";
+import { getDescendantIds } from "@/lib/domain/knowledge-tree";
 
 export const DEFAULT_EXAM_BLUEPRINT_NAME = "默认模拟测试";
 
@@ -112,4 +115,90 @@ export function validateExamBlueprint(
     for (const item of blueprint.items) validateExamBlueprintItem(item);
   }
   return blueprint;
+}
+
+export type ExamBlueprintStockIssue = {
+  knowledgePointId: string;
+  knowledgePointCode: string;
+  knowledgePointName: string;
+  questionType: "SINGLE_CHOICE" | "MULTIPLE_CHOICE";
+  required: number;
+  available: number;
+};
+
+/**
+ * Reject duplicate and ancestor/descendant knowledge point selections in a
+ * blueprint. The `points` array must contain the full knowledge point tree so
+ * descendant relationships can be resolved.
+ */
+export function validateExamBlueprintKnowledgePointOverlap(
+  items: readonly Pick<ExamBlueprintItem, "knowledgePointId">[],
+  points: readonly Pick<KnowledgePoint, "id" | "code" | "name" | "parentId">[],
+) {
+  const ids = items.map((item) => item.knowledgePointId);
+  if (new Set(ids).size !== ids.length) throw new Error("蓝图条目知识点不能重复");
+
+  const pointById = new Map(points.map((point) => [point.id, point]));
+  for (const id of ids) {
+    if (!pointById.has(id)) throw new Error("知识点不存在");
+  }
+
+  for (let left = 0; left < ids.length; left += 1) {
+    for (let right = left + 1; right < ids.length; right += 1) {
+      const leftId = ids[left];
+      const rightId = ids[right];
+      const leftDescendants = new Set(getDescendantIds(points, leftId));
+      if (leftDescendants.has(rightId)) {
+        throw new Error(`蓝图条目知识点存在父子重叠：${pointById.get(leftId)!.name} 与 ${pointById.get(rightId)!.name} 不能同时选择`);
+      }
+      const rightDescendants = new Set(getDescendantIds(points, rightId));
+      if (rightDescendants.has(leftId)) {
+        throw new Error(`蓝图条目知识点存在父子重叠：${pointById.get(rightId)!.name} 与 ${pointById.get(leftId)!.name} 不能同时选择`);
+      }
+    }
+  }
+  return items;
+}
+
+/**
+ * Compare requested blueprint item counts with per-knowledge-point inventory.
+ * Returns one issue per question type where the requested count exceeds stock.
+ */
+export function findExamBlueprintStockIssues(
+  items: readonly Pick<ExamBlueprintItem, "knowledgePointId" | "singleCount" | "multipleCount">[],
+  inventoryByPointId: ReadonlyMap<string, PracticeRule>,
+  pointById: ReadonlyMap<string, Pick<KnowledgePoint, "id" | "code" | "name">>,
+): ExamBlueprintStockIssue[] {
+  const issues: ExamBlueprintStockIssue[] = [];
+  for (const item of items) {
+    const point = pointById.get(item.knowledgePointId);
+    if (!point) continue;
+    const inventory = inventoryByPointId.get(item.knowledgePointId) ?? { singleCount: 0, multipleCount: 0 };
+    if (item.singleCount > inventory.singleCount) {
+      issues.push({
+        knowledgePointId: item.knowledgePointId,
+        knowledgePointCode: point.code,
+        knowledgePointName: point.name,
+        questionType: "SINGLE_CHOICE",
+        required: item.singleCount,
+        available: inventory.singleCount,
+      });
+    }
+    if (item.multipleCount > inventory.multipleCount) {
+      issues.push({
+        knowledgePointId: item.knowledgePointId,
+        knowledgePointCode: point.code,
+        knowledgePointName: point.name,
+        questionType: "MULTIPLE_CHOICE",
+        required: item.multipleCount,
+        available: inventory.multipleCount,
+      });
+    }
+  }
+  return issues;
+}
+
+export function formatExamBlueprintStockIssue(issue: ExamBlueprintStockIssue) {
+  const typeLabel = issue.questionType === "SINGLE_CHOICE" ? "单选" : "多选";
+  return `知识点“${issue.knowledgePointName}”（${issue.knowledgePointCode}）${typeLabel}库存不足：需要 ${issue.required} 题，当前仅 ${issue.available} 题，缺少 ${issue.required - issue.available} 题`;
 }

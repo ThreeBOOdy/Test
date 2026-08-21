@@ -98,7 +98,14 @@ describe("exam blueprint service (issue #15)", () => {
     expect(result).toEqual([{ id: "blueprint-1", items: [] }]);
     expect(mocks.blueprintFindMany).toHaveBeenCalledWith({
       where: { levelId: "level-a" },
-      include: { items: { orderBy: { knowledgePointId: "asc" } } },
+      include: {
+        items: {
+          orderBy: { knowledgePointId: "asc" },
+          include: {
+            knowledgePoint: { select: { id: true, code: true, name: true, path: true } },
+          },
+        },
+      },
       orderBy: [{ levelId: "asc" }, { isDefault: "desc" }, { name: "asc" }],
     });
   });
