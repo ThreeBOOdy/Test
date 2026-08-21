@@ -145,4 +145,11 @@ describe("PracticeRunner", () => {
     expect(screen.getByText("第 1 / 1 题")).toBeInTheDocument();
     expect(screen.queryByText("标准答案：A")).not.toBeInTheDocument();
   });
+
+  it("shows sequential round count and resume position for order sessions", () => {
+    render(<PracticeRunner session={practiceSessionFixture({ mode: "QUESTION_ORDER", title: "A级 · 顺序练习", sequentialProgress: { lastIndex: 1, roundCount: 2 } })} />);
+
+    expect(screen.getByText("完成 2 轮")).toBeInTheDocument();
+    expect(screen.getByText("上次做到第 2 / 2 题")).toBeInTheDocument();
+  });
 });

@@ -396,6 +396,25 @@ describe("MySQL project configuration", () => {
     expect(schema).toMatch(/@@unique\(\[levelId, name\]\)/);
     expect(schema).toMatch(/@@unique\(\[blueprintId, knowledgePointId\]\)/);
   });
+
+  it("adds sequential practice progress with lastIndex and roundCount", () => {
+    const migration = fs.readFileSync(path.resolve("prisma/migrations/20260821130000_student_level_progress/migration.sql"), "utf8");
+    const schema = fs.readFileSync(path.resolve("prisma/schema.prisma"), "utf8");
+
+    expect(migration).toContain("CREATE TABLE `StudentLevelProgress`");
+    expect(migration).toContain("`lastIndex` INTEGER NOT NULL DEFAULT 0");
+    expect(migration).toContain("`roundCount` INTEGER NOT NULL DEFAULT 0");
+    expect(migration).toContain("UNIQUE INDEX `StudentLevelProgress_userId_levelId_key`(`userId`, `levelId`)");
+    expect(migration).toContain("FOREIGN KEY (`userId`) REFERENCES `User`(`id`) ON DELETE CASCADE ON UPDATE CASCADE");
+    expect(migration).toContain("FOREIGN KEY (`levelId`) REFERENCES `Level`(`id`) ON DELETE RESTRICT ON UPDATE CASCADE");
+    expect(migration).not.toMatch(/DROP TABLE `(User|Level|StudentLevelProgress)`|DELETE FROM `(User|Level)`/);
+
+    expect(schema).toContain("model StudentLevelProgress {");
+    expect(schema).toMatch(/lastIndex\s+Int\s+@default\(0\)/);
+    expect(schema).toMatch(/roundCount\s+Int\s+@default\(0\)/);
+    expect(schema).toMatch(/@@unique\(\[userId, levelId\]\)/);
+    expect(schema).toMatch(/studentLevelProgresses\s+StudentLevelProgress\[\]/);
+  });
 });
 
 describe("MySQL database URL protection", () => {

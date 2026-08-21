@@ -39,6 +39,7 @@ beforeEach(async () => {
   await prisma.practiceSessionQuestion.deleteMany();
   await prisma.practiceSession.deleteMany();
   await prisma.wrongQuestion.deleteMany();
+  await prisma.studentLevelProgress.deleteMany();
   await prisma.questionRevision.deleteMany();
   await prisma.questionImage.deleteMany();
   await prisma.question.deleteMany();
@@ -419,21 +420,47 @@ describe("production database foundation", () => {
     expect(await prisma.wrongQuestion.findUniqueOrThrow({ where: { userId_questionId: { userId: user.id, questionId: incorrectQuestion.id } } })).toMatchObject({ mastered: false, wrongCount: 2 });
   });
 
-  it("creates sequential practice in strict natural question-number order", async () => {
+  it("creates sequential practice with every active question in natural order without reading count rules", async () => {
     const user = await prisma.user.create({ data: { username: "order-user", displayName: "Order User", passwordHash: "test", role: "STUDENT" } });
     const level = await prisma.level.create({ data: { code: "A", name: "A Level" } });
     await prisma.user.update({ where: { id: user.id }, data: { activeLevelId: level.id } });
     const defaultType = await prisma.knowledgePointType.upsert({ where: { code: "DEFAULT" }, update: {}, create: { code: "DEFAULT", name: "默认" } });
   const point = await prisma.knowledgePoint.create({ data: { typeId: defaultType.id, code: "9.1.1", name: "Order Point", path: "/9/9.1/9.1.1", depth: 2 } });
-    const questions = await Promise.all(["A10", "A2", "A1"].map((code) => prisma.question.create({ data: { knowledgePointId: point.id, levels: { create: { levelId: level.id } }, externalQuestionCode: code, stem: code, type: "SINGLE_CHOICE", optionCount: 2, correctOptionCount: 1, selectionSpec: "2选1", options: [{ id: "A", text: "A" }, { id: "B", text: "B" }], correctOptionIds: ["A"] } })));
-    await prisma.levelPracticeRule.create({ data: { levelId: level.id, singleCount: 2, multipleCount: 0 } });
-    const answeredSession = await prisma.practiceSession.create({ data: { userId: user.id, mode: "LEVEL_COMPREHENSIVE", levelId: level.id, singleCountSnapshot: 1, multipleCountSnapshot: 0, status: "COMPLETED", completedAt: new Date() } });
-    await prisma.practiceAnswer.create({ data: { sessionId: answeredSession.id, questionId: questions.find((question) => question.externalQuestionCode === "A1")!.id, selectedOptionIds: ["A"], isCorrect: true } });
+    await Promise.all(["A10", "A2", "A1"].map((code) => prisma.question.create({ data: { knowledgePointId: point.id, levels: { create: { levelId: level.id } }, externalQuestionCode: code, stem: code, type: "SINGLE_CHOICE", optionCount: 2, correctOptionCount: 1, selectionSpec: "2选1", options: [{ id: "A", text: "A" }, { id: "B", text: "B" }], correctOptionIds: ["A"] } })));
+    await prisma.levelPracticeRule.create({ data: { levelId: level.id, singleCount: 1, multipleCount: 0 } });
 
     const session = await createPracticeSession(user.id, { mode: "order", levelCode: "A" });
 
     expect(session.mode).toBe("QUESTION_ORDER");
-    expect(session.questions.map((question) => question.externalQuestionCode)).toEqual(["A1", "A2"]);
+    expect(session.questions.map((question) => question.externalQuestionCode)).toEqual(["A1", "A2", "A10"]);
+    expect(session.total).toBe(3);
+    expect(session.sequentialProgress).toMatchObject({ lastIndex: 0, roundCount: 0 });
+  });
+
+  it("persists sequential lastIndex, resumes an active order session, and increments roundCount on completion", async () => {
+    const user = await prisma.user.create({ data: { username: "order-progress-user", displayName: "Order Progress User", passwordHash: "test", role: "STUDENT" } });
+    const level = await prisma.level.create({ data: { code: "A", name: "A Level" } });
+    await prisma.user.update({ where: { id: user.id }, data: { activeLevelId: level.id } });
+    const defaultType = await prisma.knowledgePointType.upsert({ where: { code: "DEFAULT" }, update: {}, create: { code: "DEFAULT", name: "默认" } });
+  const point = await prisma.knowledgePoint.create({ data: { typeId: defaultType.id, code: "9.1.2", name: "Order Progress Point", path: "/9/9.1/9.1.2", depth: 2 } });
+    const questions = await Promise.all(["P1", "P2", "P3"].map((code) => prisma.question.create({ data: { knowledgePointId: point.id, levels: { create: { levelId: level.id } }, externalQuestionCode: code, stem: code, type: "SINGLE_CHOICE", optionCount: 2, correctOptionCount: 1, selectionSpec: "2选1", options: [{ id: "A", text: "A" }, { id: "B", text: "B" }], correctOptionIds: ["A"] } })));
+
+    const first = await createPracticeSession(user.id, { mode: "order", levelCode: "A" });
+    expect(first.total).toBe(3);
+    await submitPracticeAnswer(user.id, first.id, questions[0].id, ["A"], "order-progress-1");
+    await submitPracticeAnswer(user.id, first.id, questions[1].id, ["A"], "order-progress-2");
+    expect(await prisma.studentLevelProgress.findUniqueOrThrow({ where: { userId_levelId: { userId: user.id, levelId: level.id } } })).toMatchObject({ lastIndex: 2, roundCount: 0 });
+
+    const resumed = await createPracticeSession(user.id, { mode: "order", levelCode: "A" });
+    expect(resumed.id).toBe(first.id);
+
+    await submitPracticeAnswer(user.id, first.id, questions[2].id, ["A"], "order-progress-3");
+    expect(await prisma.practiceSession.findUniqueOrThrow({ where: { id: first.id } })).toMatchObject({ status: "COMPLETED" });
+    expect(await prisma.studentLevelProgress.findUniqueOrThrow({ where: { userId_levelId: { userId: user.id, levelId: level.id } } })).toMatchObject({ lastIndex: 0, roundCount: 1 });
+
+    const nextRound = await createPracticeSession(user.id, { mode: "order", levelCode: "A" });
+    expect(nextRound.id).not.toBe(first.id);
+    expect(nextRound.questions.map((question) => question.externalQuestionCode)).toEqual(["P1", "P2", "P3"]);
   });
 
   it("fills random practice entirely from unanswered questions when enough are available", async () => {
