@@ -14,6 +14,7 @@ const studentNationalId = createNationalId(Number(numericRunId));
 const studentPhone = `138${numericRunId}`;
 const initialPassword = "InitialPass123!";
 const changedPassword = "ChangedPass456!";
+const blueprintName = `E2E模拟-${runId}`;
 
 function createNationalId(seed: number) {
   const sequence = String(100 + (seed % 450) * 2).padStart(3, "0");
@@ -161,6 +162,38 @@ test.describe.serial("production business flows", () => {
     await expect(page.getByRole("heading", { name: "欢迎回来，端到端学生" })).toBeVisible();
   });
 
+  test("teacher binds the activated student to the A level", async ({ page }) => {
+    await login(page, "teacher", "123456", "/teacher/students");
+    const row = page.getByRole("row").filter({ hasText: activatedStudentUsername });
+    await expect(row).toContainText("端到端学生", { timeout: 20_000 });
+    if (await row.getByText("未分配", { exact: true }).count()) {
+      await row.getByRole("combobox").selectOption({ label: "A · A级 · 基础掌握" });
+      await row.getByRole("button", { name: "保存", exact: true }).click();
+      await expect(page.getByRole("status")).toHaveText("字母类已保存");
+    } else {
+      await expect(row).toContainText("A级");
+    }
+  });
+
+  test("teacher configures an A-level mock exam blueprint", async ({ page }) => {
+    await login(page, "teacher", "123456", "/teacher/rules");
+    const aCard = page.getByRole("heading", { name: "A级 · 基础掌握 · 模拟测试蓝图" }).locator("xpath=ancestor::div[contains(@class,'rounded-3xl')][1]");
+    await expect(aCard).toBeVisible({ timeout: 20_000 });
+    await aCard.getByRole("button", { name: "新增蓝图" }).click();
+    const dialog = page.getByRole("dialog", { name: "新建蓝图" });
+    await dialog.getByLabel("蓝图名称").fill(blueprintName);
+    await dialog.getByLabel("考试时间（分钟）").fill("30");
+    await dialog.getByLabel("合格题数").fill("1");
+    await dialog.getByRole("button", { name: "添加知识点条目" }).click();
+    const picker = page.getByRole("dialog", { name: "选择知识点" });
+    await picker.getByRole("button", { name: "选择知识点 4.1.1 导体与绝缘体" }).click();
+    await dialog.getByLabel("4.1.1 单选数量").fill("1");
+    await expect(dialog.getByRole("status")).toContainText("共 1 题");
+    await dialog.getByRole("button", { name: "保存蓝图" }).click();
+    await expect(dialog).toBeHidden({ timeout: 20_000 });
+    await expect(page.getByText(blueprintName, { exact: true })).toBeVisible({ timeout: 20_000 });
+  });
+
   test("student practice restores progress and closes the wrong-question loop", async ({ page }) => {
     await login(page, activatedStudentUsername, changedPassword, "/student");
     await page.getByRole("link", { name: /A级顺序刷题/ }).click();
@@ -184,6 +217,10 @@ test.describe.serial("production business flows", () => {
     await expect(page.getByText("正确", { exact: true }).locator("..")).toContainText("0");
     await expect(page.getByText("总题", { exact: true }).locator("..")).toContainText("10");
 
+    // 今日复习计划应基于刚产生的错题生成
+    await page.goto("/student");
+    await expect(page.getByText("今日复习计划")).toBeVisible({ timeout: 20_000 });
+    await expect(page.getByText(/错题巩固/).first()).toBeVisible();
     await page.goto("/student/history");
     await expect(page.getByText("A级顺序练习").first()).toBeVisible();
     await expect(page.getByText("10 题", { exact: false }).first()).toBeVisible();
@@ -206,8 +243,54 @@ test.describe.serial("production business flows", () => {
     await page.goto("/student/wrong");
     await expect(page.getByText("待巩固 0", { exact: true })).toBeVisible();
     await expect(page.getByText("已掌握 10", { exact: true })).toBeVisible();
+    // 一键清除错题：先制造一道错题，再通过学生端清除
+    await page.goto("/student/practice/start?mode=order&level=A");
+    await expect(page).toHaveURL(/\/student\/practice\?session=/, { timeout: 30_000 });
+    await expect(page.getByText("第 1 / 10 题", { exact: true })).toBeVisible();
+    await answerWrong(page);
+    await page.goto("/student/wrong");
+    await expect(page.getByText("待巩固 1", { exact: true })).toBeVisible();
+    await page.getByRole("button", { name: "一键清除错题" }).click();
+    await page.getByRole("button", { name: "确认清除" }).click();
+    await expect(page.getByRole("status")).toContainText("错题已清除（1 道）");
+    await expect(page.getByText("待巩固 0", { exact: true })).toBeVisible({ timeout: 20_000 });
     await page.goto("/student/history");
     await expect(page.getByText("错题巩固练习").first()).toBeVisible();
+  });
+
+
+  test("student can use random, favorite and mock exam channels", async ({ page }) => {
+    await login(page, activatedStudentUsername, changedPassword, "/student");
+
+    // 随机刷题
+    await page.getByRole("link", { name: /A级随机刷题/ }).click();
+    await expect(page).toHaveURL(/\/student\/practice\?session=/, { timeout: 30_000 });
+    await expect(page.getByText("第 1 / 10 题", { exact: true })).toBeVisible();
+    await page.getByRole("button", { name: "收藏", exact: true }).click();
+    await expect(page.getByRole("button", { name: "收藏", exact: true })).toHaveAttribute("aria-pressed", "true");
+    await page.getByRole("link", { name: "退出训练" }).click();
+    await expect(page).toHaveURL(/\/student$/, { timeout: 20_000 });
+
+    // 收藏列表与收藏练习
+    await page.goto("/student/favorites");
+    await expect(page.getByText("我的收藏")).toBeVisible();
+    await expect(page.getByRole("link", { name: "练习收藏题" })).toBeVisible();
+    await page.getByRole("link", { name: "练习收藏题" }).click();
+    await expect(page).toHaveURL(/\/student\/practice\?session=/, { timeout: 30_000 });
+    await expect(page.getByText("第 1 / 1 题", { exact: true })).toBeVisible();
+    await page.getByRole("link", { name: "退出训练" }).click();
+    await expect(page).toHaveURL(/\/student$/, { timeout: 20_000 });
+
+    // 教师配置的模拟测试蓝图
+    await page.goto("/student/practice/start");
+    const examLink = page.getByRole("link", { name: new RegExp(`A级·${blueprintName}`) });
+    await expect(examLink).toBeVisible();
+    await examLink.click();
+    await expect(page).toHaveURL(/\/student\/practice\?session=/, { timeout: 30_000 });
+    await expect(page.getByText("模拟考试", { exact: true })).toBeVisible();
+    await expect(page.getByText("第 1 / 1 题", { exact: true })).toBeVisible();
+    await page.getByRole("button", { name: "放弃考试" }).click();
+    await expect(page).toHaveURL(/\/student$/, { timeout: 20_000 });
   });
 
   test("Excel preview, issue report, commit, and revert work as one server-owned batch", async ({ page }) => {
