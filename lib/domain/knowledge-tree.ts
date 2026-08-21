@@ -22,7 +22,7 @@ export function buildKnowledgeTree(points: readonly KnowledgePoint[]): Knowledge
   return roots;
 }
 
-export function getDescendantIds(points: readonly KnowledgePoint[], rootId: string): string[] {
+export function getDescendantIds(points: readonly Pick<KnowledgePoint, "id" | "parentId">[], rootId: string): string[] {
   const childrenByParent = new Map<string, string[]>();
   for (const point of points) {
     if (!point.parentId) continue;
