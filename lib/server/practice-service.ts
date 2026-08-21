@@ -159,7 +159,8 @@ async function persistPracticeSession(userId: string, mode: PracticeMode, levelI
     });
     sequentialProgress = await getSequentialProgress(userId, levelId);
   }
-  return toPublicSession(session, snapshots, {}, publicExam, undefined, undefined, sequentialProgress ?? undefined);
+  const questionStates = await loadQuestionStates(userId, snapshots);
+  return toPublicSession(session, snapshots, {}, publicExam, undefined, undefined, sequentialProgress ?? undefined, questionStates);
 }
 
 export async function getPracticeSession(userId: string, sessionId: string): Promise<PublicPracticeSession | null> {
@@ -183,7 +184,8 @@ export async function getPracticeSession(userId: string, sessionId: string): Pro
     ? toPublicExamResult(session.correctCount, session.questions.length, session.passingCountSnapshot ?? session.questions.length, session.completedAt, session.examSettlementSource ?? "STUDENT_SUBMISSION")
     : undefined;
   const sequentialProgress = session.mode === "QUESTION_ORDER" && session.levelId ? await getSequentialProgress(userId, session.levelId) : undefined;
-  return toPublicSession(session, snapshots, results, exam, draft, examResult, sequentialProgress ?? undefined);
+  const questionStates = await loadQuestionStates(userId, snapshots);
+  return toPublicSession(session, snapshots, results, exam, draft, examResult, sequentialProgress ?? undefined, questionStates);
 }
 
 export async function saveExamDraft(userId: string, sessionId: string, input: { answers: Record<string, string[]>; currentIndex: number; version: number }) {
@@ -423,8 +425,25 @@ function createSnapshots(records: QuestionRecord[], questions: Question[]) {
   });
 }
 
-function toPublicSession(session: { id: string; mode: PracticeMode; learningMode: boolean; status: "IN_PROGRESS" | "COMPLETED" | "ABANDONED" }, snapshots: QuestionSnapshot[], results: Record<string, PublicAnswerResult>, exam?: { durationMinutes: number; passingCount: number; expiresAt: Date }, draft?: PublicPracticeSession["draft"], examResult?: PublicExamResult, sequentialProgress?: { lastIndex: number; roundCount: number }): PublicPracticeSession {
-  return { id: session.id, mode: session.mode, learningMode: session.learningMode, status: session.status, title: sessionTitle(session.mode, snapshots), total: snapshots.length, questions: snapshots.map(toPublicQuestionSnapshot), initialResults: session.mode === "MOCK_EXAM" ? {} : results, ...(exam ? { exam: { durationMinutes: exam.durationMinutes, passingCount: exam.passingCount, expiresAt: exam.expiresAt.toISOString() } } : {}), ...(draft ? { draft } : {}), ...(examResult ? { examResult } : {}), ...(sequentialProgress ? { sequentialProgress } : {}) };
+async function loadQuestionStates(userId: string, snapshots: QuestionSnapshot[]): Promise<Map<string, { favorite: boolean; ignored: boolean }>> {
+  const questionIds = snapshots.map((snapshot) => snapshot.questionId);
+  if (questionIds.length === 0) return new Map();
+  const levelIds = Array.from(new Set(snapshots.map((snapshot) => snapshot.levelId).filter(Boolean)));
+  const rows = await prisma.studentLevelQuestionState.findMany({
+    where: { userId, questionId: { in: questionIds }, ...(levelIds.length ? { levelId: { in: levelIds } } : {}) },
+    select: { questionId: true, levelId: true, favorite: true, ignored: true },
+  });
+  const byQuestionAndLevel = new Map(rows.map((row) => [`${row.questionId}:${row.levelId}`, row]));
+  const states = new Map<string, { favorite: boolean; ignored: boolean }>();
+  for (const snapshot of snapshots) {
+    const row = byQuestionAndLevel.get(`${snapshot.questionId}:${snapshot.levelId}`) ?? rows.find((item) => item.questionId === snapshot.questionId);
+    if (row) states.set(snapshot.questionId, { favorite: row.favorite, ignored: row.ignored });
+  }
+  return states;
+}
+
+function toPublicSession(session: { id: string; mode: PracticeMode; learningMode: boolean; status: "IN_PROGRESS" | "COMPLETED" | "ABANDONED" }, snapshots: QuestionSnapshot[], results: Record<string, PublicAnswerResult>, exam?: { durationMinutes: number; passingCount: number; expiresAt: Date }, draft?: PublicPracticeSession["draft"], examResult?: PublicExamResult, sequentialProgress?: { lastIndex: number; roundCount: number }, questionStates: Map<string, { favorite: boolean; ignored: boolean }> = new Map()): PublicPracticeSession {
+  return { id: session.id, mode: session.mode, learningMode: session.learningMode, status: session.status, title: sessionTitle(session.mode, snapshots), total: snapshots.length, questions: snapshots.map((snapshot) => toPublicQuestionSnapshot(snapshot, questionStates.get(snapshot.questionId))), initialResults: session.mode === "MOCK_EXAM" ? {} : results, ...(exam ? { exam: { durationMinutes: exam.durationMinutes, passingCount: exam.passingCount, expiresAt: exam.expiresAt.toISOString() } } : {}), ...(draft ? { draft } : {}), ...(examResult ? { examResult } : {}), ...(sequentialProgress ? { sequentialProgress } : {}) };
 }
 
 async function getApprovedExplanations(questionIds: string[]): Promise<Array<StudentExplanation | null>> {

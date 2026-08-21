@@ -24,6 +24,8 @@ export function practiceSessionFixture(overrides: Partial<PublicPracticeSession>
         ],
         knowledgeName: "无线电基础",
         levelCode: "A",
+        favorite: false,
+        ignored: false,
       },
       {
         id: "question-2",
@@ -40,6 +42,8 @@ export function practiceSessionFixture(overrides: Partial<PublicPracticeSession>
         ],
         knowledgeName: "规范操作",
         levelCode: "A",
+        favorite: false,
+        ignored: false,
       },
     ],
     initialResults: {},

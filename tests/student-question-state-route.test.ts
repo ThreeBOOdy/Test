@@ -69,6 +69,28 @@ describe("student question state API", () => {
     expect(mocks.setStudentQuestionState).toHaveBeenCalledWith("student-1", "q1", { ignored: false });
   });
 
+  it("updates favorite and ignored together for the current active level", async () => {
+    mocks.setStudentQuestionState.mockResolvedValue({
+      questionId: "q1",
+      levelId: "level-a",
+      levelCode: "A",
+      favorite: true,
+      ignored: true,
+    });
+
+    const response = await PATCH(stateRequest({ favorite: true, ignored: true }), { params: Promise.resolve({ questionId: "q1" }) });
+
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({
+      questionId: "q1",
+      levelId: "level-a",
+      levelCode: "A",
+      favorite: true,
+      ignored: true,
+    });
+    expect(mocks.setStudentQuestionState).toHaveBeenCalledWith("student-1", "q1", { favorite: true, ignored: true });
+  });
+
   it("rejects a body with neither favorite nor ignored", async () => {
     const response = await PATCH(stateRequest({}), { params: Promise.resolve({ questionId: "q1" }) });
 

@@ -65,4 +65,11 @@ describe("practice question snapshots", () => {
     expect(publicQuestion).not.toHaveProperty("correctOptionCount");
     expect(publicQuestion).not.toHaveProperty("selectionSpec");
   });
+
+  it("carries favorite/ignored marks into the public question for the practice UI", () => {
+    const publicQuestion = toPublicQuestionSnapshot(createQuestionSnapshot(question()), { favorite: true, ignored: true });
+
+    expect(publicQuestion.favorite).toBe(true);
+    expect(publicQuestion.ignored).toBe(true);
+  });
 });

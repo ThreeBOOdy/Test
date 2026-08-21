@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
-import { ArrowLeft, ArrowRight, CheckCircle2, CircleX, Clock3, Radio, Send } from "lucide-react";
+import { ArrowLeft, ArrowRight, CheckCircle2, CircleX, Clock3, EyeOff, Radio, Send, Star } from "lucide-react";
 import { AnswerOption } from "@/components/training/answer-option";
 import { BossBattle } from "@/components/training/boss-battle";
 import { PracticeSummary } from "@/components/training/practice-summary";
@@ -30,6 +30,9 @@ export function PracticeRunner({ session }: { session: PublicPracticeSession }) 
   const [pending, setPending] = useState(false);
   const [learningMode, setLearningMode] = useState(session.learningMode ?? false);
   const [modeSaving, setModeSaving] = useState(false);
+  const showFavoriteButtons = !isExam && (session.mode === "QUESTION_ORDER" || session.mode === "RANDOM_ALL" || session.mode === "WRONG_QUESTION");
+  const [marks, setMarks] = useState<Record<string, { favorite: boolean; ignored: boolean }>>(() => Object.fromEntries(session.questions.map((item) => [item.id, { favorite: item.favorite ?? false, ignored: item.ignored ?? false }])));
+  const [markPending, setMarkPending] = useState<"favorite" | "ignored" | null>(null);
   const [remainingSeconds, setRemainingSeconds] = useState(() => session.exam ? Math.max(0, Math.ceil((new Date(session.exam.expiresAt).getTime() - Date.now()) / 1000)) : 0);
   const autoSubmitted = useRef(false);
   const answerRequestKeys = useRef<Record<string, string>>({});
@@ -39,6 +42,7 @@ export function PracticeRunner({ session }: { session: PublicPracticeSession }) 
   const draftRequestInFlight = useRef(false);
   const draftRetryTimer = useRef<number | null>(null);
   const question = session.questions[index];
+  const currentMarks = useMemo(() => marks[question.id] ?? { favorite: false, ignored: false }, [marks, question.id]);
   const result = results[question.id];
   const selected = useMemo(() => result?.selectedOptionIds ?? drafts[question.id] ?? [], [drafts, question.id, result?.selectedOptionIds]);
   const selectedSet = useMemo(() => new Set(selected), [selected]);
@@ -71,6 +75,32 @@ export function PracticeRunner({ session }: { session: PublicPracticeSession }) 
       setModeSaving(false);
     }
   }, [learningMode, modeSaving, session.id]);
+
+  const toggleMark = useCallback(async (kind: "favorite" | "ignored") => {
+    if (isExam || markPending || !showFavoriteButtons) return;
+    const next = !currentMarks[kind];
+    setError("");
+    setMarkPending(kind);
+    try {
+      const response = await fetch(`/api/v1/student/question-states/${question.id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ [kind]: next }) });
+      const data = await response.json() as { favorite?: boolean; ignored?: boolean; message?: string };
+      if (!response.ok) {
+        setError(data.message ?? "更新题目状态失败，请稍后重试");
+        return;
+      }
+      setMarks((current) => ({
+        ...current,
+        [question.id]: {
+          favorite: data.favorite ?? current[question.id]?.favorite ?? false,
+          ignored: data.ignored ?? current[question.id]?.ignored ?? false,
+        },
+      }));
+    } catch {
+      setError("更新题目状态失败，请稍后重试");
+    } finally {
+      setMarkPending(null);
+    }
+  }, [currentMarks, isExam, markPending, question.id, showFavoriteButtons]);
 
   const flushDraftSave = useCallback(async () => {
     if (!isExam || draftRequestInFlight.current || !pendingDraft.current || summaryVisible) return;
@@ -227,7 +257,7 @@ export function PracticeRunner({ session }: { session: PublicPracticeSession }) 
     {isExam ? <div className="mb-5"><BossBattle mode="exam" total={session.total} passingCount={session.exam?.passingCount} /></div> : null}
     <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_280px]">
       <Card variant="receiver" className="practice-console overflow-hidden text-slate-50"><div className="border-b border-cyan-200/10 bg-[#08121e]/95 px-5 py-5 sm:px-7"><div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between"><div><div className="font-radio flex items-center gap-2 text-[10px] font-bold tracking-[.14em] text-cyan-300"><Radio className="size-3.5" />{studentFacingTitle}</div><div className="mt-1.5 text-base font-bold text-slate-100">第 {index + 1} / {session.total} 题</div></div><div className="w-full sm:max-w-64"><div className="font-radio mb-2 flex justify-between text-[10px] text-slate-400"><span>{isExam ? "答题进度" : "训练进度"}</span><span>{progressCount} / {session.total}</span></div><SpectrumProgress answered={progressCount} total={session.total} /></div></div></div>
-        <CardContent className="bg-[linear-gradient(145deg,rgba(13,27,42,.98),rgba(7,15,25,.98))] p-5 sm:p-8"><div className="rounded-2xl border border-cyan-200/10 bg-black/10 p-4 sm:p-5"><div className="font-radio text-[10px] font-bold tracking-[.14em] text-amber-300/80">QUESTION {String(index + 1).padStart(2, "0")}</div><h1 className="practice-question mt-3 text-[1.35rem] font-bold leading-[1.75] text-white sm:text-[1.7rem]"><QuestionRichText text={question.stem} zoomable /></h1><p className="mt-3 text-sm leading-7 text-slate-400">请选择你认为正确的答案。</p></div><div className="mt-5 flex flex-col gap-3">{question.options.map((option, optionIndex) => <AnswerOption key={option.id} index={optionIndex} option={option} type={question.type} selected={selectedSet.has(option.id)} disabled={Boolean(result)} correct={result?.correctOptionIds.includes(option.id)} wrongSelected={Boolean(result && result.selectedOptionIds.includes(option.id) && !result.correctOptionIds.includes(option.id))} onToggle={() => toggleOption(option.id)} />)}</div>{error ? <div role="alert" className="mt-4 rounded-xl border border-rose-300/20 bg-rose-400/10 px-4 py-3 text-sm font-semibold text-rose-100">{error}</div> : null}{result && !isExam ? <div className={cn("mt-5 flex items-start gap-3 rounded-2xl border p-4", result.isCorrect ? "border-emerald-300/20 bg-emerald-400/10 text-emerald-100" : "border-rose-300/20 bg-rose-400/10 text-rose-100")}>{result.isCorrect ? <CheckCircle2 className="mt-0.5 size-5 shrink-0" /> : <CircleX className="mt-0.5 size-5 shrink-0" />}<div><div className="font-bold">{result.isCorrect ? "回答正确" : "回答错误"}</div><div className="mt-1 text-sm leading-6">标准答案：{result.correctOptionIds.join("、")}</div></div></div> : null}{result && !isExam ? <StudentExplanationCard explanation={result.explanation} autoExpand={!result.isCorrect} /> : null}<div className="mt-7 hidden items-center justify-between gap-3 border-t border-white/[.07] pt-5 sm:flex"><Button variant="outline" onClick={() => moveTo(index - 1)} disabled={index === 0}><ArrowLeft className="size-4" />上一题</Button><span className="font-radio text-[10px] text-slate-500">数字键选择 · ← → 切题</span>{isExam ? index === session.total - 1 ? <Button onClick={() => void submitExam()} disabled={pending}><Send className="size-4" />{pending ? "交卷中…" : "提交试卷"}</Button> : <Button onClick={() => moveTo(index + 1)}>下一题<ArrowRight className="size-4" /></Button> : result ? completed ? <Button onClick={() => setSummaryVisible(true)}>查看结果<ArrowRight className="size-4" /></Button> : <Button onClick={() => moveTo(index + 1)}>下一题<ArrowRight className="size-4" /></Button> : <Button onClick={() => void submitAnswer()} disabled={pending}>{pending ? "提交中…" : "提交答案"}</Button>}</div></CardContent>
+        <CardContent className="bg-[linear-gradient(145deg,rgba(13,27,42,.98),rgba(7,15,25,.98))] p-5 sm:p-8"><div className="rounded-2xl border border-cyan-200/10 bg-black/10 p-4 sm:p-5"><div className="flex flex-wrap items-center justify-between gap-3"><div className="font-radio text-[10px] font-bold tracking-[.14em] text-amber-300/80">QUESTION {String(index + 1).padStart(2, "0")}</div>{showFavoriteButtons ? <div className="flex items-center gap-2"><button type="button" aria-label="收藏" aria-pressed={currentMarks.favorite} disabled={markPending !== null} onClick={() => void toggleMark("favorite")} className={cn("inline-flex min-h-9 items-center gap-1.5 rounded-full border px-3 text-xs font-bold transition", currentMarks.favorite ? "border-amber-300/30 bg-amber-400/10 text-amber-300" : "border-white/10 bg-white/[.03] text-slate-400 hover:border-amber-300/30 hover:text-amber-300")}><Star className="size-4" fill={currentMarks.favorite ? "currentColor" : "none"} />{currentMarks.favorite ? "已收藏" : "收藏"}</button><button type="button" aria-label="忽略" aria-pressed={currentMarks.ignored} disabled={markPending !== null} onClick={() => void toggleMark("ignored")} className={cn("inline-flex min-h-9 items-center gap-1.5 rounded-full border px-3 text-xs font-bold transition", currentMarks.ignored ? "border-rose-300/30 bg-rose-400/10 text-rose-300" : "border-white/10 bg-white/[.03] text-slate-400 hover:border-rose-300/30 hover:text-rose-300")}><EyeOff className="size-4" />{currentMarks.ignored ? "已忽略" : "忽略"}</button></div> : null}</div><h1 className="practice-question mt-3 text-[1.35rem] font-bold leading-[1.75] text-white sm:text-[1.7rem]"><QuestionRichText text={question.stem} zoomable /></h1><p className="mt-3 text-sm leading-7 text-slate-400">请选择你认为正确的答案。</p></div><div className="mt-5 flex flex-col gap-3">{question.options.map((option, optionIndex) => <AnswerOption key={option.id} index={optionIndex} option={option} type={question.type} selected={selectedSet.has(option.id)} disabled={Boolean(result)} correct={result?.correctOptionIds.includes(option.id)} wrongSelected={Boolean(result && result.selectedOptionIds.includes(option.id) && !result.correctOptionIds.includes(option.id))} onToggle={() => toggleOption(option.id)} />)}</div>{error ? <div role="alert" className="mt-4 rounded-xl border border-rose-300/20 bg-rose-400/10 px-4 py-3 text-sm font-semibold text-rose-100">{error}</div> : null}{result && !isExam ? <div className={cn("mt-5 flex items-start gap-3 rounded-2xl border p-4", result.isCorrect ? "border-emerald-300/20 bg-emerald-400/10 text-emerald-100" : "border-rose-300/20 bg-rose-400/10 text-rose-100")}>{result.isCorrect ? <CheckCircle2 className="mt-0.5 size-5 shrink-0" /> : <CircleX className="mt-0.5 size-5 shrink-0" />}<div><div className="font-bold">{result.isCorrect ? "回答正确" : "回答错误"}</div><div className="mt-1 text-sm leading-6">标准答案：{result.correctOptionIds.join("、")}</div></div></div> : null}{result && !isExam ? <StudentExplanationCard explanation={result.explanation} autoExpand={!result.isCorrect} /> : null}<div className="mt-7 hidden items-center justify-between gap-3 border-t border-white/[.07] pt-5 sm:flex"><Button variant="outline" onClick={() => moveTo(index - 1)} disabled={index === 0}><ArrowLeft className="size-4" />上一题</Button><span className="font-radio text-[10px] text-slate-500">数字键选择 · ← → 切题</span>{isExam ? index === session.total - 1 ? <Button onClick={() => void submitExam()} disabled={pending}><Send className="size-4" />{pending ? "交卷中…" : "提交试卷"}</Button> : <Button onClick={() => moveTo(index + 1)}>下一题<ArrowRight className="size-4" /></Button> : result ? completed ? <Button onClick={() => setSummaryVisible(true)}>查看结果<ArrowRight className="size-4" /></Button> : <Button onClick={() => moveTo(index + 1)}>下一题<ArrowRight className="size-4" /></Button> : <Button onClick={() => void submitAnswer()} disabled={pending}>{pending ? "提交中…" : "提交答案"}</Button>}</div></CardContent>
       </Card>
       <QuestionNavigator questions={session.questions} currentIndex={index} drafts={drafts} results={results} onSelect={moveTo} />
     </div>

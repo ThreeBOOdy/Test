@@ -147,6 +147,9 @@ export type PublicQuestion = Omit<Question, "levelIds" | "correctOptionIds" | "s
   levelId: string;
   knowledgeName: string;
   levelCode: string;
+  /** 当前学生在该字母类下的收藏/忽略标记；练习会话中用于展示与即时更新。 */
+  favorite?: boolean;
+  ignored?: boolean;
 };
 
 export type PublicAnswerResult = {
