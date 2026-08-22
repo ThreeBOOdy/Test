@@ -18,7 +18,26 @@ export async function POST(request: Request) {
     const input = schema.parse(await readJsonBody(request));
     const ip = getClientIp(request);
     if (await checkLoginRateLimit(input.username, ip)) return NextResponse.json({ message: "登录尝试过多，请 15 分钟后重试" }, { status: 429 });
-    const user = input.username && input.password ? await prisma.user.findUnique({ where: { username: input.username } }) : null;
+    const user = input.username && input.password ? await prisma.user.findUnique({
+      where: { username: input.username },
+      // Only select fields needed for authentication. This keeps login working even
+      // if a deployed database has not yet applied newer optional User columns
+      // (e.g. activeLevelId), instead of failing with an unknown-column error.
+      select: {
+        id: true,
+        username: true,
+        displayName: true,
+        passwordHash: true,
+        role: true,
+        enabled: true,
+        mustChangePassword: true,
+        activationRequired: true,
+        studentStatus: true,
+        isLongTerm: true,
+        validFrom: true,
+        validUntil: true,
+      },
+    }) : null;
     if (!user || !verifyPassword(input.password, user.passwordHash)) {
       await recordLoginAttempt(input.username, ip, false);
       return NextResponse.json({ message: "用户名或密码错误" }, { status: 401 });
@@ -48,6 +67,7 @@ export async function POST(request: Request) {
     setSessionCookie(response, token);
     return response;
   } catch (error) {
+    console.error("[login] login failed", error);
     return apiErrorResponse(error, "登录失败");
   }
 }
