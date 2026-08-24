@@ -2,15 +2,14 @@ import { describe, expect, it } from "vitest";
 
 import type { DocxImage } from "../lib/domain/docx-content";
 import {
-  createQuestionImageId,
   extractImageMarkers,
   imageMarker,
   normalizeImageMarkers,
-  prepareQuestionRowImages,
   revalidateCommitRowImages,
   splitImageMarkerText,
   validateQuestionImageLimits,
 } from "../lib/domain/question-image-marker";
+import { createQuestionImageId, prepareQuestionRowImages } from "../lib/server/question-image-crypto";
 import type { ImportQuestionRow } from "../lib/domain/types";
 
 const pngBytes = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);

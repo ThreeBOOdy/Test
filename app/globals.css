@@ -46,7 +46,7 @@
 }
 
 * { box-sizing: border-box; }
-html { background: var(--background); scroll-behavior: smooth; }
+html { background: var(--background); scroll-behavior: smooth; font-size: 17px; }
 body {
   min-width: 320px;
   margin: 0;
@@ -118,6 +118,12 @@ th, td { border-color: var(--border) !important; }
 }
 .receiver-panel::before { content: ""; position: absolute; inset: 0; pointer-events: none; background: linear-gradient(110deg, transparent 20%, rgba(10,134,152,.045), transparent 48%); transform: translateX(-70%); transition: transform var(--motion-slow) ease; }
 .receiver-panel:hover::before { transform: translateX(70%); }
+.on-dark.receiver-panel {
+  background: #07121b !important;
+}
+.ink-card {
+  background: var(--ink) !important;
+}
 .instrument-grid { background-image: linear-gradient(var(--grid-line) 1px, transparent 1px), linear-gradient(90deg, var(--grid-line) 1px, transparent 1px); background-size: 24px 24px; }
 .callsign-label { display: inline-flex; align-items: center; gap: .5rem; border: 1px solid rgba(10,134,152,.24); border-radius: 999px; background: rgba(10,134,152,.07); padding: .36rem .7rem; color: var(--primary); font-family: var(--font-mono); font-size: .66rem; font-weight: 700; letter-spacing: .11em; }
 .status-dot { width: .42rem; height: .42rem; border-radius: 50%; background: var(--signal-green); box-shadow: 0 0 10px rgba(29,157,119,.45); animation: status-pulse 2.4s ease-in-out infinite; }
