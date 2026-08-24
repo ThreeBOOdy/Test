@@ -44,12 +44,11 @@ describe("TeacherStudentManager", () => {
     render(<TeacherStudentManager initial={initial} />);
 
     expect(screen.getByText("学生一")).toBeInTheDocument();
-    expect(screen.getByText("A")).toBeInTheDocument();
-    expect(screen.getByText("基础掌握")).toBeInTheDocument();
+    expect(screen.getAllByText("A级").length).toBeGreaterThan(0);
     expect(screen.getAllByText("未分配").length).toBeGreaterThan(0);
 
     const select = screen.getByLabelText("设置 学生二 的字母类") as HTMLSelectElement;
-    expect(Array.from(select.options).map((option) => option.textContent)).toEqual(expect.arrayContaining(["A · 基础掌握", "B · 综合提升", "C · 高阶挑战"]));
+    expect(Array.from(select.options).map((option) => option.textContent)).toEqual(expect.arrayContaining(["A级", "B级", "C级"]));
   });
 
   it("keeps letter class options when reloading the student list", async () => {
@@ -61,7 +60,7 @@ describe("TeacherStudentManager", () => {
 
     await waitFor(() => expect(fetchMock).toHaveBeenCalledWith("/api/v1/teacher/students?page=1&pageSize=20", expect.anything()));
     const select = screen.getByLabelText("设置 学生二 的字母类") as HTMLSelectElement;
-    expect(Array.from(select.options).map((option) => option.textContent)).toEqual(expect.arrayContaining(["A · 基础掌握", "B · 综合提升", "C · 高阶挑战"]));
+    expect(Array.from(select.options).map((option) => option.textContent)).toEqual(expect.arrayContaining(["A级", "B级", "C级"]));
   });
 
   it("saves a new activeLevel and updates the row locally", async () => {
@@ -78,8 +77,7 @@ describe("TeacherStudentManager", () => {
       body: JSON.stringify({ activeLevelId: "level-b" }),
     })));
     expect(await screen.findByText("字母类已保存")).toBeInTheDocument();
-    expect(screen.getByText("B")).toBeInTheDocument();
-    expect(screen.getByText("综合提升")).toBeInTheDocument();
+    expect(within(row).getAllByText("B级").length).toBeGreaterThan(0);
   });
 
   it("saves null to unassign a student", async () => {

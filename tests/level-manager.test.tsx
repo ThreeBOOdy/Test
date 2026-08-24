@@ -26,12 +26,11 @@ describe("LevelManager", () => {
   it("shows level details, question counts and enabled state", () => {
     render(<LevelManager levels={levels} />);
     const levelA = screen.getByTestId("level-level-a");
-    expect(within(levelA).getByText("基础掌握")).toBeInTheDocument();
-    expect(within(levelA).getByText("A")).toBeInTheDocument();
+    expect(within(levelA).getByText("A级")).toBeInTheDocument();
     expect(within(levelA).getByText("3")).toBeInTheDocument();
     expect(within(levelA).getByText("启用")).toBeInTheDocument();
     expect(within(screen.getByTestId("level-level-k")).getByText("停用")).toBeInTheDocument();
-    expect(within(screen.getByTestId("level-level-k")).getByText("K 类综合")).toBeInTheDocument();
+    expect(within(screen.getByTestId("level-level-k")).getByText("K级")).toBeInTheDocument();
   });
 
   it("creates a K level and refreshes the list", async () => {

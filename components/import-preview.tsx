@@ -346,7 +346,7 @@ export function ImportPreview({ knowledgePointTypes = [], levels = [] }: ImportP
             const selected = levelWizard.selectedLevelIds.includes(level.id);
             return <label key={level.id} className="flex min-h-10 cursor-pointer items-center gap-2 rounded-lg px-2 text-sm hover:bg-[var(--surface-soft)]">
               <input type="checkbox" aria-label={`字母类 ${level.code}`} checked={selected} onChange={(event) => setLevelWizard({ ...levelWizard, selectedLevelIds: event.target.checked ? [...levelWizard.selectedLevelIds, level.id] : levelWizard.selectedLevelIds.filter((id) => id !== level.id) })} className="size-4 accent-[var(--primary)]" />
-              <span><span className="font-bold">{level.code}级</span><span className="ml-2 text-[var(--muted-foreground)]">{level.name}</span></span>
+              <span><span className="font-bold">{level.code}级</span></span>
             </label>;
           })}
         </div> : <div className="mt-5 rounded-xl bg-[var(--muted)] px-4 py-6 text-center text-sm text-[var(--muted-foreground)]">尚未配置启用的字母类，可稍后在题目管理中批量归类。</div>}

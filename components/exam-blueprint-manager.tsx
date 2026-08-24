@@ -350,7 +350,7 @@ export function ExamBlueprintManager({
               <div className="flex items-center gap-2">
                 <div className="grid size-10 place-items-center rounded-xl bg-[var(--secondary)] font-radio text-sm font-black text-[var(--primary)]">{level.code}</div>
                 <div>
-                  <CardTitle>{level.name} · 模拟测试蓝图</CardTitle>
+                  <CardTitle>{level.code}级 · 模拟测试蓝图</CardTitle>
                   <p className="mt-1 text-sm text-[var(--muted-foreground)]">可维护多套命名蓝图；学生模拟测试默认使用标记为“默认”的蓝图。</p>
                 </div>
               </div>
@@ -402,7 +402,7 @@ export function ExamBlueprintManager({
           {!editor.id ? <label className="grid gap-2 text-sm font-semibold">
             字母类
             <select aria-label="字母类" value={editor.levelId} onChange={(event) => setEditor({ ...editor, levelId: event.target.value })} className="h-11 rounded-xl border border-[var(--border)] bg-[var(--muted)] px-4 outline-none focus:border-[var(--primary)]">
-              {levels.map((level) => <option key={level.id} value={level.id}>{level.code} · {level.name}</option>)}
+              {levels.map((level) => <option key={level.id} value={level.id}>{level.code}级</option>)}
             </select>
           </label> : null}
           <label className="grid gap-2 text-sm font-semibold">

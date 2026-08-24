@@ -128,11 +128,11 @@ export function TeacherStudentManager({ initial }: { initial: TeacherStudentPage
               <StudentCell label="人物用户名">{row.username}</StudentCell>
               <StudentCell label="学校/年级">{row.school ?? "—"}{row.grade ? ` · ${row.grade.name}` : ""}</StudentCell>
               <StudentCell label="账号状态">{studentStatusLabel(row.studentStatus, row.enabled)}</StudentCell>
-              <StudentCell label="当前字母类">{row.activeLevel ? <span className="font-bold">{row.activeLevel.code}<span className="ml-1 font-normal text-[var(--muted-foreground)]">{row.activeLevel.name}</span></span> : "未分配"}</StudentCell>
+              <StudentCell label="当前字母类">{row.activeLevel ? <span className="font-bold">{row.activeLevel.code}级</span> : "未分配"}</StudentCell>
               <StudentCell label="设置字母类">
                 <select aria-label={`设置 ${row.realName} 的字母类`} value={selected} onChange={(event) => setDrafts((current) => ({ ...current, [row.id]: event.target.value }))} className={inputClass}>
                   <option value="">未分配</option>
-                  {options.map((level) => <option key={level.id} value={level.id} disabled={!level.enabled}>{level.code} · {level.name}{level.enabled ? "" : "（停用）"}</option>)}
+                  {options.map((level) => <option key={level.id} value={level.id} disabled={!level.enabled}>{level.code}级{level.enabled ? "" : "（停用）"}</option>)}
                 </select>
               </StudentCell>
               <StudentCell label="操作" actions>

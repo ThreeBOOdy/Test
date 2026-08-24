@@ -97,7 +97,7 @@ export function LevelManager({ levels }: { levels: LevelManagerRow[] }) {
     <Card><CardContent className="p-0">
       <div className="hidden grid-cols-[1fr_90px_110px_100px_160px] border-b border-[var(--border)] bg-[var(--muted)] px-5 py-4 text-xs font-semibold text-[var(--muted-foreground)] md:grid"><span>字母类</span><span>排序</span><span>关联题目</span><span>状态</span><span>操作</span></div>
       {levels.map((level) => <div key={level.id} data-testid={`level-${level.id}`} className="grid gap-3 border-b border-[var(--border)] px-4 py-4 last:border-0 md:grid-cols-[1fr_90px_110px_100px_160px] md:items-center md:px-5">
-        <div className="flex min-w-0 items-center gap-3"><div className="grid size-10 shrink-0 place-items-center rounded-xl bg-[var(--secondary)] text-[var(--primary)]"><Layers3 className="size-4" /></div><div className="min-w-0"><div className="font-extrabold">{level.name}</div><div className="mt-1 text-xs text-[var(--muted-foreground)]">{level.code}</div></div></div>
+        <div className="flex min-w-0 items-center gap-3"><div className="grid size-10 shrink-0 place-items-center rounded-xl bg-[var(--secondary)] text-[var(--primary)]"><Layers3 className="size-4" /></div><div className="min-w-0"><div className="font-extrabold">{level.code}级</div></div></div>
         <div className="text-sm"><span className="md:hidden text-[var(--muted-foreground)]">排序：</span>{level.sortOrder}</div>
         <div className="text-sm"><span className="md:hidden text-[var(--muted-foreground)]">关联题目：</span>{level.questionCount}</div>
         <div><Badge tone={level.enabled ? "green" : "red"}>{level.enabled ? "启用" : "停用"}</Badge></div>

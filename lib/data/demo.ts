@@ -1,9 +1,9 @@
 import type { KnowledgePoint, Level, PracticeRule, Question } from "@/lib/domain/types";
 
 export const levels: Level[] = [
-  { id: "level-a", code: "A", name: "A级 · 基础掌握", sortOrder: 1, enabled: true },
-  { id: "level-b", code: "B", name: "B级 · 能力进阶", sortOrder: 2, enabled: true },
-  { id: "level-c", code: "C", name: "C级 · 综合挑战", sortOrder: 3, enabled: true },
+  { id: "level-a", code: "A", name: "A级", sortOrder: 1, enabled: true },
+  { id: "level-b", code: "B", name: "B级", sortOrder: 2, enabled: true },
+  { id: "level-c", code: "C", name: "C级", sortOrder: 3, enabled: true },
 ];
 
 export const knowledgePoints: KnowledgePoint[] = [

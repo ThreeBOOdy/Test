@@ -48,7 +48,7 @@ export default async function AiExplanationsPage({ searchParams }: { searchParam
             </label>
             <select name="levelId" defaultValue={params.levelId ?? ""} className="h-11 w-full rounded-xl border border-[var(--border)] bg-[var(--surface-soft)] px-3 text-sm outline-none">
               <option value="">全部等级</option>
-              {levels.map((level) => <option key={level.id} value={level.id}>{level.code}级 · {level.name}</option>)}
+              {levels.map((level) => <option key={level.id} value={level.id}>{level.code}级</option>)}
             </select>
             <button type="submit" className="h-11 rounded-xl border border-[var(--border)] bg-[var(--surface-soft)] px-5 text-sm font-bold hover:border-[var(--border-strong)]">筛选</button>
           </form>

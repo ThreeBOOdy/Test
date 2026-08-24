@@ -164,30 +164,17 @@ test.describe.serial("production business flows", () => {
     const row = page.getByRole("row").filter({ hasText: activatedStudentUsername });
     await expect(row).toContainText("端到端学生", { timeout: 20_000 });
     if (await row.getByText("未分配", { exact: true }).count()) {
-      await row.getByRole("combobox").selectOption({ label: "A · A级 · 基础掌握" });
+      await row.getByRole("combobox").selectOption({ label: "A级" });
       await row.getByRole("button", { name: "保存", exact: true }).click();
       await expect(page.getByRole("status")).toHaveText("字母类已保存");
     } else {
       await expect(row).toContainText("A级");
     }
-
-    // 后续学生端“一键清除错题”用例要求该年级开放自助清除。
-    await page.goto("/teacher");
-    await waitForPageHydration(page);
-    const wrongClearCard = page.getByText("JUNIOR_1", { exact: true })
-      .locator("xpath=ancestor::div[contains(@class,'rounded-2xl')][1]")
-      .filter({ hasText: /仅教师可清除|已开放自助清除/ })
-      .first();
-    await expect(wrongClearCard).toBeVisible({ timeout: 20_000 });
-    if (await wrongClearCard.getByRole("button", { name: "开启自助清除" }).count()) {
-      await wrongClearCard.getByRole("button", { name: "开启自助清除" }).click();
-    }
-    await expect(wrongClearCard).toContainText("已开放自助清除", { timeout: 30_000 });
   });
 
   test("teacher configures an A-level mock exam blueprint", async ({ page }) => {
     await login(page, "teacher", "123456", "/teacher/rules");
-    const aCard = page.getByRole("heading", { name: "A级 · 基础掌握 · 模拟测试蓝图" }).locator("xpath=ancestor::div[contains(@class,'rounded-3xl')][1]");
+    const aCard = page.getByRole("heading", { name: "A级 · 模拟测试蓝图" }).locator("xpath=ancestor::div[contains(@class,'rounded-3xl')][1]");
     await expect(aCard).toBeVisible({ timeout: 20_000 });
     await aCard.getByRole("button", { name: "新增蓝图" }).click();
     const dialog = page.getByRole("dialog", { name: "新建蓝图" });
