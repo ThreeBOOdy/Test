@@ -189,6 +189,8 @@ th, td { border-color: var(--border) !important; }
     text-transform: uppercase;
   }
   .responsive-data-table td[data-actions] { align-items: center; }
+  .responsive-data-table td[colspan] { display: block; }
+  .responsive-data-table td[colspan]::before { content: none; }
 }
 
 @media (min-width: 1024px) { .safe-bottom { padding-bottom: 2rem; } }

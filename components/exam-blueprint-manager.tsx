@@ -442,7 +442,7 @@ export function ExamBlueprintManager({
           {editor.items.length === 0 ? <div className="mt-4 rounded-2xl border border-dashed border-[var(--border)] p-8 text-center text-sm text-[var(--muted-foreground)]">尚未添加条目，请选择一个知识点。</div> : null}
 
           {editor.items.length > 0 ? <div className="mt-4 overflow-x-auto">
-            <table className="w-full min-w-[760px]">
+            <table className="responsive-data-table min-w-[760px] w-full">
               <thead>
                 <tr className="border-y border-[var(--border)] bg-[var(--muted)] text-left text-xs font-semibold text-[var(--muted-foreground)]">
                   <th className="px-4 py-3">知识点</th>
@@ -457,17 +457,17 @@ export function ExamBlueprintManager({
                   const point = pointById.get(item.knowledgePointId);
                   const name = point?.name ?? "未知知识点";
                   return <tr key={item.key} data-testid={`blueprint-item-${item.key}`} className="border-b border-[var(--border)]">
-                    <td className="px-4 py-3">
+                    <td data-label="知识点" className="px-4 py-3">
                       <div className="font-extrabold">{point?.code}</div>
                       <div className="mt-1 text-xs text-[var(--muted-foreground)]">{name}</div>
                     </td>
-                    <td className="px-4 py-3"><input aria-label={`${point?.code ?? name} 单选数量`} type="number" min={0} max={1000} value={item.singleCount} onChange={(event) => updateDraftItem(item.key, { singleCount: Math.max(0, Number(event.target.value) || 0) })} className="h-10 w-20 rounded-xl border border-[var(--border)] bg-[var(--muted)] px-3 outline-none focus:border-[var(--primary)]" /></td>
-                    <td className="px-4 py-3"><input aria-label={`${point?.code ?? name} 多选数量`} type="number" min={0} max={1000} value={item.multipleCount} onChange={(event) => updateDraftItem(item.key, { multipleCount: Math.max(0, Number(event.target.value) || 0) })} className="h-10 w-20 rounded-xl border border-[var(--border)] bg-[var(--muted)] px-3 outline-none focus:border-[var(--primary)]" /></td>
-                    <td className="px-4 py-3 text-xs leading-5 text-[var(--muted-foreground)]">
+                    <td data-label="单选" className="px-4 py-3"><input aria-label={`${point?.code ?? name} 单选数量`} type="number" min={0} max={1000} value={item.singleCount} onChange={(event) => updateDraftItem(item.key, { singleCount: Math.max(0, Number(event.target.value) || 0) })} className="h-10 w-20 rounded-xl border border-[var(--border)] bg-[var(--muted)] px-3 outline-none focus:border-[var(--primary)]" /></td>
+                    <td data-label="多选" className="px-4 py-3"><input aria-label={`${point?.code ?? name} 多选数量`} type="number" min={0} max={1000} value={item.multipleCount} onChange={(event) => updateDraftItem(item.key, { multipleCount: Math.max(0, Number(event.target.value) || 0) })} className="h-10 w-20 rounded-xl border border-[var(--border)] bg-[var(--muted)] px-3 outline-none focus:border-[var(--primary)]" /></td>
+                    <td data-label="当前库存" className="px-4 py-3 text-xs leading-5 text-[var(--muted-foreground)]">
                       <div>单选 {inventory.singleCount} · 多选 {inventory.multipleCount}</div>
                       {issues.map((issue) => <div key={issue.label} className="font-semibold text-rose-700">缺 {issue.missing} 题{issue.label}</div>)}
                     </td>
-                    <td className="px-4 py-3"><Button type="button" variant="ghost" size="sm" aria-label={`删除条目 ${point?.code ?? name}`} onClick={() => removeDraftItem(item.key)}><Trash2 className="size-4" /></Button></td>
+                    <td data-label="操作" data-actions className="px-4 py-3"><Button type="button" variant="ghost" size="sm" aria-label={`删除条目 ${point?.code ?? name}`} onClick={() => removeDraftItem(item.key)}><Trash2 className="size-4" /></Button></td>
                   </tr>;
                 })}
               </tbody>

@@ -305,7 +305,7 @@ export function ImportPreview({ knowledgePointTypes = [], levels = [] }: ImportP
             <Metric label="错误" value={preview.stats.errorRows} tone="red" />
           </div>
           <div className="mt-5 max-h-[520px] overflow-auto rounded-2xl border border-[var(--border)]">
-            <table className="min-w-[760px] w-full text-left text-sm">
+            <table className="responsive-data-table min-w-[760px] w-full text-left text-sm">
               <thead className="sticky top-0 bg-[var(--muted)]">
                 <tr><Th>来源</Th><Th>题目</Th><Th>分类</Th><Th>规格</Th><Th>结果</Th></tr>
               </thead>
@@ -314,15 +314,15 @@ export function ImportPreview({ knowledgePointTypes = [], levels = [] }: ImportP
                   const hasError = item.issues.some((issue) => issue.severity === "error");
                   const hasWarning = item.issues.some((issue) => issue.severity === "warning");
                   return <tr key={`${item.row.sheetName ?? "sheet"}-${item.row.rowNumber}-${index}`} className="border-t border-[var(--border)]">
-                    <Td>{item.row.locationLabel ?? (item.row.sheetName ? `${item.row.sheetName}!${item.row.rowNumber}` : `第 ${item.row.rowNumber} 行`)}</Td>
-                    <Td>
+                    <Td label="来源">{item.row.locationLabel ?? (item.row.sheetName ? `${item.row.sheetName}!${item.row.rowNumber}` : `第 ${item.row.rowNumber} 行`)}</Td>
+                    <Td label="题目">
                       <div className="max-w-72 truncate font-semibold">{item.row.stem}</div>
                       <div className="mt-1 text-xs text-[var(--muted-foreground)]">{item.row.externalQuestionCode}</div>
                       {item.images?.length ? <div className="mt-2 flex flex-wrap items-center gap-2"><span className="text-xs font-bold text-[var(--muted-foreground)]">图片 {item.images.length} 张</span>{item.images.map((image) => <Image key={image.id} src={`/api/v1/teacher/import-batches/${preview.batchId}/images/${image.id}`} alt={`题目图片 ${image.id}`} width={64} height={64} unoptimized className="h-16 w-auto max-w-40 rounded-lg border border-[var(--border)] bg-white object-contain" />)}</div> : null}
                     </Td>
-                    <Td>{item.row.categoryCode}</Td>
-                    <Td>{item.selectionSpec}</Td>
-                    <Td>{hasError ? <Status icon={XCircle} tone="red" label={item.issues[0].message} /> : hasWarning ? <Status icon={AlertTriangle} tone="amber" label={item.issues[0].message} /> : <Status icon={CheckCircle2} tone="green" label="通过" />}</Td>
+                    <Td label="分类">{item.row.categoryCode}</Td>
+                    <Td label="规格">{item.selectionSpec}</Td>
+                    <Td label="结果">{hasError ? <Status icon={XCircle} tone="red" label={item.issues[0].message} /> : hasWarning ? <Status icon={AlertTriangle} tone="amber" label={item.issues[0].message} /> : <Status icon={CheckCircle2} tone="green" label="通过" />}</Td>
                   </tr>;
                 })}
               </tbody>
@@ -428,6 +428,6 @@ function Th({ children }: { children: React.ReactNode }) {
   return <th className="px-4 py-3 text-xs font-semibold text-[var(--muted-foreground)]">{children}</th>;
 }
 
-function Td({ children }: { children: React.ReactNode }) {
-  return <td className="px-4 py-3">{children}</td>;
+function Td({ children, label, actions = false }: { children: React.ReactNode; label?: string; actions?: boolean }) {
+  return <td data-label={label} data-actions={actions || undefined} className="px-4 py-3">{children}</td>;
 }

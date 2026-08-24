@@ -239,7 +239,7 @@ export function StudentImportPreview() {
             </div>
 
             {batch.totalPages > 1 ? (
-              <div className="mt-5 flex items-center justify-between gap-3 text-sm">
+              <div className="mt-5 flex flex-col items-stretch gap-3 text-sm sm:flex-row sm:items-center sm:justify-between">
                 <span>第 {batch.page} / {batch.totalPages} 页（每页 {batch.pageSize} 条）</span>
                 <div className="flex gap-2">
                   <Button type="button" variant="outline" disabled={pending || batch.page === 1} onClick={() => loadPage(batch.page - 1)}>上一页</Button>
@@ -248,7 +248,7 @@ export function StudentImportPreview() {
               </div>
             ) : null}
             <div className="mt-4 overflow-auto">
-              <table className="w-full min-w-[1100px] text-left text-sm">
+              <table className="responsive-data-table min-w-[1100px] w-full text-left text-sm">
                 <thead>
                   <tr>
                     {["来源", "用户名", "姓名", "学校", "年级", "性别", "启用", "有效期", "长期", "结果", "编辑"].map(
@@ -263,17 +263,17 @@ export function StudentImportPreview() {
                 <tbody>
                   {batch.rows.map((row) => (
                     <tr key={row.id} className="border-t border-[var(--border)]">
-                      <td className="px-3 py-3">{row.sheetName}!{row.sourceRowNumber}</td>
-                      <td className="px-3 py-3">{textValue(row.payload.username)}</td>
-                      <td className="px-3 py-3">{textValue(row.payload.displayName)}</td>
-                      <td className="px-3 py-3">{textValue(row.payload.school)}</td>
-                      <td className="px-3 py-3">{textValue(row.payload.grade)}</td>
-                      <td className="px-3 py-3">{row.payload.gender === "MALE" ? "男" : "女"}</td>
-                      <td className="px-3 py-3">{row.payload.enabled ? "是" : "否"}</td>
-                      <td className="px-3 py-3">{textValue(row.payload.validFrom)} 至 {textValue(row.payload.validUntil)}</td>
-                      <td className="px-3 py-3">{row.payload.isLongTerm ? "是" : "否"}</td>
-                      <td className="px-3 py-3">{row.valid ? "通过" : row.issues.map((issue) => issue.message).join("；")}</td>
-                      <td className="px-3 py-3">
+                      <td data-label="来源" className="px-3 py-3">{row.sheetName}!{row.sourceRowNumber}</td>
+                      <td data-label="用户名" className="px-3 py-3">{textValue(row.payload.username)}</td>
+                      <td data-label="姓名" className="px-3 py-3">{textValue(row.payload.displayName)}</td>
+                      <td data-label="学校" className="px-3 py-3">{textValue(row.payload.school)}</td>
+                      <td data-label="年级" className="px-3 py-3">{textValue(row.payload.grade)}</td>
+                      <td data-label="性别" className="px-3 py-3">{row.payload.gender === "MALE" ? "男" : "女"}</td>
+                      <td data-label="启用" className="px-3 py-3">{row.payload.enabled ? "是" : "否"}</td>
+                      <td data-label="有效期" className="px-3 py-3">{textValue(row.payload.validFrom)} 至 {textValue(row.payload.validUntil)}</td>
+                      <td data-label="长期" className="px-3 py-3">{row.payload.isLongTerm ? "是" : "否"}</td>
+                      <td data-label="结果" className="px-3 py-3">{row.valid ? "通过" : row.issues.map((issue) => issue.message).join("；")}</td>
+                      <td data-label="编辑" data-actions className="px-3 py-3">
                         <Button size="sm" variant="outline" onClick={() => openEditor(row)}>
                           编辑
                         </Button>
@@ -329,7 +329,7 @@ export function StudentImportPreview() {
         </div>
       ) : null}
 
-      {credentials.length ? <div className="mt-4 overflow-auto rounded-xl border border-amber-600/25 bg-amber-500/[.07] p-4"><p className="text-sm font-extrabold">一次性激活凭据（仅此展示）</p><table className="mt-3 min-w-[680px] w-full text-left text-sm"><thead><tr><th>导入用户名</th><th>初始密码</th><th>激活码</th><th>过期时间</th></tr></thead><tbody>{credentials.map((credential) => <tr key={credential.username} className="border-t border-amber-600/15"><td className="py-2">{credential.username}</td><td className="py-2 font-mono">{credential.initialPassword}</td><td className="py-2 font-mono">{credential.activationCode}</td><td className="py-2">{new Date(credential.expiresAt).toLocaleDateString("zh-CN")}</td></tr>)}</tbody></table></div> : null}
+      {credentials.length ? <div className="mt-4 overflow-auto rounded-xl border border-amber-600/25 bg-amber-500/[.07] p-4"><p className="text-sm font-extrabold">一次性激活凭据（仅此展示）</p><table className="mt-3 responsive-data-table min-w-[680px] w-full text-left text-sm"><thead><tr><th>导入用户名</th><th>初始密码</th><th>激活码</th><th>过期时间</th></tr></thead><tbody>{credentials.map((credential) => <tr key={credential.username} className="border-t border-amber-600/15"><td data-label="导入用户名" className="py-2">{credential.username}</td><td data-label="初始密码" className="py-2 font-mono">{credential.initialPassword}</td><td data-label="激活码" className="py-2 font-mono">{credential.activationCode}</td><td data-label="过期时间" className="py-2">{new Date(credential.expiresAt).toLocaleDateString("zh-CN")}</td></tr>)}</tbody></table></div> : null}
       {message ? <div role="status" className="mt-4 rounded-xl bg-[var(--surface-soft)] p-3">{message}</div> : null}
     </>
   );
