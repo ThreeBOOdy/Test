@@ -1,8 +1,6 @@
 import Link from "next/link";
 import { AlertCircle, ArrowRight, BookOpenCheck, CheckCircle2, Database, FileSpreadsheet, Layers3, RadioTower, Target, UsersRound, Waves } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
-import { GradeGamificationSettings } from "@/components/grade-gamification-settings";
-import { GradeWrongClearSettings } from "@/components/grade-wrong-clear-settings";
 import { StatCard } from "@/components/stat-card";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { CallsignLabel, FrequencyScale, SignalMeter } from "@/components/visual/radio-instruments";
@@ -47,9 +45,6 @@ export default async function TeacherPage() {
           <StatCard icon={UsersRound} label="学生账号" value={String(studentCount)} helper="当前启用账号" tone="amber" />
           <StatCard icon={CheckCircle2} label="近7日正确率" value={`${accuracy}%`} helper={`${recentSessions.length} 次已完成练习`} tone="rose" />
         </div>
-
-        <div className="mt-7"><GradeGamificationSettings /></div>
-        <div className="mt-7"><GradeWrongClearSettings /></div>
 
         <div className="mt-7 grid gap-6 xl:grid-cols-[1.18fr_.82fr]">
           <Card className="overflow-hidden"><CardHeader className="border-b border-[var(--border)] pb-5"><div className="flex items-center justify-between gap-4"><div><div className="text-[10px] font-black tracking-[0.2em] text-[var(--primary)]">INVENTORY SPECTRUM</div><CardTitle className="mt-1">各等级题库库存</CardTitle><CardDescription>颜色条展示单选与多选的相对容量</CardDescription></div><Link href="/teacher/rules" className="flex items-center gap-2 text-sm font-extrabold text-[var(--primary)]">配置规则<ArrowRight className="size-4" /></Link></div></CardHeader><CardContent className="flex flex-col gap-4">{inventories.map(({ level, singles, multiples, total }) => <div key={level.id} className="rounded-[20px] border border-[var(--border)] bg-[var(--muted)]/65 p-4 transition hover:border-cyan-400 hover:bg-cyan-50/60"><div className="flex items-center gap-3"><div className="grid size-11 place-items-center rounded-xl bg-[var(--ink)] font-black text-cyan-200 shadow-lg">{level.code}</div><div><div className="font-black">{level.name}</div><div className="mt-0.5 text-xs text-[var(--muted-foreground)]">{total} 道启用题目</div></div><div className="ml-auto flex gap-2"><Inventory label="单选" value={singles} /><Inventory label="多选" value={multiples} /></div></div><div className="mt-4 flex h-2.5 overflow-hidden rounded-full bg-slate-200"><div className="bg-[linear-gradient(90deg,#0a96a2,#28c5cb)] transition-all" style={{ width: `${(singles / maxInventory) * 100}%` }} /><div className="bg-[linear-gradient(90deg,#e9a341,#ffc86d)] transition-all" style={{ width: `${(multiples / maxInventory) * 100}%` }} /></div></div>)}</CardContent></Card>
