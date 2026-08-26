@@ -27,6 +27,12 @@ export function SignalField({ className, intensity = "hero" }: SignalFieldProps)
     const host = hostRef.current;
     if (!host) return;
 
+    // WeChat's embedded webview is a legacy Chromium/WebView that can freeze
+    // when running WebGL particle scenes. Skip the Three.js signal field there
+    // so login/public pages stay responsive inside WeChat.
+    const isWeChat = typeof navigator !== "undefined" && /MicroMessenger|Weixin/i.test(navigator.userAgent);
+    if (isWeChat) return;
+
     try {
     const hero = intensity === "hero";
     const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
