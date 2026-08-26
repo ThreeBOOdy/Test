@@ -201,12 +201,21 @@ export function SignalField({ className, intensity = "hero" }: SignalFieldProps)
 
     // ---------- 渲染循环(可暂停) ----------
     const clock = new THREE.Clock();
+    const WARMUP_MS = 6000; // stop continuous animation after a few seconds
     let raf = 0;
     let running = false;
     let visible = true;
+    let warmupTimer: number | undefined;
+    let lastFrameTime = 0;
 
-    const frame = () => {
+    const frame = (time: number) => {
       raf = 0;
+      // Throttle to ~30fps to keep CPU/GPU usage low on busy machines.
+      if (time - lastFrameTime < 33) {
+        if (running) raf = requestAnimationFrame(frame);
+        return;
+      }
+      lastFrameTime = time;
       const t = clock.getElapsedTime();
       displace(t);
       rippleStrength *= 0.965;
@@ -234,12 +243,17 @@ export function SignalField({ className, intensity = "hero" }: SignalFieldProps)
       running = true;
       clock.start();
       raf = requestAnimationFrame(frame);
+      if (!warmupTimer) warmupTimer = window.setTimeout(() => stop(), WARMUP_MS);
     };
     const stop = () => {
       running = false;
       clock.stop();
       if (raf) cancelAnimationFrame(raf);
       raf = 0;
+      if (warmupTimer) {
+        window.clearTimeout(warmupTimer);
+        warmupTimer = undefined;
+      }
     };
 
     const io = new IntersectionObserver(([entry]) => {
