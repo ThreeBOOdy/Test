@@ -23,7 +23,7 @@
 
 <p align="center"><img src="./public/screenshots/01-login.png" alt="登录入口" width="860" /></p>
 
-- **登录入口**：无线电主题品牌页，演示账号可直接进入学生 / 教师 / 管理员端。
+- **登录入口**：无线电主题品牌页，登录界面不暴露演示账号；测试账号仅保留在本地种子数据中。
 
 <p align="center"><img src="./public/screenshots/02-student-home.png" alt="学生首页" width="860" /></p>
 
@@ -57,7 +57,7 @@
 
 <p align="center"><img src="./public/screenshots/10-teacher-dashboard.png" alt="教师控制台" width="860" /></p>
 
-- **教师控制台**：题库库存、知识点覆盖、学生账号、近 7 日正确率、年级游戏化与错题清除设置。
+- **教师控制台**：题库库存、知识点覆盖、学生账号、近 7 日正确率与教学统计。
 
 <p align="center"><img src="./public/screenshots/11-teacher-questions.png" alt="题库管理" width="860" /></p>
 
